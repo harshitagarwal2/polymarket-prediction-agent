@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from adapters.types import (
+    BalanceSnapshot,
+    Contract,
+    NormalizedOrder,
+    OrderBookSnapshot,
+    OrderIntent,
+)
+from engine.interfaces import Strategy, StrategyContext
+from research.paper import PaperBroker, PaperTrade
+from risk.limits import RiskDecision, RiskEngine
+
+
+@dataclass(frozen=True)
+class ReplayStep:
+    book: OrderBookSnapshot
+    fair_value: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ReplayEvent:
+    step_index: int
+    book: OrderBookSnapshot
+    approved: list[OrderIntent]
+    rejected: list[str]
+    trades: list[PaperTrade]
+
+
+@dataclass
+class ReplayResult:
+    events: list[ReplayEvent]
+    ending_cash: float
+    ending_positions: dict[str, float]
+    mark_prices: dict[str, float]
+    ending_portfolio_value: float
+    net_pnl: float
+
+
+class ReplayRunner:
+    def __init__(
+        self,
+        strategy: Strategy,
+        risk_engine: RiskEngine,
+        broker: PaperBroker | None = None,
+    ):
+        self.strategy = strategy
+        self.risk_engine = risk_engine
+        self.broker = broker or PaperBroker()
+
+    def run(self, steps: list[ReplayStep]) -> ReplayResult:
+        events: list[ReplayEvent] = []
+        mark_prices: dict[str, float] = {}
+        for index, step in enumerate(steps):
+            carry_trades = self.broker.advance(step.book)
+            contract = step.book.contract
+            mark_price = step.book.midpoint
+            if mark_price is None:
+                if step.book.best_bid is not None and step.book.best_ask is not None:
+                    mark_price = (step.book.best_bid + step.book.best_ask) / 2
+                else:
+                    mark_price = step.book.best_bid or step.book.best_ask or 0.0
+            mark_prices[contract.market_key] = mark_price
+            context = StrategyContext(
+                contract=contract,
+                book=step.book,
+                position=self.broker.position_for(contract),
+                balance=BalanceSnapshot(
+                    venue=contract.venue,
+                    available=self.broker.cash,
+                    total=self.broker.cash,
+                ),
+                open_orders=self.broker.open_orders_for(contract),
+                fair_value=step.fair_value,
+                metadata=step.metadata,
+            )
+            proposed = self.strategy.generate_intents(context)
+            risk = self.risk_engine.evaluate(
+                proposed, position=context.position, open_orders=context.open_orders
+            )
+            submitted_trades = self.broker.submit_intents(step.book, risk.approved)
+            events.append(
+                ReplayEvent(
+                    step_index=index,
+                    book=step.book,
+                    approved=risk.approved,
+                    rejected=[rejection.reason for rejection in risk.rejected],
+                    trades=[*carry_trades, *submitted_trades],
+                )
+            )
+        ending_portfolio_value = self.broker.portfolio_value(mark_prices)
+        return ReplayResult(
+            events=events,
+            ending_cash=self.broker.cash,
+            ending_positions=dict(self.broker.positions),
+            mark_prices=mark_prices,
+            ending_portfolio_value=ending_portfolio_value,
+            net_pnl=ending_portfolio_value - self.broker.initial_cash,
+        )
