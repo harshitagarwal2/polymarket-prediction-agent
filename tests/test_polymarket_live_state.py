@@ -390,6 +390,46 @@ class PolymarketLiveStateTests(unittest.TestCase):
         self.assertFalse(delta.open_orders)
         self.assertEqual(delta.terminal_order_ids, ("live-order-1",))
 
+    def test_exchange_prefixed_terminal_status_marks_live_order_terminal(self):
+        adapter = StubLiveStatePolymarketAdapter()
+        adapter._set_live_orders_cache(
+            [
+                {
+                    "id": "live-order-1",
+                    "asset_id": "token-1",
+                    "side": "BUY",
+                    "price": 0.52,
+                    "original_size": 2.0,
+                    "size_matched": 0.0,
+                    "updated_at": "2026-01-01T00:00:02+00:00",
+                    "condition_id": "condition-1",
+                }
+            ],
+            observed_at=datetime(2026, 1, 1, 0, 0, 2, tzinfo=timezone.utc),
+        )
+        adapter._live_state_active = True
+
+        adapter._apply_live_state_message(
+            {
+                "event_type": "order",
+                "order": {
+                    "id": "live-order-1",
+                    "asset_id": "token-1",
+                    "side": "BUY",
+                    "status": "ORDER_STATUS_CANCELED_MARKET_RESOLVED",
+                    "updated_at": "2026-01-01T00:00:03+00:00",
+                },
+            }
+        )
+
+        delta = adapter.live_user_state_delta(adapter.contract)
+
+        self.assertIsNotNone(delta)
+        if delta is None:
+            self.fail("expected live delta")
+        self.assertFalse(delta.open_orders)
+        self.assertEqual(delta.terminal_order_ids, ("live-order-1",))
+
     def test_live_state_recovering_forces_rest_fallback(self):
         adapter = StubLiveStatePolymarketAdapter()
         adapter.rest_orders = [
@@ -458,6 +498,80 @@ class PolymarketLiveStateTests(unittest.TestCase):
         self.assertEqual(book.best_ask, 0.49)
         self.assertTrue(status.snapshot_book_overlay_applied)
         self.assertEqual(status.snapshot_book_overlay_source, "rest_plus_live_market")
+
+    def test_rest_order_book_caches_tick_and_min_order_size(self):
+        adapter = StubLiveStatePolymarketAdapter()
+        adapter.rest_book.tick_size = 0.01
+        adapter.rest_book.min_order_size = 5.0
+
+        adapter.get_order_book(adapter.contract)
+
+        with adapter._market_state_lock:
+            state = adapter._market_state_books[adapter.contract.symbol]
+
+        self.assertEqual(state["tick_size"], 0.01)
+        self.assertEqual(state["min_order_size"], 5.0)
+
+    def test_market_state_price_changes_array_updates_book(self):
+        adapter = StubLiveStatePolymarketAdapter()
+
+        adapter._apply_market_state_message(
+            {
+                "event_type": "price_change",
+                "price_changes": [
+                    {
+                        "asset_id": "token-1",
+                        "side": "BUY",
+                        "price": "0.48",
+                        "size": "3.0",
+                    },
+                    {
+                        "asset_id": "token-1",
+                        "side": "SELL",
+                        "price": "0.49",
+                        "size": "4.0",
+                    },
+                ],
+            }
+        )
+
+        with adapter._market_state_lock:
+            state = adapter._market_state_books["token-1"]
+
+        self.assertEqual(state["bids"][0.48], 3.0)
+        self.assertEqual(state["asks"][0.49], 4.0)
+
+    def test_market_state_tick_size_change_updates_cached_tick_size(self):
+        adapter = StubLiveStatePolymarketAdapter()
+
+        adapter._apply_market_state_message(
+            {
+                "event_type": "tick_size_change",
+                "asset_id": "token-1",
+                "new_tick_size": "0.01",
+            }
+        )
+
+        with adapter._market_state_lock:
+            state = adapter._market_state_books["token-1"]
+
+        self.assertEqual(state["tick_size"], 0.01)
+
+    def test_market_state_tick_size_change_reads_nested_payload(self):
+        adapter = StubLiveStatePolymarketAdapter()
+
+        adapter._apply_market_state_message(
+            {
+                "event_type": "tick_size_change",
+                "asset_id": "token-1",
+                "payload": {"new_tick_size": "0.001"},
+            }
+        )
+
+        with adapter._market_state_lock:
+            state = adapter._market_state_books["token-1"]
+
+        self.assertEqual(state["tick_size"], 0.001)
 
     def test_market_state_overlay_blocks_trading_on_non_tradable_market(self):
         adapter = StubLiveStatePolymarketAdapter()

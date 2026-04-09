@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tempfile
 from types import SimpleNamespace
 from typing import cast
 import unittest
@@ -60,10 +62,9 @@ class RunAgentLoopTests(unittest.TestCase):
             patch.object(run_agent_loop, "validate_runtime"),
             patch.object(
                 run_agent_loop,
-                "load_fair_values",
-                return_value={"token-1:yes": 0.60},
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
             ),
-            patch.object(run_agent_loop, "StaticFairValueProvider"),
             patch.object(
                 run_agent_loop,
                 "TradingEngine",
@@ -173,10 +174,9 @@ class RunAgentLoopTests(unittest.TestCase):
             patch.object(run_agent_loop, "validate_runtime"),
             patch.object(
                 run_agent_loop,
-                "load_fair_values",
-                return_value={"token-1:yes": 0.60},
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
             ),
-            patch.object(run_agent_loop, "StaticFairValueProvider"),
             patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
             patch.object(run_agent_loop, "AgentOrchestrator"),
             patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
@@ -219,10 +219,9 @@ class RunAgentLoopTests(unittest.TestCase):
             patch.object(run_agent_loop, "validate_runtime"),
             patch.object(
                 run_agent_loop,
-                "load_fair_values",
-                return_value={"token-1:yes": 0.60},
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
             ),
-            patch.object(run_agent_loop, "StaticFairValueProvider"),
             patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
             patch.object(run_agent_loop, "AgentOrchestrator"),
             patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
@@ -248,6 +247,266 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertIn('"live_last_fills_source": "rest"', rendered)
         self.assertIn('"snapshot_open_order_overlay_source": "rest_only"', rendered)
         self.assertIn('"snapshot_fill_overlay_source": "rest_only"', rendered)
+
+    def test_main_wires_ranker_filters_from_cli(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+            patch.object(run_agent_loop, "AgentOrchestrator") as orchestrator_ctor,
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--fair-values-file",
+                    "runtime/fair-values.json",
+                    "--categories",
+                    "sports, nba",
+                    "--taker-fee-rate",
+                    "0.03",
+                    "--min-volume",
+                    "2500",
+                    "--max-spread",
+                    "0.08",
+                    "--min-hours-to-expiry",
+                    "2",
+                    "--max-hours-to-expiry",
+                    "24",
+                    "--max-fair-value-age-seconds",
+                    "900",
+                ],
+            ):
+                run_agent_loop.main()
+
+        ranker = orchestrator_ctor.call_args.kwargs["ranker"]
+        pair_ranker = orchestrator_ctor.call_args.kwargs["pair_ranker"]
+        self.assertEqual(ranker.allowed_categories, ("sports", "nba"))
+        self.assertEqual(ranker.taker_fee_rate, 0.03)
+        self.assertEqual(ranker.min_volume, 2500.0)
+        self.assertEqual(ranker.max_spread, 0.08)
+        self.assertEqual(ranker.min_hours_to_expiry, 2.0)
+        self.assertEqual(ranker.max_hours_to_expiry, 24.0)
+        self.assertEqual(pair_ranker.allowed_categories, ("sports", "nba"))
+        self.assertEqual(pair_ranker.taker_fee_rate, 0.03)
+        self.assertEqual(pair_ranker.min_volume, 2500.0)
+        self.assertEqual(pair_ranker.max_spread, 0.08)
+
+    def test_main_supports_pair_mode_last_selected_summary(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=SimpleNamespace(market_key="event-1"))
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+            patch("sys.stdout") as stdout,
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--fair-values-file",
+                    "runtime/fair-values.json",
+                    "--mode",
+                    "pair-preview",
+                ],
+            ):
+                run_agent_loop.main()
+
+        rendered = "".join(call.args[0] for call in stdout.write.call_args_list)
+        self.assertIn('"last_selected": "event-1"', rendered)
+
+    def test_main_passes_quantity_into_polling_config_for_pair_mode(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--fair-values-file",
+                    "runtime/fair-values.json",
+                    "--mode",
+                    "pair-run",
+                    "--quantity",
+                    "2.5",
+                ],
+            ):
+                run_agent_loop.main()
+
+        config = polling_loop.call_args.kwargs["config"]
+        self.assertEqual(config.quantity, 2.5)
+
+    def test_build_fair_value_provider_supports_manifest_records(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(
+                {
+                    "generated_at": "2026-04-07T12:00:00Z",
+                    "source": "sports-model-v1",
+                    "max_age_seconds": 900,
+                    "values": {
+                        "token-1:yes": {
+                            "fair_value": 0.61,
+                            "condition_id": "condition-1",
+                        }
+                    },
+                },
+                handle,
+            )
+            handle.flush()
+
+            provider = run_agent_loop.build_fair_value_provider(handle.name)
+
+        self.assertIsInstance(provider, run_agent_loop.ManifestFairValueProvider)
+        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
+            self.fail("expected manifest fair value provider")
+        manifest_provider = provider
+        self.assertEqual(manifest_provider.max_age_seconds, 900.0)
+        self.assertEqual(manifest_provider.source, "sports-model-v1")
+        self.assertEqual(
+            manifest_provider.records["token-1:yes"].fair_value,
+            0.61,
+        )
+        self.assertEqual(
+            manifest_provider.records["token-1:yes"].condition_id,
+            "condition-1",
+        )
+
+    def test_main_wraps_provider_with_reloader_when_requested(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(run_agent_loop, "ReloadingFairValueProvider") as reloader_ctor,
+            patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+        ):
+            reloader_ctor.return_value = SimpleNamespace()
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--fair-values-file",
+                    "runtime/fair-values.json",
+                    "--fair-values-reload-seconds",
+                    "30",
+                ],
+            ):
+                run_agent_loop.main()
+
+        reloader_ctor.assert_called_once()
+        self.assertEqual(
+            reloader_ctor.call_args.kwargs["reload_interval_seconds"], 30.0
+        )
+
+    def test_reloading_fair_value_provider_reloads_after_interval(self):
+        class Provider:
+            def __init__(self, value):
+                self.value = value
+
+            def fair_value_for(self, _market):
+                return self.value
+
+        values = iter([Provider(0.6), Provider(0.7), Provider(0.8)])
+        provider = run_agent_loop.ReloadingFairValueProvider(
+            lambda: next(values),
+            reload_interval_seconds=0.0,
+        )
+
+        first = provider.fair_value_for(SimpleNamespace())
+        second = provider.fair_value_for(SimpleNamespace())
+
+        self.assertEqual(first, 0.7)
+        self.assertEqual(second, 0.8)
 
 
 if __name__ == "__main__":

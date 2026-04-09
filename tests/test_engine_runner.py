@@ -317,6 +317,32 @@ class RefreshThenRetryAdmissionAdapter(SequencedAdapter):
         raise AssertionError("runner should not place when admission asks for refresh")
 
 
+class ShrinkAdmissionAdapter(SequencedAdapter):
+    def __init__(self):
+        super().__init__()
+        self.seen_quantities: list[float] = []
+
+    def admit_limit_order(self, intent: OrderIntent):
+        return SimpleNamespace(
+            action="shrink_to_size",
+            reason="requested quantity exceeds configured visible depth envelope",
+            scope=intent.contract.market_key,
+            adjusted_quantity=0.5,
+            assessment={
+                "requested_quantity": intent.quantity,
+                "visible_quantity": 1.0,
+                "max_admissible_quantity": 0.5,
+                "expected_slippage_bps": 25.0,
+                "depth_levels_used": 2,
+                "complete_within_visible_depth": False,
+            },
+        )
+
+    def place_limit_order(self, intent: OrderIntent) -> PlacementResult:
+        self.seen_quantities.append(intent.quantity)
+        return PlacementResult(True, order_id="placed-1", status=OrderStatus.RESTING)
+
+
 class AmbiguousSubmitAdapter(SequencedAdapter):
     def __init__(self):
         super().__init__()
@@ -765,6 +791,26 @@ class EngineRunnerTests(unittest.TestCase):
             status.overlay_last_forced_snapshot_scope, adapter.contract.market_key
         )
 
+    def test_run_once_shrinks_quantity_from_admission_guard(self):
+        adapter = ShrinkAdmissionAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+
+        result = engine.run_once(adapter.contract, fair_value=0.60)
+        status = engine.status_snapshot()
+
+        self.assertEqual(adapter.seen_quantities, [0.5])
+        self.assertEqual(result.placements[0].order_id, "placed-1")
+        self.assertIsNotNone(status.last_depth_assessment)
+        if status.last_depth_assessment is None:
+            self.fail("expected depth assessment")
+        self.assertEqual(status.last_depth_assessment["max_admissible_quantity"], 0.5)
+
     def test_ambiguous_submit_becomes_pending_submission_and_requests_refresh(self):
         adapter = AmbiguousSubmitAdapter()
         engine = TradingEngine(
@@ -783,6 +829,10 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(
             engine.pending_submissions(unresolved_only=True)[0].status,
             "needs_recovery",
+        )
+        self.assertEqual(
+            [item.item_type for item in engine.recovery_items(open_only=True)],
+            ["submit-uncertain"],
         )
         self.assertIn("placement uncertain", result.placements[0].message or "")
         self.assertEqual(status.overlay_forced_snapshot_count, 1)
@@ -821,6 +871,13 @@ class EngineRunnerTests(unittest.TestCase):
         context = engine.build_context(adapter.contract, fair_value=0.60)
 
         self.assertFalse(engine.pending_submissions(unresolved_only=True))
+        self.assertFalse(
+            [
+                item
+                for item in engine.recovery_items(open_only=True)
+                if item.item_type == "submit-uncertain"
+            ]
+        )
         self.assertEqual(first.placements[0].order_id, "placed-1")
         self.assertEqual(
             [order.order_id for order in context.open_orders], ["placed-1"]
@@ -844,6 +901,12 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertEqual(status.overlay_forced_snapshot_count, 1)
         self.assertEqual(
             status.overlay_last_forced_snapshot_scope, adapter.contract.market_key
+        )
+        self.assertTrue(
+            any(
+                item.item_type == "cancel-uncertain"
+                for item in engine.recovery_items(open_only=True)
+            )
         )
 
     def test_live_terminal_does_not_remove_pending_cancel_order_early(self):

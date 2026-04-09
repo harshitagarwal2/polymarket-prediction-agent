@@ -30,6 +30,7 @@ from engine.runner import TradingEngine
 from engine.safety_state import (
     EngineSafetyState,
     PendingRefreshRequestState,
+    RecoveryItemState,
 )
 from engine.safety_store import SafetyStateStore
 from research.storage import (
@@ -218,6 +219,13 @@ def _live_state_payload(adapter) -> dict[str, Any] | None:
     return _normalize_payload(getter().__dict__)
 
 
+def _market_state_payload(adapter) -> dict[str, Any] | None:
+    getter = getattr(adapter, "market_state_status", None)
+    if not callable(getter):
+        return None
+    return _normalize_payload(getter().__dict__)
+
+
 def _tracking_engine(args, adapter) -> TradingEngine:
     return TradingEngine(
         adapter=adapter,
@@ -359,6 +367,7 @@ def cmd_status(args) -> int:
     )
     payload: dict = {
         "safety_state": _state_payload(state),
+        "depth_assessment": _normalize_payload(state.last_depth_assessment),
         "pending_cancels": _pending_cancel_payloads(state),
         "pending_submissions": _pending_submission_payloads(state),
         "pending_refresh_requests": _pending_refresh_payloads(state),
@@ -414,6 +423,7 @@ def cmd_status(args) -> int:
             persisted_truth, current_truth
         ).__dict__
         payload["live_state"] = _live_state_payload(adapter)
+        payload["market_state"] = _market_state_payload(adapter)
         payload["reconciliation"] = (
             _reconciliation_payload(
                 engine.reconcile_persisted_truth(contract, snapshot)
@@ -505,6 +515,40 @@ def cmd_force_refresh(args) -> int:
                 requested_at=datetime.now().astimezone(),
             )
         )
+    recovery_id = (
+        f"account-refresh-needed:{scope}"
+        if scope == "account"
+        else f"market-refresh-needed:{scope}"
+    )
+    existing_recovery = next(
+        (item for item in state.recovery_items if item.recovery_id == recovery_id),
+        None,
+    )
+    now = datetime.now().astimezone()
+    if existing_recovery is None:
+        state.recovery_items.append(
+            RecoveryItemState(
+                recovery_id=recovery_id,
+                item_type=(
+                    "account-refresh-needed"
+                    if scope == "account"
+                    else "market-refresh-needed"
+                ),
+                scope=scope,
+                reason=args.reason,
+                clear_source="authoritative_snapshot",
+                opened_at=now,
+                last_evidence_at=now,
+                last_evidence=args.reason,
+            )
+        )
+    else:
+        existing_recovery.status = "open"
+        existing_recovery.reason = args.reason
+        existing_recovery.last_evidence_at = now
+        existing_recovery.last_evidence = args.reason
+        existing_recovery.cleared_at = None
+        existing_recovery.clear_reason = None
     store.save(state)
     _journal_action(
         args,

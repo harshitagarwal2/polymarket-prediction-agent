@@ -22,6 +22,7 @@ from adapters.types import (
     FillSnapshot,
     NormalizedOrder,
     OrderAction,
+    OrderBookExecutionAssessment,
     OrderBookSnapshot,
     OrderIntent,
     OrderStatus,
@@ -60,6 +61,9 @@ class PolymarketConfig:
     market_state_freshness_seconds: float = 10.0
     live_market_ping_interval_seconds: float = 10.0
     live_market_assets: list[str] | None = None
+    depth_admission_levels: int | None = 3
+    depth_admission_liquidity_fraction: float = 0.5
+    depth_admission_max_expected_slippage_bps: float | None = 50.0
 
 
 @dataclass(frozen=True)
@@ -146,6 +150,8 @@ class OrderAdmissionDecision:
     action: str
     reason: str | None = None
     scope: str | None = None
+    adjusted_quantity: float | None = None
+    assessment: dict[str, Any] | None = None
 
 
 class PolymarketAdapter:
@@ -1368,6 +1374,8 @@ class PolymarketAdapter:
         )
         if status_value is not None:
             normalized = str(status_value).strip().lower()
+            if normalized.startswith("order_status_"):
+                normalized = normalized.removeprefix("order_status_")
             if normalized in {"live", "resting", "open", "booked", "unmatched"}:
                 return OrderStatus.RESTING
             if normalized in {"pending", "queued", "accepted", "processing"}:
@@ -1378,13 +1386,20 @@ class PolymarketAdapter:
                 "partially-filled",
                 "partially matched",
                 "partially_matched",
+                "matched_partially",
             }:
                 return OrderStatus.PARTIALLY_FILLED
             if normalized in {"filled", "matched", "complete", "completed"}:
                 return OrderStatus.FILLED
-            if normalized in {"cancelled", "canceled"}:
+            if (
+                normalized in {"cancelled", "canceled"}
+                or normalized.startswith("canceled_")
+                or normalized.startswith("cancelled_")
+            ):
                 return OrderStatus.CANCELLED
-            if normalized in {"rejected", "error", "failed"}:
+            if normalized in {"rejected", "error", "failed"} or normalized.startswith(
+                "rejected_"
+            ):
                 return OrderStatus.REJECTED
         matched = max(0.0, quantity - remaining_quantity)
         if matched > 0.0:
@@ -1547,16 +1562,24 @@ class PolymarketAdapter:
         if status is None:
             return False
         normalized = str(status).strip().lower()
-        return normalized in {
-            "cancelled",
-            "canceled",
-            "filled",
-            "matched",
-            "complete",
-            "completed",
-            "rejected",
-            "failed",
-        }
+        if normalized.startswith("order_status_"):
+            normalized = normalized.removeprefix("order_status_")
+        return (
+            normalized
+            in {
+                "cancelled",
+                "canceled",
+                "filled",
+                "matched",
+                "complete",
+                "completed",
+                "rejected",
+                "failed",
+            }
+            or normalized.startswith("canceled_")
+            or normalized.startswith("cancelled_")
+            or normalized.startswith("rejected_")
+        )
 
     def _fill_order_id(self, trade: dict[str, Any]) -> str:
         return str(
@@ -1702,7 +1725,32 @@ class PolymarketAdapter:
                     asset_ids.extend(
                         str(value) for value in values if value not in (None, "")
                     )
+            price_changes = candidate.get("price_changes")
+            if isinstance(price_changes, list):
+                for change in price_changes:
+                    if not isinstance(change, dict):
+                        continue
+                    for key in ("asset_id", "assetId"):
+                        value = change.get(key)
+                        if value not in (None, ""):
+                            asset_ids.append(str(value))
         return list(dict.fromkeys(asset_ids))
+
+    def _iter_market_price_changes(
+        self, message: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        payload = (
+            message.get("payload") if isinstance(message.get("payload"), dict) else None
+        )
+        candidates = [message, payload or {}]
+        normalized: list[dict[str, Any]] = []
+        for candidate in candidates:
+            changes = candidate.get("price_changes")
+            if isinstance(changes, list):
+                normalized.extend(item for item in changes if isinstance(item, dict))
+        if normalized:
+            return normalized
+        return [message]
 
     def _market_level_map(self, entries: Any) -> dict[float, float]:
         levels: dict[float, float] = {}
@@ -1728,6 +1776,8 @@ class PolymarketAdapter:
             "asset_id": asset_id,
             "bids": dict(state.get("bids", {})),
             "asks": dict(state.get("asks", {})),
+            "tick_size": state.get("tick_size"),
+            "min_order_size": state.get("min_order_size"),
             "tradable": state.get("tradable", True),
             "active": state.get("active", True),
             "last_update_at": state.get("last_update_at"),
@@ -1807,23 +1857,60 @@ class PolymarketAdapter:
                             or changed
                         )
                 elif event_type == "price_change":
-                    side = str(message.get("side") or "").lower()
-                    price = message.get("price")
-                    size = message.get("size")
-                    if price in (None, ""):
+                    for price_change in self._iter_market_price_changes(message):
+                        side = str(price_change.get("side") or "").lower()
+                        price = price_change.get("price")
+                        size = (
+                            price_change.get("size")
+                            or price_change.get("quantity")
+                            or price_change.get("amount")
+                        )
+                        if price in (None, ""):
+                            continue
+                        level_price = float(price)
+                        level_size = 0.0 if size in (None, "") else float(size)
+                        change_asset_ids = self._market_message_asset_ids(price_change)
+                        for asset_id in change_asset_ids or asset_ids:
+
+                            def updater(state: dict[str, Any]) -> bool:
+                                book_side = "bids" if side in {"buy", "bid"} else "asks"
+                                levels = dict(state.get(book_side, {}))
+                                if level_size <= 0.0:
+                                    levels.pop(level_price, None)
+                                else:
+                                    levels[level_price] = level_size
+                                state[book_side] = levels
+                                return True
+
+                            changed = (
+                                self._update_market_state_asset(
+                                    asset_id, updater, observed_at=observed_at
+                                )
+                                or changed
+                            )
+                elif event_type == "tick_size_change":
+                    payload = (
+                        message.get("payload")
+                        if isinstance(message.get("payload"), dict)
+                        else {}
+                    )
+                    tick_size = (
+                        message.get("new_tick_size")
+                        or message.get("newTickSize")
+                        or message.get("tick_size")
+                        or message.get("tickSize")
+                        or payload.get("new_tick_size")
+                        or payload.get("newTickSize")
+                        or payload.get("tick_size")
+                        or payload.get("tickSize")
+                    )
+                    if tick_size in (None, ""):
                         continue
-                    level_price = float(price)
-                    level_size = 0.0 if size in (None, "") else float(size)
+                    resolved_tick_size = float(tick_size)
                     for asset_id in asset_ids:
 
                         def updater(state: dict[str, Any]) -> bool:
-                            book_side = "bids" if side in {"buy", "bid"} else "asks"
-                            levels = dict(state.get(book_side, {}))
-                            if level_size <= 0.0:
-                                levels.pop(level_price, None)
-                            else:
-                                levels[level_price] = level_size
-                            state[book_side] = levels
+                            state["tick_size"] = resolved_tick_size
                             return True
 
                         changed = (
@@ -2278,6 +2365,62 @@ class PolymarketAdapter:
             self._market_state_last_snapshot_book_overlay_applied = True
         return overlay
 
+    def _market_state_order_book(
+        self, contract: Contract, state: dict[str, Any]
+    ) -> OrderBookSnapshot:
+        bids = self._market_state_levels(dict(state.get("bids", {})), reverse=True)
+        asks = self._market_state_levels(dict(state.get("asks", {})), reverse=False)
+        midpoint = None
+        if bids and asks:
+            midpoint = (bids[0].price + asks[0].price) / 2
+        elif bids:
+            midpoint = bids[0].price
+        elif asks:
+            midpoint = asks[0].price
+        return OrderBookSnapshot(
+            contract=contract,
+            bids=bids,
+            asks=asks,
+            midpoint=midpoint,
+            observed_at=state.get("last_update_at") or datetime.now(timezone.utc),
+            raw={"live_market": state},
+        )
+
+    def _assess_order_intent_depth(
+        self, intent: OrderIntent, state: dict[str, Any]
+    ) -> OrderBookExecutionAssessment:
+        book = self._market_state_order_book(intent.contract, state)
+        visible_quantity = book.cumulative_quantity(
+            intent.action,
+            limit_price=intent.price,
+            max_levels=self.config.depth_admission_levels,
+        )
+        max_admissible_quantity = (
+            visible_quantity * self.config.depth_admission_liquidity_fraction
+        )
+        estimate = book.estimate_fill(
+            intent.action,
+            intent.quantity,
+            limit_price=intent.price,
+            max_levels=self.config.depth_admission_levels,
+        )
+        reference_price = (
+            book.best_ask if intent.action is OrderAction.BUY else book.best_bid
+        )
+        expected_slippage_bps = estimate.expected_slippage_bps(
+            reference_price=reference_price,
+            action=intent.action,
+        )
+        return OrderBookExecutionAssessment(
+            action=intent.action,
+            requested_quantity=intent.quantity,
+            visible_quantity=visible_quantity,
+            max_admissible_quantity=max_admissible_quantity,
+            expected_slippage_bps=expected_slippage_bps,
+            depth_levels_used=estimate.levels_consumed,
+            complete_within_visible_depth=estimate.complete,
+        )
+
     def admit_limit_order(self, intent: OrderIntent) -> OrderAdmissionDecision:
         with self._market_state_lock:
             fallback_reason = self._market_state_book_fallback_reason_locked()
@@ -2305,22 +2448,76 @@ class PolymarketAdapter:
                 scope=intent.contract.market_key,
             )
 
+        assessment = self._assess_order_intent_depth(intent, state)
+        assessment_payload = {
+            "action": assessment.action.value,
+            "requested_quantity": assessment.requested_quantity,
+            "visible_quantity": assessment.visible_quantity,
+            "max_admissible_quantity": assessment.max_admissible_quantity,
+            "expected_slippage_bps": assessment.expected_slippage_bps,
+            "depth_levels_used": assessment.depth_levels_used,
+            "complete_within_visible_depth": assessment.complete_within_visible_depth,
+        }
+
         bids = dict(state.get("bids", {}))
         asks = dict(state.get("asks", {}))
         best_bid = max(bids) if bids else None
         best_ask = min(asks) if asks else None
+
+        tick_size = state.get("tick_size")
+        if tick_size not in (None, ""):
+            resolved_tick_size = float(tick_size)
+            if (
+                intent.price < resolved_tick_size
+                or intent.price > 1.0 - resolved_tick_size
+            ):
+                return OrderAdmissionDecision(
+                    "deny",
+                    reason=(
+                        "price outside venue tick-size bounds "
+                        f"({intent.price:.4f} not in [{resolved_tick_size:.4f}, {1.0 - resolved_tick_size:.4f}])"
+                    ),
+                    scope=intent.contract.market_key,
+                    assessment=assessment_payload,
+                )
+            scaled_price = round(intent.price / resolved_tick_size)
+            aligned_price = round(scaled_price * resolved_tick_size, 10)
+            if abs(aligned_price - intent.price) > 1e-9:
+                return OrderAdmissionDecision(
+                    "deny",
+                    reason=(
+                        "price does not align with live tick size "
+                        f"({intent.price:.4f} vs tick {resolved_tick_size:.4f})"
+                    ),
+                    scope=intent.contract.market_key,
+                    assessment=assessment_payload,
+                )
+
+        min_order_size = state.get("min_order_size")
+        if min_order_size not in (None, "") and intent.quantity < float(min_order_size):
+            return OrderAdmissionDecision(
+                "deny",
+                reason=(
+                    "quantity below live minimum order size "
+                    f"({intent.quantity:.4f} < {float(min_order_size):.4f})"
+                ),
+                scope=intent.contract.market_key,
+                assessment=assessment_payload,
+            )
 
         if intent.action is OrderAction.BUY and best_ask is None:
             return OrderAdmissionDecision(
                 "refresh_then_retry",
                 reason="live market best ask unavailable",
                 scope=intent.contract.market_key,
+                assessment=assessment_payload,
             )
         if intent.action is OrderAction.SELL and best_bid is None:
             return OrderAdmissionDecision(
                 "refresh_then_retry",
                 reason="live market best bid unavailable",
                 scope=intent.contract.market_key,
+                assessment=assessment_payload,
             )
 
         if (
@@ -2333,6 +2530,7 @@ class PolymarketAdapter:
                     "deny",
                     reason="post-only buy would cross live best ask",
                     scope=intent.contract.market_key,
+                    assessment=assessment_payload,
                 )
         if (
             intent.post_only
@@ -2344,9 +2542,55 @@ class PolymarketAdapter:
                     "deny",
                     reason="post-only sell would cross live best bid",
                     scope=intent.contract.market_key,
+                    assessment=assessment_payload,
                 )
 
-        return OrderAdmissionDecision("allow")
+        if not intent.post_only:
+            if assessment.visible_quantity <= 0.0:
+                return OrderAdmissionDecision(
+                    "refresh_then_retry",
+                    reason="no visible depth available within limit price",
+                    scope=intent.contract.market_key,
+                    assessment=assessment_payload,
+                )
+            if assessment.max_admissible_quantity <= 0.0:
+                return OrderAdmissionDecision(
+                    "deny",
+                    reason="visible depth does not support any admissible size",
+                    scope=intent.contract.market_key,
+                    assessment=assessment_payload,
+                )
+            if (
+                self.config.depth_admission_max_expected_slippage_bps is not None
+                and assessment.expected_slippage_bps is not None
+                and assessment.expected_slippage_bps
+                > self.config.depth_admission_max_expected_slippage_bps
+            ):
+                return OrderAdmissionDecision(
+                    "shrink_to_size",
+                    reason=(
+                        "expected slippage exceeds depth admission limit "
+                        f"({assessment.expected_slippage_bps:.2f}bps > "
+                        f"{self.config.depth_admission_max_expected_slippage_bps:.2f}bps)"
+                    ),
+                    scope=intent.contract.market_key,
+                    adjusted_quantity=round(assessment.max_admissible_quantity, 4),
+                    assessment=assessment_payload,
+                )
+            if assessment.requested_quantity > assessment.max_admissible_quantity:
+                return OrderAdmissionDecision(
+                    "shrink_to_size",
+                    reason=(
+                        "requested quantity exceeds configured visible depth envelope "
+                        f"({assessment.requested_quantity:.4f} > "
+                        f"{assessment.max_admissible_quantity:.4f})"
+                    ),
+                    scope=intent.contract.market_key,
+                    adjusted_quantity=round(assessment.max_admissible_quantity, 4),
+                    assessment=assessment_payload,
+                )
+
+        return OrderAdmissionDecision("allow", assessment=assessment_payload)
 
     def _placement_status(self, payload: dict[str, Any]) -> OrderStatus:
         status_value = (
@@ -2483,9 +2727,42 @@ class PolymarketAdapter:
         if items is None and isinstance(response, dict):
             items = response.get("markets")
         summaries: list[MarketSummary] = []
+
+        def _coerce_json_list(value: Any) -> list[Any] | None:
+            if value in (None, ""):
+                return None
+            if isinstance(value, list):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                except ValueError:
+                    return None
+                return parsed if isinstance(parsed, list) else None
+            return None
+
         for item in items or []:
             title = item.get("question") or item.get("title") or item.get("slug")
             category = item.get("category")
+            sport = item.get("sport")
+            series = item.get("series")
+            event_key = (
+                item.get("event_key")
+                or item.get("eventKey")
+                or item.get("event_slug")
+                or item.get("eventSlug")
+                or item.get("slug")
+            )
+            game_id = item.get("game_id") or item.get("gameId")
+            sports_market_type = item.get("sports_market_type") or item.get(
+                "sportsMarketType"
+            )
+            raw_tags = item.get("tags")
+            tags: tuple[str, ...] = ()
+            if isinstance(raw_tags, str):
+                tags = tuple(tag.strip() for tag in raw_tags.split(",") if tag.strip())
+            elif isinstance(raw_tags, list):
+                tags = tuple(str(tag).strip() for tag in raw_tags if str(tag).strip())
             active = bool(item.get("active", True))
             volume = (
                 item.get("volume") or item.get("volume24hr") or item.get("volume_num")
@@ -2500,9 +2777,48 @@ class PolymarketAdapter:
                 except ValueError:
                     expires_at = None
 
-            token_entries = item.get("tokens") or item.get("outcomes")
+            start_time_raw = item.get("gameStartTime") or item.get("start_time")
+            start_time = None
+            if start_time_raw:
+                try:
+                    start_time = datetime.fromisoformat(
+                        str(start_time_raw).replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    start_time = None
+
+            token_entries = item.get("tokens")
+            if not token_entries:
+                outcome_names = _coerce_json_list(item.get("outcomes"))
+                outcome_prices = _coerce_json_list(
+                    item.get("outcomePrices") or item.get("outcome_prices")
+                )
+                token_ids = _coerce_json_list(
+                    item.get("clobTokenIds") or item.get("clob_token_ids")
+                )
+                if outcome_names and token_ids:
+                    token_entries = []
+                    for index, token_id in enumerate(token_ids):
+                        token_entries.append(
+                            {
+                                "token_id": token_id,
+                                "outcome": (
+                                    outcome_names[index]
+                                    if index < len(outcome_names)
+                                    else None
+                                ),
+                                "midpoint": (
+                                    outcome_prices[index]
+                                    if outcome_prices and index < len(outcome_prices)
+                                    else None
+                                ),
+                            }
+                        )
+
             if token_entries:
                 for token in token_entries:
+                    if not isinstance(token, dict):
+                        continue
                     symbol = str(
                         token.get("token_id")
                         or token.get("tokenId")
@@ -2534,6 +2850,7 @@ class PolymarketAdapter:
                     )
                     best_bid = token.get("best_bid") or token.get("bid")
                     best_ask = token.get("best_ask") or token.get("ask")
+                    midpoint = token.get("midpoint")
                     summaries.append(
                         MarketSummary(
                             contract=Contract(
@@ -2547,9 +2864,24 @@ class PolymarketAdapter:
                             best_ask=float(best_ask) if best_ask is not None else None,
                             midpoint=(float(best_bid) + float(best_ask)) / 2
                             if best_bid is not None and best_ask is not None
+                            else float(midpoint)
+                            if midpoint is not None
                             else None,
                             volume=float(volume) if volume is not None else None,
                             category=category,
+                            sport=str(sport) if sport not in (None, "") else None,
+                            series=str(series) if series not in (None, "") else None,
+                            event_key=(
+                                str(event_key) if event_key not in (None, "") else None
+                            ),
+                            game_id=str(game_id) if game_id not in (None, "") else None,
+                            sports_market_type=(
+                                str(sports_market_type)
+                                if sports_market_type not in (None, "")
+                                else None
+                            ),
+                            start_time=start_time,
+                            tags=tags,
                             active=active,
                             expires_at=expires_at,
                             raw={"market": item, "token": token},
@@ -2580,6 +2912,19 @@ class PolymarketAdapter:
                         else None,
                         volume=float(volume) if volume is not None else None,
                         category=category,
+                        sport=str(sport) if sport not in (None, "") else None,
+                        series=str(series) if series not in (None, "") else None,
+                        event_key=(
+                            str(event_key) if event_key not in (None, "") else None
+                        ),
+                        game_id=str(game_id) if game_id not in (None, "") else None,
+                        sports_market_type=(
+                            str(sports_market_type)
+                            if sports_market_type not in (None, "")
+                            else None
+                        ),
+                        start_time=start_time,
+                        tags=tags,
                         active=active,
                         expires_at=expires_at,
                         raw=item,
@@ -2672,6 +3017,15 @@ class PolymarketAdapter:
             raw=book,
         )
         with self._market_state_lock:
+            state = self._market_state_snapshot_for_asset(contract.symbol)
+            tick_size = getattr(book, "tick_size", None)
+            min_order_size = getattr(book, "min_order_size", None)
+            if tick_size not in (None, ""):
+                state["tick_size"] = float(tick_size)
+            if min_order_size not in (None, ""):
+                state["min_order_size"] = float(min_order_size)
+            state["last_update_at"] = rest_book.observed_at
+            self._market_state_books[contract.symbol] = state
             if self._market_state_mode == "recovering":
                 self._set_market_state_mode_locked("healthy")
                 self._market_state_last_recovery_at = rest_book.observed_at
@@ -3011,7 +3365,7 @@ class PolymarketAdapter:
             )
 
         unsupported_fields: list[str] = []
-        if intent.reduce_only:
+        if intent.reduce_only and intent.action is not OrderAction.SELL:
             unsupported_fields.append("reduce_only")
         if intent.client_order_id is not None:
             unsupported_fields.append("client_order_id")

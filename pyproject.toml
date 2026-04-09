@@ -10,8 +10,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.scripts]
+prediction-market-sports-benchmark = "research.benchmark_cli:main"
+prediction-market-sports-benchmark-suite = "research.benchmark_suite_cli:main"
+
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.package-data]
+research = ["fixtures/*.json"]
 
 [tool.setuptools.packages.find]
 include = ["adapters*", "engine*", "risk*", "research*"]

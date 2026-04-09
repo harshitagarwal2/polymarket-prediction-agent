@@ -52,6 +52,51 @@ class PriceLevel:
     quantity: float
 
 
+@dataclass(frozen=True)
+class OrderBookFillEstimate:
+    requested_quantity: float
+    filled_quantity: float
+    average_price: float | None = None
+    worst_price: float | None = None
+    levels_consumed: int = 0
+
+    @property
+    def unfilled_quantity(self) -> float:
+        return max(0.0, self.requested_quantity - self.filled_quantity)
+
+    @property
+    def complete(self) -> bool:
+        return self.filled_quantity >= self.requested_quantity
+
+    def expected_slippage_bps(
+        self, *, reference_price: float | None, action: OrderAction
+    ) -> float | None:
+        if (
+            reference_price is None
+            or reference_price <= 0.0
+            or self.average_price is None
+        ):
+            return None
+        if action is OrderAction.BUY:
+            return max(
+                0.0, (self.average_price - reference_price) / reference_price * 10_000
+            )
+        return max(
+            0.0, (reference_price - self.average_price) / reference_price * 10_000
+        )
+
+
+@dataclass(frozen=True)
+class OrderBookExecutionAssessment:
+    action: OrderAction
+    requested_quantity: float
+    visible_quantity: float
+    max_admissible_quantity: float
+    expected_slippage_bps: float | None
+    depth_levels_used: int
+    complete_within_visible_depth: bool
+
+
 @dataclass
 class OrderBookSnapshot:
     contract: Contract
@@ -69,6 +114,77 @@ class OrderBookSnapshot:
     @property
     def best_ask(self) -> float | None:
         return self.asks[0].price if self.asks else None
+
+    def levels_for_action(self, action: OrderAction) -> list[PriceLevel]:
+        return self.asks if action is OrderAction.BUY else self.bids
+
+    def cumulative_quantity(
+        self,
+        action: OrderAction,
+        *,
+        limit_price: float | None = None,
+        max_levels: int | None = None,
+    ) -> float:
+        total = 0.0
+        levels_consumed = 0
+        for level in self.levels_for_action(action):
+            if max_levels is not None and levels_consumed >= max_levels:
+                break
+            if limit_price is not None:
+                if action is OrderAction.BUY and level.price > limit_price:
+                    break
+                if action is OrderAction.SELL and level.price < limit_price:
+                    break
+            total += level.quantity
+            levels_consumed += 1
+        return total
+
+    def estimate_fill(
+        self,
+        action: OrderAction,
+        quantity: float,
+        *,
+        limit_price: float | None = None,
+        max_levels: int | None = None,
+    ) -> OrderBookFillEstimate:
+        if quantity <= 0:
+            return OrderBookFillEstimate(
+                requested_quantity=quantity, filled_quantity=0.0
+            )
+
+        remaining = quantity
+        filled = 0.0
+        total_notional = 0.0
+        worst_price: float | None = None
+        levels_consumed = 0
+
+        for level in self.levels_for_action(action):
+            if max_levels is not None and levels_consumed >= max_levels:
+                break
+            if limit_price is not None:
+                if action is OrderAction.BUY and level.price > limit_price:
+                    break
+                if action is OrderAction.SELL and level.price < limit_price:
+                    break
+            take_quantity = min(remaining, level.quantity)
+            if take_quantity <= 0:
+                continue
+            filled += take_quantity
+            total_notional += take_quantity * level.price
+            worst_price = level.price
+            remaining -= take_quantity
+            levels_consumed += 1
+            if remaining <= 0:
+                break
+
+        average_price = total_notional / filled if filled > 0 else None
+        return OrderBookFillEstimate(
+            requested_quantity=quantity,
+            filled_quantity=filled,
+            average_price=average_price,
+            worst_price=worst_price,
+            levels_consumed=levels_consumed,
+        )
 
 
 @dataclass(frozen=True)
@@ -172,6 +288,13 @@ class MarketSummary:
     midpoint: float | None = None
     volume: float | None = None
     category: str | None = None
+    sport: str | None = None
+    series: str | None = None
+    event_key: str | None = None
+    game_id: str | None = None
+    sports_market_type: str | None = None
+    start_time: datetime | None = None
+    tags: tuple[str, ...] = field(default_factory=tuple)
     active: bool = True
     expires_at: datetime | None = None
     raw: Any | None = None
@@ -204,6 +327,58 @@ def deserialize_contract(payload: dict[str, Any]) -> Contract:
         symbol=str(payload["symbol"]),
         outcome=OutcomeSide(payload.get("outcome", OutcomeSide.UNKNOWN.value)),
         title=payload.get("title"),
+    )
+
+
+def serialize_market_summary(market: MarketSummary) -> dict[str, Any]:
+    return {
+        "contract": serialize_contract(market.contract),
+        "title": market.title,
+        "best_bid": market.best_bid,
+        "best_ask": market.best_ask,
+        "midpoint": market.midpoint,
+        "volume": market.volume,
+        "category": market.category,
+        "sport": market.sport,
+        "series": market.series,
+        "event_key": market.event_key,
+        "game_id": market.game_id,
+        "sports_market_type": market.sports_market_type,
+        "start_time": _serialize_datetime(market.start_time),
+        "tags": list(market.tags),
+        "active": market.active,
+        "expires_at": _serialize_datetime(market.expires_at),
+        "raw": market.raw,
+    }
+
+
+def deserialize_market_summary(payload: dict[str, Any]) -> MarketSummary:
+    return MarketSummary(
+        contract=deserialize_contract(payload["contract"]),
+        title=payload.get("title"),
+        best_bid=(
+            float(payload["best_bid"]) if payload.get("best_bid") is not None else None
+        ),
+        best_ask=(
+            float(payload["best_ask"]) if payload.get("best_ask") is not None else None
+        ),
+        midpoint=(
+            float(payload["midpoint"]) if payload.get("midpoint") is not None else None
+        ),
+        volume=(
+            float(payload["volume"]) if payload.get("volume") is not None else None
+        ),
+        category=payload.get("category"),
+        sport=payload.get("sport"),
+        series=payload.get("series"),
+        event_key=payload.get("event_key"),
+        game_id=payload.get("game_id"),
+        sports_market_type=payload.get("sports_market_type"),
+        start_time=_deserialize_datetime(payload.get("start_time")),
+        tags=tuple(str(tag) for tag in payload.get("tags", [])),
+        active=bool(payload.get("active", True)),
+        expires_at=_deserialize_datetime(payload.get("expires_at")),
+        raw=payload.get("raw"),
     )
 
 

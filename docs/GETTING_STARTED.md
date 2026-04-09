@@ -41,6 +41,11 @@ pip install pandas pyarrow duckdb
 Quick demos:
 
 ```bash
+python3 scripts/export_polymarket_markets.py --output runtime/polymarket_markets.json --limit 200
+python3 scripts/fetch_the_odds_api_rows.py --sport-key basketball_nba --event-map-file runtime/odds_event_map.json --output runtime/sportsbook_odds.json
+python3 scripts/build_sports_fair_values.py --input runtime/sportsbook_odds.json --output runtime/fair_values.json --devig-method multiplicative --max-age-seconds 900
+python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
+python3 scripts/run_sports_benchmark_suite.py --output-dir runtime/benchmark-suite
 python3 scripts/demo_preview.py
 python3 scripts/demo_replay.py
 python3 scripts/operator_cli.py status --state-file runtime/safety-state.json
@@ -51,6 +56,20 @@ python3 scripts/summarize_events.py --journal runtime/events.jsonl
 
 `summarize_events.py` now shows both aggregate counts and a compact recent-runtime summary.
 That recent-runtime summary now includes the last execution-attempt context as well (selected market, policy outcome, placement count, accepted placements, and order IDs when present).
+
+The repo can now generate an offline fair-value manifest from normalized sportsbook odds rows before the polling loop starts. `scripts/fetch_the_odds_api_rows.py` pulls live decimal odds from The Odds API into the repo’s normalized row format, `scripts/export_polymarket_markets.py` snapshots the current Polymarket market universe, and `scripts/build_sports_fair_values.py` matches and de-vigs those rows into the runtime manifest. For simple moneyline markets, the matcher can now derive yes/no mapping from sportsbook team names and Polymarket market titles even without a hand-written event map. If you have multiple books, `--book-aggregation best-line` picks the best decimal odds per outcome before de-vigging, and `scripts/run_agent_loop.py --fair-values-reload-seconds ...` lets a long-running process pick up refreshed manifests without restart.
+
+For a **public-safe, fixture-driven** path that does not depend on live APIs, use the benchmark toolkit instead:
+
+```bash
+python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
+```
+
+That path exercises the same fair-value and replay core, but keeps the workflow offline and reproducible. See `docs/BENCHMARK_TOOLKIT.md` for the benchmark case format and output report shape.
+It also documents the fail-closed fields (`expected_market_keys` and `outcome_labels`) that make incomplete fair-value resolution a benchmark error instead of a partial success.
+The replay report is still based on the repo's paper-execution model, so treat it as an approximation rather than a claim of live-fill realism.
+If you want the packaged multi-case benchmark artifacts, run `scripts/run_sports_benchmark_suite.py` and read `docs/BENCHMARK_PROTOCOL.md` for the aggregate workflow.
+If you install the project as a package, you can also run the suite via `prediction-market-sports-benchmark-suite --output-dir ...`.
 
 Paper execution realism knobs live in `PaperExecutionConfig` and currently support:
 

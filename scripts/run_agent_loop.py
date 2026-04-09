@@ -4,7 +4,9 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -13,7 +15,10 @@ from adapters.polymarket import PolymarketAdapter, PolymarketConfig
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.discovery import (
     AgentOrchestrator,
+    FairValueManifestEntry,
+    ManifestFairValueProvider,
     OpportunityRanker,
+    PairOpportunityRanker,
     PollingAgentLoop,
     PollingLoopConfig,
     StaticFairValueProvider,
@@ -66,6 +71,103 @@ def load_fair_values(path: str) -> dict[str, float]:
     return {str(key): float(value) for key, value in payload.items()}
 
 
+def _parse_fair_value_timestamp(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def build_fair_value_provider(path: str, *, max_age_seconds: float | None = None):
+    payload = json.loads(Path(path).read_text())
+    if not isinstance(payload, dict):
+        raise RuntimeError("fair values file must contain a JSON object")
+
+    manifest_values = payload.get("values")
+    if isinstance(manifest_values, dict):
+        resolved_max_age = max_age_seconds
+        if resolved_max_age is None and payload.get("max_age_seconds") not in (
+            None,
+            "",
+        ):
+            resolved_max_age = float(payload["max_age_seconds"])
+
+        records: dict[str, FairValueManifestEntry] = {}
+        for market_key, item in manifest_values.items():
+            if isinstance(item, dict):
+                if item.get("fair_value") in (None, ""):
+                    raise RuntimeError(
+                        f"manifest fair value missing for market key: {market_key}"
+                    )
+                records[str(market_key)] = FairValueManifestEntry(
+                    fair_value=float(item["fair_value"]),
+                    generated_at=_parse_fair_value_timestamp(item.get("generated_at")),
+                    source=(
+                        str(item.get("source"))
+                        if item.get("source") not in (None, "")
+                        else None
+                    ),
+                    condition_id=(
+                        str(item.get("condition_id"))
+                        if item.get("condition_id") not in (None, "")
+                        else None
+                    ),
+                    event_key=(
+                        str(item.get("event_key"))
+                        if item.get("event_key") not in (None, "")
+                        else None
+                    ),
+                )
+                continue
+            records[str(market_key)] = FairValueManifestEntry(fair_value=float(item))
+
+        return ManifestFairValueProvider(
+            records=records,
+            generated_at=_parse_fair_value_timestamp(payload.get("generated_at")),
+            source=(
+                str(payload.get("source"))
+                if payload.get("source") not in (None, "")
+                else None
+            ),
+            max_age_seconds=resolved_max_age,
+        )
+
+    return StaticFairValueProvider(
+        {str(key): float(value) for key, value in payload.items()}
+    )
+
+
+class ReloadingFairValueProvider:
+    def __init__(
+        self,
+        loader: Callable[[], object],
+        *,
+        reload_interval_seconds: float,
+    ):
+        self.loader = loader
+        self.reload_interval_seconds = max(0.0, reload_interval_seconds)
+        self._provider = self.loader()
+        self._loaded_at = datetime.now(timezone.utc)
+
+    def _refresh_if_due(self) -> None:
+        now = datetime.now(timezone.utc)
+        age_seconds = (now - self._loaded_at).total_seconds()
+        if age_seconds < self.reload_interval_seconds:
+            return
+        self._provider = self.loader()
+        self._loaded_at = now
+
+    def fair_value_for(self, market):
+        self._refresh_if_due()
+        fair_value_for = getattr(self._provider, "fair_value_for")
+        return fair_value_for(market)
+
+
 def _required_env_vars(venue_name: str) -> list[str]:
     if venue_name == "polymarket":
         return ["POLYMARKET_PRIVATE_KEY"]
@@ -103,7 +205,11 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run the prediction-market polling loop"
     )
     parser.add_argument("--venue", choices=["polymarket", "kalshi"], required=True)
-    parser.add_argument("--mode", choices=["preview", "run"], default="preview")
+    parser.add_argument(
+        "--mode",
+        choices=["preview", "run", "pair-preview", "pair-run"],
+        default="preview",
+    )
     parser.add_argument("--fair-values-file", required=True)
     parser.add_argument("--market-limit", type=int, default=100)
     parser.add_argument("--interval-seconds", type=float, default=5.0)
@@ -112,8 +218,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state-file", default="runtime/safety-state.json")
     parser.add_argument("--quantity", type=float, default=1.0)
     parser.add_argument("--edge-threshold", type=float, default=0.03)
+    parser.add_argument("--taker-fee-rate", type=float, default=0.0)
+    parser.add_argument("--max-fair-value-age-seconds", type=float, default=None)
+    parser.add_argument("--fair-values-reload-seconds", type=float, default=None)
     parser.add_argument("--max-contracts-per-market", type=int, default=10)
     parser.add_argument("--max-global-contracts", type=int, default=20)
+    parser.add_argument("--categories", default=None)
+    parser.add_argument("--min-volume", type=float, default=None)
+    parser.add_argument("--max-spread", type=float, default=None)
+    parser.add_argument("--min-hours-to-expiry", type=float, default=None)
+    parser.add_argument("--max-hours-to-expiry", type=float, default=None)
     parser.add_argument("--polymarket-live-user-markets", default=None)
     parser.add_argument("--polymarket-user-ws-host", default=None)
     return parser
@@ -124,7 +238,35 @@ def main() -> int:
     validate_runtime(args)
     adapter = build_adapter(args.venue, args)
     try:
-        provider = StaticFairValueProvider(load_fair_values(args.fair_values_file))
+        loader = lambda: build_fair_value_provider(
+            args.fair_values_file,
+            max_age_seconds=args.max_fair_value_age_seconds,
+        )
+        provider = loader()
+        if args.fair_values_reload_seconds is not None:
+            provider = ReloadingFairValueProvider(
+                loader,
+                reload_interval_seconds=args.fair_values_reload_seconds,
+            )
+        categories = _parse_comma_separated(args.categories)
+        ranker = OpportunityRanker(
+            edge_threshold=args.edge_threshold,
+            taker_fee_rate=args.taker_fee_rate,
+            allowed_categories=tuple(categories) if categories else None,
+            min_volume=args.min_volume,
+            max_spread=args.max_spread,
+            min_hours_to_expiry=args.min_hours_to_expiry,
+            max_hours_to_expiry=args.max_hours_to_expiry,
+        )
+        pair_ranker = PairOpportunityRanker(
+            edge_threshold=args.edge_threshold,
+            taker_fee_rate=args.taker_fee_rate,
+            allowed_categories=tuple(categories) if categories else None,
+            min_volume=args.min_volume,
+            max_spread=args.max_spread,
+            min_hours_to_expiry=args.min_hours_to_expiry,
+            max_hours_to_expiry=args.max_hours_to_expiry,
+        )
         engine = TradingEngine(
             adapter=adapter,
             strategy=FairValueBandStrategy(
@@ -142,7 +284,8 @@ def main() -> int:
             adapter=adapter,
             engine=engine,
             fair_value_provider=provider,
-            ranker=OpportunityRanker(edge_threshold=args.edge_threshold),
+            ranker=ranker,
+            pair_ranker=pair_ranker,
             journal=EventJournal(args.journal),
         )
         loop = PollingAgentLoop(
@@ -152,6 +295,7 @@ def main() -> int:
                 market_limit=args.market_limit,
                 interval_seconds=args.interval_seconds,
                 max_cycles=args.max_cycles,
+                quantity=args.quantity,
             ),
             lifecycle_manager=OrderLifecycleManager(
                 adapter=adapter,
@@ -193,13 +337,23 @@ def main() -> int:
             market_state_status, "last_recovery_at", None
         )
         pending_cancels = list(getattr(status, "pending_cancels", []) or [])
+
+        def _selected_market_key(result) -> str | None:
+            selected = getattr(result, "selected", None)
+            if selected is None:
+                return None
+            contract = getattr(selected, "contract", None)
+            if contract is not None:
+                return getattr(contract, "market_key", None)
+            return getattr(selected, "market_key", None)
+
         print(
             json.dumps(
                 {
                     "cycles": len(results),
                     "mode": args.mode,
-                    "last_selected": results[-1].selected.contract.market_key
-                    if results and results[-1].selected
+                    "last_selected": _selected_market_key(results[-1])
+                    if results
                     else None,
                     "engine_halted": engine.safety_state.halted,
                     "engine_paused": engine.safety_state.paused,
@@ -228,6 +382,9 @@ def main() -> int:
                     "pending_cancel_post_fill_seen": any(
                         getattr(item, "post_cancel_fill_seen", False)
                         for item in pending_cancels
+                    ),
+                    "last_depth_assessment": getattr(
+                        status, "last_depth_assessment", None
                     ),
                     "last_live_delta_applied_at": (
                         last_live_delta_applied_at.isoformat()

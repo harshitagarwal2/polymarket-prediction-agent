@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
@@ -362,6 +362,9 @@ class TradingEngine:
         if persist:
             self._persist_safety_state()
 
+    def _record_depth_assessment(self, payload: dict[str, Any] | None) -> None:
+        self.safety_state.last_depth_assessment = payload
+
     def _has_pending_refresh(self, scope: str) -> bool:
         return scope in self._refresh_requests or "account" in self._refresh_requests
 
@@ -641,6 +644,18 @@ class TradingEngine:
             records = [item for item in records if not item.acknowledged]
         return records
 
+    def pending_submissions_for_pair(
+        self, pair_id: str, *, unresolved_only: bool = False
+    ) -> list[PendingSubmissionState]:
+        records = [
+            item
+            for item in self.safety_state.pending_submissions
+            if item.pair_id == pair_id
+        ]
+        if unresolved_only:
+            records = [item for item in records if not item.acknowledged]
+        return records
+
     def _prune_pending_submissions(self) -> None:
         self.safety_state.pending_submissions = [
             item
@@ -721,9 +736,14 @@ class TradingEngine:
         contract_key = intent.contract.market_key
         record = self._pending_submission_record(intent_id, contract_key)
         if record is None:
+            pair_id = None
+            metadata = intent.metadata if isinstance(intent.metadata, dict) else {}
+            if metadata.get("pair_id") not in (None, ""):
+                pair_id = str(metadata["pair_id"])
             record = PendingSubmissionState(
                 intent_id=intent_id,
                 contract_key=contract_key,
+                pair_id=pair_id,
                 contract=serialize_contract(intent.contract),
                 action=intent.action,
                 price=intent.price,
@@ -750,6 +770,14 @@ class TradingEngine:
             "authoritative_observation",
             observed_at=now,
         )
+        if record.pair_id is not None:
+            self._upsert_recovery_item(
+                "pair-submit-uncertain",
+                record.pair_id,
+                reason or status,
+                "authoritative_observation",
+                observed_at=now,
+            )
         self._prune_pending_submissions()
         self._persist_safety_state()
         return record
@@ -777,6 +805,21 @@ class TradingEngine:
             if (clear_reason := (reason or status))
             else status,
         )
+        if record.pair_id is not None:
+            unresolved_pair_records = [
+                item
+                for item in self.pending_submissions_for_pair(
+                    record.pair_id, unresolved_only=True
+                )
+                if item.intent_id != record.intent_id
+            ]
+            if not unresolved_pair_records:
+                self._clear_recovery_item(
+                    "pair-submit-uncertain",
+                    record.pair_id,
+                    observed_at=observed_at,
+                    clear_reason=reason or status,
+                )
 
     def _submission_matches_snapshot(
         self, record: PendingSubmissionState, snapshot: AccountSnapshot
@@ -1464,6 +1507,9 @@ class TradingEngine:
         merged_metadata["last_action_gate_reason"] = (
             self.safety_state.last_action_gate_reason
         )
+        merged_metadata["last_depth_assessment"] = (
+            self.safety_state.last_depth_assessment
+        )
         merged_metadata["resume_confirmation_required"] = (
             self.resume_confirmation_required
         )
@@ -1829,6 +1875,7 @@ class TradingEngine:
             hold_since=self.safety_state.hold_since,
             last_action_gate_action=self.safety_state.last_action_gate_action,
             last_action_gate_reason=self.safety_state.last_action_gate_reason,
+            last_depth_assessment=self.safety_state.last_depth_assessment,
             contract_key=self.safety_state.contract_key,
             clean_resume_streak=self.safety_state.clean_resume_streak,
             last_clean_resume_observed_at=self.safety_state.last_clean_resume_observed_at,
@@ -1991,42 +2038,17 @@ class TradingEngine:
             reconciliation_before=reconciliation_before,
         )
 
-    def run_once(
+    def execute_precomputed(
         self,
-        contract: Contract,
-        fair_value: float | None = None,
-        metadata: dict[str, Any] | None = None,
+        preview: EngineRunResult,
+        *,
+        contracts: list[Contract] | None = None,
     ) -> EngineRunResult:
-        preview = self.preview_once(contract, fair_value=fair_value, metadata=metadata)
-        if self.safety_state.paused:
-            return self._block_for_pause(preview)
-        if self.safety_state.halted:
-            return self._block_for_engine_halt(preview)
-        if not preview.context.metadata.get("account_snapshot_complete", True):
-            return self._block_for_incomplete_snapshot(preview)
-        heartbeat_reason = self.heartbeat_block_reason()
-        if heartbeat_reason is not None:
-            if self.safety_state.heartbeat_unhealthy:
-                self.halt(heartbeat_reason, contract)
-            return self._block_for_heartbeat(preview, heartbeat_reason)
-        cancel_reason = self.pending_cancel_block_reason(contract)
-        if cancel_reason is not None:
-            self.halt(cancel_reason, contract)
-            return self._block_for_heartbeat(preview, cancel_reason)
-        if self.safety_state.hold_new_orders and preview.risk.approved:
-            reason = self.safety_state.hold_reason or "new orders held by operator"
-            return self._block_for_heartbeat(preview, reason)
-        pending_cancel_submission_reason = self.pending_cancel_submission_guard_reason(
-            contract
-        )
-        if pending_cancel_submission_reason is not None and preview.risk.approved:
-            self.request_authoritative_refresh(
-                "pending cancel awaiting authoritative observation",
-                scope=contract.market_key,
-            )
-            return self._block_for_heartbeat(preview, pending_cancel_submission_reason)
+        contract = preview.context.contract
+        reconciliation_contracts = contracts or [contract]
         placements: list[PlacementResult] = []
         fail_closed_reasons: list[str] = []
+        self._record_depth_assessment(None)
         for intent in preview.risk.approved:
             policy = self.evaluate_order_action_policy(
                 "submit", contract=intent.contract, intent=intent
@@ -2079,6 +2101,7 @@ class TradingEngine:
                     or "admission guard blocked order"
                 )
                 scope = getattr(admission, "scope", None) or intent.contract.market_key
+                self._record_depth_assessment(getattr(admission, "assessment", None))
                 if action == "refresh_then_retry":
                     self.request_authoritative_refresh(reason, scope=scope)
                     placements.append(
@@ -2108,6 +2131,28 @@ class TradingEngine:
                         )
                     )
                     break
+                if action == "shrink_to_size":
+                    adjusted_quantity = float(
+                        getattr(admission, "adjusted_quantity", 0.0) or 0.0
+                    )
+                    if adjusted_quantity <= 0.0:
+                        placements.append(
+                            PlacementResult(
+                                False,
+                                status=OrderStatus.REJECTED,
+                                message=(
+                                    "placement denied by live admission guard: "
+                                    f"{reason}"
+                                ),
+                                raw={
+                                    "admission_action": action,
+                                    "reason": reason,
+                                    "scope": scope,
+                                },
+                            )
+                        )
+                        break
+                    intent = replace(intent, quantity=adjusted_quantity)
             try:
                 result = self.adapter.place_limit_order(intent)
             except Exception as exc:
@@ -2184,27 +2229,34 @@ class TradingEngine:
                         observed_at=datetime.now(timezone.utc),
                         reason=result.message or "venue rejected placement",
                     )
-        observed_after = self.adapter.get_account_snapshot(contract)
-        pending_cancel_order_ids = self.pending_cancel_order_ids(
-            contract, unresolved_only=True
-        )
-        reconciliation_after = self.reconciliation.reconcile(
-            contract,
-            observed_snapshot=observed_after,
-            pending_cancel_order_ids=pending_cancel_order_ids,
-        )
-        self.observe_polled_snapshot(
-            observed_after,
-            contract=contract,
-            allow_retry=False,
-            apply_live_delta=True,
-        )
-        self._schedule_pending_submission_refreshes(contract, placements)
+        if len(reconciliation_contracts) > 1:
+            observed_after = self.adapter.get_account_snapshot(None)
+        else:
+            observed_after = self.adapter.get_account_snapshot(contract)
+        reconciliation_after = None
+        for reconciliation_contract in reconciliation_contracts:
+            pending_cancel_order_ids = self.pending_cancel_order_ids(
+                reconciliation_contract, unresolved_only=True
+            )
+            reconciliation_after = self.reconciliation.reconcile(
+                reconciliation_contract,
+                observed_snapshot=observed_after,
+                pending_cancel_order_ids=pending_cancel_order_ids,
+            )
+            self.observe_polled_snapshot(
+                observed_after,
+                contract=reconciliation_contract,
+                allow_retry=False,
+                apply_live_delta=True,
+            )
+            self._schedule_pending_submission_refreshes(
+                reconciliation_contract, placements
+            )
+            if reconciliation_after.policy.action == "halt":
+                fail_closed_reasons.append(reconciliation_after.policy.reason)
         fail_closed_reasons.extend(
             self._placement_acknowledgement_failures(placements, observed_after)
         )
-        if reconciliation_after.policy.action == "halt":
-            fail_closed_reasons.append(reconciliation_after.policy.reason)
         if fail_closed_reasons:
             unique_reasons = list(
                 dict.fromkeys(reason for reason in fail_closed_reasons if reason)
@@ -2218,3 +2270,39 @@ class TradingEngine:
             reconciliation_before=preview.reconciliation_before,
             reconciliation_after=reconciliation_after,
         )
+
+    def run_once(
+        self,
+        contract: Contract,
+        fair_value: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> EngineRunResult:
+        preview = self.preview_once(contract, fair_value=fair_value, metadata=metadata)
+        if self.safety_state.paused:
+            return self._block_for_pause(preview)
+        if self.safety_state.halted:
+            return self._block_for_engine_halt(preview)
+        if not preview.context.metadata.get("account_snapshot_complete", True):
+            return self._block_for_incomplete_snapshot(preview)
+        heartbeat_reason = self.heartbeat_block_reason()
+        if heartbeat_reason is not None:
+            if self.safety_state.heartbeat_unhealthy:
+                self.halt(heartbeat_reason, contract)
+            return self._block_for_heartbeat(preview, heartbeat_reason)
+        cancel_reason = self.pending_cancel_block_reason(contract)
+        if cancel_reason is not None:
+            self.halt(cancel_reason, contract)
+            return self._block_for_heartbeat(preview, cancel_reason)
+        if self.safety_state.hold_new_orders and preview.risk.approved:
+            reason = self.safety_state.hold_reason or "new orders held by operator"
+            return self._block_for_heartbeat(preview, reason)
+        pending_cancel_submission_reason = self.pending_cancel_submission_guard_reason(
+            contract
+        )
+        if pending_cancel_submission_reason is not None and preview.risk.approved:
+            self.request_authoritative_refresh(
+                "pending cancel awaiting authoritative observation",
+                scope=contract.market_key,
+            )
+            return self._block_for_heartbeat(preview, pending_cancel_submission_reason)
+        return self.execute_precomputed(preview)

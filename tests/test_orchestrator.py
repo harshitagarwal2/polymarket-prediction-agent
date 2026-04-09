@@ -127,6 +127,23 @@ class ThinLiquidityAdapter(OrchestratorAdapter):
         )
 
 
+class MultiLevelLiquidityAdapter(OrchestratorAdapter):
+    def get_order_book(self, contract: Contract):
+        return OrderBookSnapshot(
+            contract=contract,
+            bids=[
+                PriceLevel(price=0.45, quantity=0.5),
+                PriceLevel(price=0.44, quantity=0.5),
+                PriceLevel(price=0.43, quantity=1.0),
+            ],
+            asks=[
+                PriceLevel(price=0.50, quantity=0.25),
+                PriceLevel(price=0.51, quantity=0.50),
+                PriceLevel(price=0.52, quantity=1.25),
+            ],
+        )
+
+
 class ExistingOrderAdapter(OrchestratorAdapter):
     def list_open_orders(self, contract: Contract | None = None):
         contract = contract or self.contract
@@ -163,6 +180,66 @@ class PartialFillAdapter(ExistingOrderAdapter):
                 action=OrderAction.BUY,
                 price=0.49,
                 quantity=0.4,
+            )
+        ]
+
+    def get_account_snapshot(self, contract: Contract | None = None):
+        contract = contract or self.contract
+        return AccountSnapshot(
+            venue=self.venue,
+            balance=self.get_balance(),
+            positions=[PositionSnapshot(contract=contract, quantity=0.0)],
+            open_orders=self.list_open_orders(contract),
+            fills=self.list_fills(contract),
+        )
+
+
+class FallbackCandidateAdapter(OrchestratorAdapter):
+    def __init__(self):
+        super().__init__()
+        self.second_contract = Contract(
+            venue=self.venue, symbol="token-2", outcome=OutcomeSide.YES
+        )
+
+    def list_markets(self, limit: int = 100):
+        return [
+            MarketSummary(
+                contract=self.contract,
+                title="Blocked top market",
+                best_bid=0.45,
+                best_ask=0.50,
+                active=True,
+            ),
+            MarketSummary(
+                contract=self.second_contract,
+                title="Fallback market",
+                best_bid=0.44,
+                best_ask=0.52,
+                active=True,
+            ),
+        ]
+
+    def get_order_book(self, contract: Contract):
+        ask_price = 0.50 if contract.market_key == self.contract.market_key else 0.52
+        return OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.45, quantity=10)],
+            asks=[PriceLevel(price=ask_price, quantity=10)],
+        )
+
+    def list_open_orders(self, contract: Contract | None = None):
+        contract = contract or self.contract
+        if contract.market_key != self.contract.market_key:
+            return []
+        return [
+            NormalizedOrder(
+                order_id="existing-order",
+                contract=contract,
+                action=OrderAction.BUY,
+                price=0.49,
+                quantity=1.0,
+                remaining_quantity=1.0,
+                status=OrderStatus.RESTING,
             )
         ]
 
@@ -239,6 +316,75 @@ class OrchestratorTests(unittest.TestCase):
         self.assertTrue(execution.risk.approved)
         self.assertEqual(execution.risk.approved[0].quantity, 2.0)
 
+    def test_preview_top_falls_back_to_next_executable_candidate(self):
+        adapter = FallbackCandidateAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider(
+                {
+                    adapter.contract.market_key: 0.60,
+                    adapter.second_contract.market_key: 0.60,
+                }
+            ),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+        )
+
+        result = orchestrator.preview_top()
+
+        self.assertTrue(result.policy_allowed)
+        self.assertIsNotNone(result.selected)
+        if result.selected is None:
+            self.fail("expected selected candidate")
+        self.assertEqual(
+            result.selected.contract.market_key,
+            adapter.second_contract.market_key,
+        )
+        self.assertEqual(
+            result.skipped_candidates[0]["market_key"], adapter.contract.market_key
+        )
+        self.assertTrue(result.skipped_candidates[0]["reasons"])
+
+    def test_sizer_uses_multi_level_visible_depth(self):
+        adapter = MultiLevelLiquidityAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider(
+                {adapter.contract.market_key: 0.60}
+            ),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+            sizer=DeterministicSizer(
+                base_quantity=2.0,
+                max_quantity=2.0,
+                edge_unit=0.03,
+                liquidity_fraction=1.0,
+                depth_levels=3,
+            ),
+        )
+
+        result = orchestrator.preview_top()
+
+        execution = result.execution
+        if execution is None:
+            self.fail("expected execution preview")
+        self.assertTrue(execution.risk.approved)
+        self.assertEqual(execution.risk.approved[0].quantity, 2.0)
+
     def test_run_top_places_order_for_top_candidate(self):
         adapter = OrchestratorAdapter()
         engine = TradingEngine(
@@ -292,6 +438,43 @@ class OrchestratorTests(unittest.TestCase):
         self.assertIn("existing position already open", result.policy_reasons[0])
         self.assertEqual(adapter.placed, 0)
 
+    def test_run_top_falls_back_to_next_candidate_when_top_candidate_blocked(self):
+        adapter = FallbackCandidateAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider(
+                {
+                    adapter.contract.market_key: 0.60,
+                    adapter.second_contract.market_key: 0.60,
+                }
+            ),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+        )
+
+        result = orchestrator.run_top()
+
+        self.assertEqual(adapter.placed, 1)
+        self.assertTrue(result.policy_allowed)
+        self.assertIsNotNone(result.selected)
+        if result.selected is None:
+            self.fail("expected selected candidate")
+        self.assertEqual(
+            result.selected.contract.market_key,
+            adapter.second_contract.market_key,
+        )
+        self.assertEqual(
+            result.skipped_candidates[0]["market_key"], adapter.contract.market_key
+        )
+        self.assertTrue(result.skipped_candidates[0]["reasons"])
+
     def test_policy_gate_blocks_thin_liquidity(self):
         adapter = ThinLiquidityAdapter()
         engine = TradingEngine(
@@ -316,6 +499,44 @@ class OrchestratorTests(unittest.TestCase):
         self.assertFalse(result.policy_allowed)
         self.assertTrue(result.policy_reasons)
         self.assertIn("top-level liquidity too low", result.policy_reasons[0])
+        self.assertEqual(adapter.placed, 0)
+
+    def test_policy_gate_blocks_when_visible_depth_too_thin(self):
+        adapter = MultiLevelLiquidityAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider(
+                {adapter.contract.market_key: 0.60}
+            ),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+            policy_gate=ExecutionPolicyGate(
+                min_top_level_liquidity=0.0,
+                depth_levels_for_liquidity=2,
+                max_visible_liquidity_consumption=1.0,
+            ),
+            sizer=DeterministicSizer(
+                base_quantity=1.0,
+                max_quantity=1.0,
+                edge_unit=0.03,
+                liquidity_fraction=1.0,
+                depth_levels=3,
+            ),
+        )
+
+        result = orchestrator.run_top()
+
+        self.assertFalse(result.policy_allowed)
+        self.assertTrue(
+            any("visible depth too thin" in reason for reason in result.policy_reasons)
+        )
         self.assertEqual(adapter.placed, 0)
 
     def test_policy_gate_blocks_when_open_order_limit_reached(self):

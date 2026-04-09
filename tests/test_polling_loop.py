@@ -25,6 +25,7 @@ from adapters import MarketSummary
 from engine.discovery import (
     AgentOrchestrator,
     OpportunityRanker,
+    PairOpportunityRanker,
     PollingAgentLoop,
     PollingLoopConfig,
     StaticFairValueProvider,
@@ -230,6 +231,53 @@ class HeartbeatLoopAdapter(LoopAdapter):
         return self._heartbeat_status
 
 
+class PairLoopAdapter(LoopAdapter):
+    def __init__(self):
+        super().__init__()
+        self.no_contract = Contract(
+            venue=self.venue, symbol="token-2", outcome=OutcomeSide.NO
+        )
+        self.last_quantities: list[float] = []
+
+    def list_markets(self, limit: int = 100):
+        return [
+            MarketSummary(
+                contract=self.contract,
+                title="Pair market",
+                best_bid=0.44,
+                best_ask=0.47,
+                event_key="event-1",
+                active=True,
+            ),
+            MarketSummary(
+                contract=self.no_contract,
+                title="Pair market",
+                best_bid=0.44,
+                best_ask=0.48,
+                event_key="event-1",
+                active=True,
+            ),
+        ]
+
+    def get_account_snapshot(self, contract: Contract | None = None):
+        open_orders = self.list_open_orders(contract)
+        self._acknowledged_orders = []
+        return AccountSnapshot(
+            venue=self.venue,
+            balance=self.get_balance(),
+            positions=[
+                PositionSnapshot(contract=self.contract, quantity=0.0),
+                PositionSnapshot(contract=self.no_contract, quantity=0.0),
+            ],
+            open_orders=open_orders,
+            fills=[],
+        )
+
+    def place_limit_order(self, intent):
+        self.last_quantities.append(intent.quantity)
+        return super().place_limit_order(intent)
+
+
 class LiveStateLoopAdapter(LoopAdapter):
     def __init__(self):
         super().__init__()
@@ -394,6 +442,67 @@ class PollingLoopTests(unittest.TestCase):
 
         self.assertEqual(len(results), 2)
         self.assertEqual(adapter.placed, 2)
+
+    def test_pair_run_mode_places_both_legs(self):
+        adapter = PairLoopAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider({}),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+            pair_ranker=PairOpportunityRanker(edge_threshold=0.01),
+        )
+        loop = PollingAgentLoop(
+            orchestrator=orchestrator,
+            config=PollingLoopConfig(
+                mode="pair-run", market_limit=10, interval_seconds=0, max_cycles=1
+            ),
+            sleep_fn=lambda _: None,
+        )
+
+        results = loop.run()
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(adapter.placed, 2)
+
+    def test_pair_run_mode_uses_configured_quantity(self):
+        adapter = PairLoopAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider({}),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+            pair_ranker=PairOpportunityRanker(edge_threshold=0.01),
+        )
+        loop = PollingAgentLoop(
+            orchestrator=orchestrator,
+            config=PollingLoopConfig(
+                mode="pair-run",
+                market_limit=10,
+                interval_seconds=0,
+                max_cycles=1,
+                quantity=2.5,
+            ),
+            sleep_fn=lambda _: None,
+        )
+
+        loop.run()
+
+        self.assertEqual(adapter.last_quantities, [2.5, 2.5])
 
     def test_pause_skips_new_scan_cycles(self):
         adapter = LoopAdapter()

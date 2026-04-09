@@ -1,0 +1,176 @@
+{
+  "name": "sports-benchmark-tiny",
+  "description": "Synthetic offline benchmark fixture for sports fair values and replay.",
+  "fair_value_case": {
+    "rows": [
+      {
+        "bookmaker": "book-a",
+        "outcome": "Home Team",
+        "selection_name": "Home Team",
+        "home_team": "Home Team",
+        "away_team": "Away Team",
+        "captured_at": "2026-04-07T12:00:00Z",
+        "decimal_odds": 1.7,
+        "event_key": "event-1",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      },
+      {
+        "bookmaker": "book-a",
+        "outcome": "Away Team",
+        "selection_name": "Away Team",
+        "home_team": "Home Team",
+        "away_team": "Away Team",
+        "captured_at": "2026-04-07T12:00:00Z",
+        "decimal_odds": 2.3,
+        "event_key": "event-1",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      }
+    ],
+    "markets": [
+      {
+        "contract": {
+          "venue": "polymarket",
+          "symbol": "token-home",
+          "outcome": "yes",
+          "title": null
+        },
+        "title": "Will Home Team win?",
+        "best_bid": null,
+        "best_ask": null,
+        "midpoint": null,
+        "volume": null,
+        "category": null,
+        "sport": "nba",
+        "series": null,
+        "event_key": "event-1",
+        "game_id": null,
+        "sports_market_type": "moneyline",
+        "start_time": null,
+        "tags": [],
+        "active": true,
+        "expires_at": null,
+        "raw": {
+          "market": {
+            "condition_id": "condition-1"
+          }
+        }
+      },
+      {
+        "contract": {
+          "venue": "polymarket",
+          "symbol": "token-home",
+          "outcome": "no",
+          "title": null
+        },
+        "title": "Will Home Team win?",
+        "best_bid": null,
+        "best_ask": null,
+        "midpoint": null,
+        "volume": null,
+        "category": null,
+        "sport": "nba",
+        "series": null,
+        "event_key": "event-1",
+        "game_id": null,
+        "sports_market_type": "moneyline",
+        "start_time": null,
+        "tags": [],
+        "active": true,
+        "expires_at": null,
+        "raw": {
+          "market": {
+            "condition_id": "condition-1"
+          }
+        }
+      }
+    ],
+    "devig_method": "multiplicative",
+    "book_aggregation": "independent",
+    "max_age_seconds": 900,
+    "source": "fixture-sports-benchmark",
+    "expected_market_keys": [
+      "token-home:yes",
+      "token-home:no"
+    ],
+    "outcome_labels": {
+      "token-home:yes": 1,
+      "token-home:no": 0
+    }
+  },
+  "replay_case": {
+    "strategy": {
+      "quantity": 5,
+      "edge_threshold": 0.03,
+      "aggressive": true
+    },
+    "risk_limits": {
+      "max_global_contracts": 10,
+      "max_contracts_per_market": 10
+    },
+    "broker": {
+      "cash": 100.0,
+      "max_fill_ratio_per_step": 1.0,
+      "slippage_bps": 0.0
+    },
+    "steps": [
+      {
+        "book": {
+          "contract": {
+            "venue": "polymarket",
+            "symbol": "token-home",
+            "outcome": "yes",
+            "title": null
+          },
+          "bids": [
+            {
+              "price": 0.45,
+              "quantity": 10
+            }
+          ],
+          "asks": [
+            {
+              "price": 0.5,
+              "quantity": 5
+            }
+          ],
+          "midpoint": 0.475,
+          "last_price": null,
+          "observed_at": "2026-04-07T12:00:00+00:00",
+          "raw": null
+        },
+        "fair_value": 0.6,
+        "metadata": {}
+      },
+      {
+        "book": {
+          "contract": {
+            "venue": "polymarket",
+            "symbol": "token-home",
+            "outcome": "yes",
+            "title": null
+          },
+          "bids": [
+            {
+              "price": 0.59,
+              "quantity": 10
+            }
+          ],
+          "asks": [
+            {
+              "price": 0.61,
+              "quantity": 10
+            }
+          ],
+          "midpoint": 0.6,
+          "last_price": null,
+          "observed_at": "2026-04-07T12:05:00+00:00",
+          "raw": null
+        },
+        "fair_value": 0.6,
+        "metadata": {}
+      }
+    ]
+  }
+}

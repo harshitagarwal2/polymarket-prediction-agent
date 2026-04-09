@@ -1,0 +1,78 @@
+{
+  "name": "sports-benchmark-round-trip",
+  "description": "Replay-only benchmark case that performs a round-trip trade and compares against a no-trade baseline.",
+  "replay_case": {
+    "strategy": {
+      "quantity": 5,
+      "edge_threshold": 0.03,
+      "aggressive": true
+    },
+    "risk_limits": {
+      "max_global_contracts": 10,
+      "max_contracts_per_market": 10
+    },
+    "broker": {
+      "cash": 100.0,
+      "max_fill_ratio_per_step": 1.0,
+      "slippage_bps": 0.0
+    },
+    "steps": [
+      {
+        "book": {
+          "contract": {
+            "venue": "polymarket",
+            "symbol": "token-round-trip",
+            "outcome": "yes",
+            "title": null
+          },
+          "bids": [
+            {
+              "price": 0.45,
+              "quantity": 10
+            }
+          ],
+          "asks": [
+            {
+              "price": 0.5,
+              "quantity": 5
+            }
+          ],
+          "midpoint": 0.475,
+          "last_price": null,
+          "observed_at": "2026-04-07T14:00:00+00:00",
+          "raw": null
+        },
+        "fair_value": 0.6,
+        "metadata": {}
+      },
+      {
+        "book": {
+          "contract": {
+            "venue": "polymarket",
+            "symbol": "token-round-trip",
+            "outcome": "yes",
+            "title": null
+          },
+          "bids": [
+            {
+              "price": 0.64,
+              "quantity": 10
+            }
+          ],
+          "asks": [
+            {
+              "price": 0.66,
+              "quantity": 10
+            }
+          ],
+          "midpoint": 0.65,
+          "last_price": null,
+          "observed_at": "2026-04-07T14:05:00+00:00",
+          "raw": null
+        },
+        "fair_value": 0.55,
+        "metadata": {}
+      }
+    ]
+  }
+}

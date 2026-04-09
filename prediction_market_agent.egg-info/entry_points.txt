@@ -1,0 +1,2 @@
+[console_scripts]
+prediction-market-sports-benchmark = research.benchmark_cli:main

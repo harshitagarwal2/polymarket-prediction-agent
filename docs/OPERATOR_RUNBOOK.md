@@ -92,6 +92,7 @@ python3 scripts/run_agent_loop.py \
   --venue polymarket \
   --mode preview \
   --fair-values-file runtime/fair_values.json \
+  --max-fair-value-age-seconds 900 \
   --max-cycles 1
 ```
 
@@ -111,6 +112,7 @@ python3 scripts/run_agent_loop.py \
   --venue polymarket \
   --mode preview \
   --fair-values-file runtime/fair_values.json \
+  --max-fair-value-age-seconds 900 \
   --interval-seconds 15 \
   --max-cycles 100
 ```
@@ -126,6 +128,7 @@ python3 scripts/run_agent_loop.py \
   --venue polymarket \
   --mode run \
   --fair-values-file runtime/fair_values.json \
+  --max-fair-value-age-seconds 900 \
   --interval-seconds 15 \
   --max-cycles 10
 ```
@@ -164,11 +167,29 @@ Before any continuous run:
 
 ## Fair values file
 
-The polling loop requires a JSON file:
+The polling loop requires a JSON file.
+
+Legacy flat-map format is still supported:
 
 ```json
 {
   "<market_key>": 0.61
+}
+```
+
+The safer manifest format adds provenance and freshness controls:
+
+```json
+{
+  "generated_at": "2026-04-07T12:00:00Z",
+  "source": "sports-model-v1",
+  "max_age_seconds": 900,
+  "values": {
+    "<market_key>": {
+      "fair_value": 0.61,
+      "condition_id": "<condition-id>"
+    }
+  }
 }
 ```
 
@@ -177,7 +198,72 @@ Where `market_key` is typically:
 - `symbol:yes`
 - `symbol:no`
 
+Use `--max-fair-value-age-seconds` to fail closed on stale records at runtime, or set `max_age_seconds` inside the manifest. For Polymarket, include `condition_id` when you can so stale token/key mismatches are rejected instead of silently traded.
+
 The current system does **not** generate fair values by itself yet. You must provide them.
+
+For offline sports workflows, the repo now includes a local fair-value builder. Feed it normalized sportsbook odds rows and emit the runtime manifest directly:
+
+```bash
+python3 scripts/export_polymarket_markets.py \
+  --output runtime/polymarket_markets.json \
+  --limit 200
+
+python3 scripts/fetch_the_odds_api_rows.py \
+  --sport-key basketball_nba \
+  --event-map-file runtime/odds_event_map.json \
+  --output runtime/sportsbook_odds.json
+
+python3 scripts/build_sports_fair_values.py \
+  --input runtime/sportsbook_odds.json \
+  --markets-file runtime/polymarket_markets.json \
+  --output runtime/fair_values.json \
+  --book-aggregation best-line \
+  --devig-method multiplicative \
+  --max-age-seconds 900
+```
+
+The input is a JSON list (or `{ "rows": [...] }`) of normalized binary sportsbook rows such as:
+
+```json
+[
+  {
+    "market_key": "token-yes:yes",
+    "bookmaker": "book-a",
+    "outcome": "yes",
+    "captured_at": "2026-04-07T12:00:00Z",
+    "decimal_odds": 1.7,
+    "condition_id": "condition-1",
+    "event_key": "nba-finals-game-1",
+    "sport": "nba",
+    "sports_market_type": "moneyline"
+  },
+  {
+    "market_key": "token-no:no",
+    "bookmaker": "book-a",
+    "outcome": "no",
+    "captured_at": "2026-04-07T12:00:00Z",
+    "decimal_odds": 2.3,
+    "condition_id": "condition-1",
+    "event_key": "nba-finals-game-1",
+    "sport": "nba",
+    "sports_market_type": "moneyline"
+  }
+]
+```
+
+The collector currently supports The Odds API's event/bookmaker/market shape for read-only sportsbook intake. Use an `event_map` JSON keyed by source event id when you want rows normalized into the repo's yes/no outcome shape and Polymarket-facing `event_key` metadata. After collection, the builder supports deterministic offline binary books with `multiplicative` and `power` de-vig methods. If rows already contain `market_key`, `--markets-file` is optional. If they do not, the builder matches them against the exported Polymarket snapshot using the normalized sports metadata (`event_key`, `sport`, `series`, `game_id`, `sports_market_type`, `outcome`) and skips ambiguous matches instead of guessing. Use `--book-aggregation best-line` when you want the best decimal odds per outcome across multiple bookmakers before de-vigging.
+
+If another supervised process is refreshing `runtime/fair_values.json`, the polling loop can reload it without restart:
+
+```bash
+python3 scripts/run_agent_loop.py \
+  --venue polymarket \
+  --mode preview \
+  --fair-values-file runtime/fair_values.json \
+  --fair-values-reload-seconds 30 \
+  --max-cycles 100
+```
 
 ## Core operator commands
 

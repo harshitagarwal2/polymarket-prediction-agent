@@ -324,6 +324,46 @@ class SafetyStatePersistenceTests(unittest.TestCase):
                 None,
             )
 
+    def test_pair_pending_submission_persists_pair_id_across_restart(self):
+        adapter = PendingSubmissionPersistenceAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            engine = TradingEngine(
+                adapter=adapter,
+                strategy=FairValueBandStrategy(quantity=10, edge_threshold=0.03),
+                risk_engine=RiskEngine(
+                    RiskLimits(max_contracts_per_market=20, max_global_contracts=20)
+                ),
+                safety_state_path=state_path,
+            )
+
+            intent = OrderIntent(
+                contract=adapter.contract,
+                action=OrderAction.BUY,
+                price=0.5,
+                quantity=1.0,
+                metadata={"pair_id": "pair-1"},
+            )
+            engine.track_pending_submission(
+                intent,
+                status="needs_recovery",
+                reason="paired order awaiting observation",
+            )
+
+            restarted = TradingEngine(
+                adapter=adapter,
+                strategy=FairValueBandStrategy(quantity=10, edge_threshold=0.03),
+                risk_engine=RiskEngine(
+                    RiskLimits(max_contracts_per_market=20, max_global_contracts=20)
+                ),
+                safety_state_path=state_path,
+            )
+
+            self.assertEqual(
+                restarted.pending_submissions(unresolved_only=True)[0].pair_id,
+                "pair-1",
+            )
+
     def test_pending_cancel_resolves_when_order_disappears(self):
         adapter = PendingCancelResolutionAdapter()
         with tempfile.TemporaryDirectory() as temp_dir:

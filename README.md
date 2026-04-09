@@ -50,3 +50,18 @@ Do **not** turn `upstreams/` into production code by importing everything direct
 The product should converge into _your_ `adapters/`, `engine/`, `risk/`, and `research/` layers.
 
 See `docs/ARCHITECTURE.md` for the full system design.
+
+## Offline sports benchmark toolkit
+
+This repo now also contains an **offline sports fair-value and replay benchmark/toolkit** built around the existing research primitives.
+
+The public-facing slice is intentionally small:
+
+- normalized sportsbook-style rows -> de-vigged fair-value manifest
+- deterministic replay/paper execution
+- benchmark scoring for forecasts and replay outcomes
+
+The benchmark path is offline and reproducible, but the replay lane is still an approximation of real queue position, latency, and venue behavior.
+
+Start with `docs/BENCHMARK_TOOLKIT.md` for the fixture-driven flow.
+For the fuller end-to-end benchmark workflow, see `docs/BENCHMARK_PROTOCOL.md` and `docs/BENCHMARK_CASE_SCHEMA.md`.

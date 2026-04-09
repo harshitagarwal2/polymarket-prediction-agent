@@ -43,6 +43,7 @@ class PendingSubmissionState:
     acknowledged: bool = False
     observed_at: datetime | None = None
     resolved_at: datetime | None = None
+    pair_id: str | None = None
 
 
 @dataclass
@@ -82,6 +83,7 @@ class EngineSafetyState:
     hold_since: datetime | None = None
     last_action_gate_action: str | None = None
     last_action_gate_reason: str | None = None
+    last_depth_assessment: dict[str, Any] | None = None
     last_truth_complete: bool = False
     last_truth_issues: list[str] | None = None
     last_truth_open_orders: int = 0
@@ -152,6 +154,7 @@ class EngineStatusSnapshot:
     hold_since: datetime | None
     last_action_gate_action: str | None
     last_action_gate_reason: str | None
+    last_depth_assessment: dict[str, Any] | None
     contract_key: str | None
     clean_resume_streak: int
     last_clean_resume_observed_at: datetime | None

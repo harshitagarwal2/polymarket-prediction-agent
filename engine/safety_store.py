@@ -62,6 +62,7 @@ def _serialize_pending_submission(state: PendingSubmissionState) -> dict:
     return {
         "intent_id": state.intent_id,
         "contract_key": state.contract_key,
+        "pair_id": state.pair_id,
         "contract": state.contract,
         "action": state.action,
         "price": state.price,
@@ -94,6 +95,7 @@ def _deserialize_pending_submission(payload: dict) -> PendingSubmissionState:
     return PendingSubmissionState(
         intent_id=str(payload["intent_id"]),
         contract_key=str(payload["contract_key"]),
+        pair_id=payload.get("pair_id"),
         contract=dict(payload["contract"]),
         action=OrderAction(payload["action"]),
         price=float(payload["price"]),
@@ -227,6 +229,7 @@ class SafetyStateStore:
             ),
             last_action_gate_action=payload.get("last_action_gate_action"),
             last_action_gate_reason=payload.get("last_action_gate_reason"),
+            last_depth_assessment=payload.get("last_depth_assessment"),
             last_truth_complete=bool(payload.get("last_truth_complete", False)),
             last_truth_issues=payload.get("last_truth_issues"),
             last_truth_open_orders=int(payload.get("last_truth_open_orders", 0)),

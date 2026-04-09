@@ -155,6 +155,22 @@ class StatusDriftAdapter(PauseAdapter):
             subscribed_markets=("condition-1",),
         )
 
+    def market_state_status(self):
+        return SimpleNamespace(
+            active=True,
+            running=True,
+            mode="healthy",
+            fresh=True,
+            last_error=None,
+            degraded_reason=None,
+            recovery_attempts=1,
+            last_recovery_at=None,
+            snapshot_book_overlay_source="rest_plus_live_market",
+            snapshot_book_overlay_reason=None,
+            snapshot_book_overlay_applied=True,
+            subscribed_assets=("token-1",),
+        )
+
 
 class PlaceableAdapter(PauseAdapter):
     def __init__(self):
@@ -382,6 +398,7 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(payload["pending_cancels"][0]["order_id"], "cancel-1")
             self.assertTrue(payload["pending_cancels"][0]["post_cancel_fill_seen"])
+            self.assertIn("recovery_items", payload)
 
     def test_status_includes_reconciliation_detail_against_persisted_truth(self):
         adapter = StatusDriftAdapter()
@@ -427,8 +444,44 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(payload["reconciliation"]["missing_on_venue"], ["local-1"])
             self.assertTrue(payload["live_state"]["active"])
+            self.assertEqual(payload["market_state"]["mode"], "healthy")
             self.assertTrue(payload["live_state"]["fills_initialized"])
             self.assertEqual(payload["live_state"]["last_fills_source"], "live_cache")
+
+    def test_status_includes_last_depth_assessment(self):
+        adapter = StatusDriftAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            store = operator_cli.SafetyStateStore(state_path)
+            state = store.load()
+            state.last_depth_assessment = {
+                "requested_quantity": 2.0,
+                "visible_quantity": 1.0,
+                "max_admissible_quantity": 0.5,
+                "expected_slippage_bps": 25.0,
+                "depth_levels_used": 2,
+            }
+            store.save(state)
+            args = argparse.Namespace(
+                state_file=str(state_path),
+                journal=None,
+                venue="polymarket",
+                symbol=adapter.contract.symbol,
+                outcome="yes",
+            )
+            stdout = io.StringIO()
+
+            with (
+                patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch("sys.stdout", stdout),
+            ):
+                result = operator_cli.cmd_status(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                payload["depth_assessment"]["max_admissible_quantity"], 0.5
+            )
 
     def test_hold_new_orders_command_persists_and_status_reports_hold(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -455,6 +508,7 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertTrue(payload["safety_state"]["hold_new_orders"])
             self.assertEqual(payload["runtime_health"]["state"], "hold_new_orders")
+            self.assertFalse(payload["runtime_health"]["resume_trading_eligible"])
 
     def test_force_refresh_command_persists_scoped_request(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -474,6 +528,49 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(len(state.pending_refresh_requests), 1)
             self.assertEqual(state.pending_refresh_requests[0].scope, "token-1:yes")
+            self.assertTrue(
+                any(
+                    item.item_type == "market-refresh-needed"
+                    for item in state.recovery_items
+                )
+            )
+
+    def test_status_reports_open_recovery_items(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            store = operator_cli.SafetyStateStore(state_path)
+            state = store.load()
+            now = datetime.now(timezone.utc)
+            state.recovery_items.append(
+                operator_cli.RecoveryItemState(
+                    recovery_id="submit-uncertain:token-1:yes",
+                    item_type="submit-uncertain",
+                    scope="token-1:yes",
+                    reason="ambiguous submission outcome",
+                    clear_source="authoritative_observation",
+                    opened_at=now,
+                    last_evidence_at=now,
+                    last_evidence="ambiguous submission outcome",
+                )
+            )
+            store.save(state)
+            args = argparse.Namespace(
+                state_file=str(state_path),
+                journal=None,
+                venue=None,
+                symbol=None,
+                outcome="unknown",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                result = operator_cli.cmd_status(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(payload["runtime_health"]["state"], "recovering")
+            self.assertEqual(payload["runtime_health"]["open_recovery_count"], 1)
+            self.assertTrue(payload["recovery_items"])
 
     def test_running_engine_syncs_hold_new_orders_from_store(self):
         adapter = PlaceableAdapter()

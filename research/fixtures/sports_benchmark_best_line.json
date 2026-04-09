@@ -1,0 +1,126 @@
+{
+  "name": "sports-benchmark-best-line",
+  "description": "Fair-value benchmark case that compares best-line aggregation against market midpoint snapshots.",
+  "fair_value_case": {
+    "rows": [
+      {
+        "bookmaker": "book-a",
+        "outcome": "Home Team",
+        "selection_name": "Home Team",
+        "home_team": "Home Team",
+        "away_team": "Away Team",
+        "captured_at": "2026-04-07T13:00:00Z",
+        "decimal_odds": 1.95,
+        "event_key": "event-2",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      },
+      {
+        "bookmaker": "book-a",
+        "outcome": "Away Team",
+        "selection_name": "Away Team",
+        "home_team": "Home Team",
+        "away_team": "Away Team",
+        "captured_at": "2026-04-07T13:00:00Z",
+        "decimal_odds": 1.87,
+        "event_key": "event-2",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      },
+      {
+        "bookmaker": "book-b",
+        "outcome": "Home Team",
+        "selection_name": "Home Team",
+        "home_team": "Home Team",
+        "away_team": "Away Team",
+        "captured_at": "2026-04-07T13:00:00Z",
+        "decimal_odds": 1.82,
+        "event_key": "event-2",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      },
+      {
+        "bookmaker": "book-b",
+        "outcome": "Away Team",
+        "selection_name": "Away Team",
+        "home_team": "Home Team",
+        "away_team": "Away Team",
+        "captured_at": "2026-04-07T13:00:00Z",
+        "decimal_odds": 2.0,
+        "event_key": "event-2",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      }
+    ],
+    "markets": [
+      {
+        "contract": {
+          "venue": "polymarket",
+          "symbol": "token-home-best-line",
+          "outcome": "yes",
+          "title": null
+        },
+        "title": "Will Home Team win?",
+        "best_bid": 0.53,
+        "best_ask": 0.55,
+        "midpoint": 0.54,
+        "volume": 2000,
+        "category": null,
+        "sport": "nba",
+        "series": "regular-season",
+        "event_key": "event-2",
+        "game_id": null,
+        "sports_market_type": "moneyline",
+        "start_time": null,
+        "tags": ["benchmark", "best-line"],
+        "active": true,
+        "expires_at": null,
+        "raw": {
+          "market": {
+            "condition_id": "condition-2"
+          }
+        }
+      },
+      {
+        "contract": {
+          "venue": "polymarket",
+          "symbol": "token-home-best-line",
+          "outcome": "no",
+          "title": null
+        },
+        "title": "Will Home Team win?",
+        "best_bid": 0.45,
+        "best_ask": 0.47,
+        "midpoint": 0.46,
+        "volume": 2000,
+        "category": null,
+        "sport": "nba",
+        "series": "regular-season",
+        "event_key": "event-2",
+        "game_id": null,
+        "sports_market_type": "moneyline",
+        "start_time": null,
+        "tags": ["benchmark", "best-line"],
+        "active": true,
+        "expires_at": null,
+        "raw": {
+          "market": {
+            "condition_id": "condition-2"
+          }
+        }
+      }
+    ],
+    "devig_method": "multiplicative",
+    "book_aggregation": "best-line",
+    "max_age_seconds": 900,
+    "source": "fixture-sports-benchmark-best-line",
+    "expected_market_keys": [
+      "token-home-best-line:yes",
+      "token-home-best-line:no"
+    ],
+    "outcome_labels": {
+      "token-home-best-line:yes": 1,
+      "token-home-best-line:no": 0
+    }
+  }
+}
