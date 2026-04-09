@@ -1,94 +1,104 @@
 # Operator Runbook
 
-This runbook explains how to operate the prediction-market agent in a **supervised 24/7 posture**.
+This runbook explains how to operate the repo in its current intended posture: supervised automation, mainly on Polymarket.
 
-## What this bot is today
+## What this system is today
 
-This workspace is a **supervised trading agent lab**, not a fire-and-forget profit machine.
+Treat this repo as a supervised trading agent lab.
 
 It can:
 
-- restore/persist safety state
-- refresh account truth and fail closed when truth is incomplete
-- discover and rank opportunities
-- apply deterministic sizing and policy vetoes
-- run preview or live cycles
-- pause, halt, resume, cancel-all, and cancel stale orders
-- journal cycles and summarize them
-- correlate related events within a polling cycle via `cycle_id`
-- trace individual events via `event_id`
+- persist safety state across restarts
+- reload authoritative account truth and fail closed when truth is incomplete
+- rank opportunities and pair opportunities
+- apply deterministic sizing and execution-policy vetoes
+- run preview or supervised live cycles
+- pause, hold new orders, force refresh, resume, cancel all, and cancel stale orders
+- write JSONL event journals and summarize them
 
-It should still be treated as **operator-supervised**.
+It should still be run with an operator watching it. The docs do not claim unattended live trading is solved.
 
-## Quick reference — pause vs halt vs resume
+## Venue posture
 
-Use this when you do not have time to reread the whole runbook.
+- **Primary supported live path:** Polymarket
+- **Secondary thin path:** Kalshi adapter support only, with less operational maturity
+
+If you want the lowest-risk way to use the repo, stay in Polymarket preview mode first and use the benchmark toolkit for offline work.
+
+## Quick reference
 
 ### Continue supervising normally
 
-Use normal supervision when:
+Continue only when:
 
 - account truth is complete
-- engine is not halted
-- policy gate is rejecting only routine low-quality candidates
-- no unexplained position/fill drift exists
+- the engine is not halted
+- there is no unresolved recovery item that should block new risk
+- recent policy rejections are routine quality filters, not a sign of broken state
 
 ### Pause
 
-Pause when:
-
-- you want to stop new decisions temporarily
-- you are doing manual maintenance
-- you want housekeeping to continue but do not want new entries
-
-Command:
+Pause stops new decisions but still allows housekeeping.
 
 ```bash
-python3 scripts/operator_cli.py pause --state-file runtime/safety-state.json --reason "manual maintenance"
+operator-cli pause --state-file runtime/safety-state.json --reason "manual maintenance"
+```
+
+### Hold new orders
+
+Use this when you want status and recovery work to continue, but you do not want any new order submissions.
+
+```bash
+operator-cli hold-new-orders --state-file runtime/safety-state.json --reason "hold while checking venue state"
+```
+
+Clear it with:
+
+```bash
+operator-cli clear-hold-new-orders --state-file runtime/safety-state.json
 ```
 
 ### Halt
 
-Halt is not a command you choose casually; it is the safety posture when trust is broken.
+Halt is the safety posture when trust is broken.
 
-Treat the bot as halted when:
+Treat the system as halted when:
 
-- reconciliation drift exists
+- reconciliation drift is unresolved
 - account truth is incomplete
-- partial-fill / cancel-race state is unclear
-- restart state does not match venue reality
+- pending cancel or pending submission recovery is unclear
+- restart state still does not match venue state
 
-In halted state, do **not** attempt to push new live runs.
+### Force refresh
+
+Queue an authoritative refresh request if you want the next runtime cycle or a later investigation to refresh truth deliberately.
+
+```bash
+operator-cli force-refresh --state-file runtime/safety-state.json --reason "operator requested refresh"
+```
+
+You can scope it to a contract when needed:
+
+```bash
+operator-cli force-refresh --state-file runtime/safety-state.json --venue polymarket --symbol <token-id> --outcome yes --reason "refresh this contract"
+```
 
 ### Resume
 
-Resume only when:
+Resume is contract-scoped and supervised.
 
-- venue truth looks healthy again
-- last truth summary is consistent
-- journal shows no unresolved confusion about the contract you care about
-- the clean-resume checks have enough fresh evidence
+```bash
+operator-cli resume --venue polymarket --symbol <token-id> --outcome yes --state-file runtime/safety-state.json
+```
 
-Resume is contract-scoped and should be supervised.
-
-### If unsure
-
-If you are unsure whether to continue or resume:
-
-1. inspect `status`
-2. inspect journal summary
-3. pause if needed
-4. cancel stale orders if needed
-5. prefer no new risk over optimistic continuation
+Resume only when venue truth looks healthy again and the clean resume check has enough fresh evidence.
 
 ## Recommended operating stages
 
-### Stage 1 — preview only
-
-Use this first:
+### Stage 1, preview only
 
 ```bash
-python3 scripts/run_agent_loop.py \
+run-agent-loop \
   --venue polymarket \
   --mode preview \
   --fair-values-file runtime/fair_values.json \
@@ -96,19 +106,18 @@ python3 scripts/run_agent_loop.py \
   --max-cycles 1
 ```
 
-Do this until you trust:
+Use this until the following are boring and explainable:
 
-- market discovery
-- candidate ranking
-- sizing
-- policy vetoes
+- discovery and ranking
+- policy-gate vetoes
+- sizing decisions
 - journaling
 - operator status output
 
-### Stage 2 — supervised repeated preview
+### Stage 2, repeated supervised preview
 
 ```bash
-python3 scripts/run_agent_loop.py \
+run-agent-loop \
   --venue polymarket \
   --mode preview \
   --fair-values-file runtime/fair_values.json \
@@ -117,14 +126,12 @@ python3 scripts/run_agent_loop.py \
   --max-cycles 100
 ```
 
-Use this to validate 24/7 behavior without placing orders.
+### Stage 3, small supervised live run
 
-### Stage 3 — small supervised live run
-
-Only after stage 2 is boring and explainable:
+Only after stage 2 is stable and well understood:
 
 ```bash
-python3 scripts/run_agent_loop.py \
+run-agent-loop \
   --venue polymarket \
   --mode run \
   --fair-values-file runtime/fair_values.json \
@@ -133,51 +140,55 @@ python3 scripts/run_agent_loop.py \
   --max-cycles 10
 ```
 
-Use very small quantities and tight risk caps.
+Use small quantities and tight risk caps.
 
-If you want the phase-1 Polymarket live user-state overlay during run mode, export the condition IDs before starting:
+## Runtime policy in operations
+
+If you want repeatable runtime behavior, pass `--policy-file`.
 
 ```bash
-export POLYMARKET_LIVE_USER_MARKETS="<condition-id-1>,<condition-id-2>"
+run-agent-loop \
+  --venue polymarket \
+  --mode preview \
+  --fair-values-file runtime/fair_values.json \
+  --policy-file runtime/policy.json
 ```
 
-This overlay only accelerates open-order freshness. It does not replace REST reconciliation for balances, positions, or fills.
+The policy file can control:
+
+- fair-value field selection, `raw` or `calibrated`
+- strategy quantity and edge threshold
+- ranker and pair-ranker thresholds
+- shared risk caps, including event-level caps
+- deterministic execution gate settings
+- engine timing and overlay recovery knobs
+- lifecycle cleanup policy
+- Polymarket depth admission
 
 ## Preflight checklist
 
 Before any continuous run:
 
 - `pip install -e .`
-- venue deps installed if needed:
-  - `pip install -e upstreams/py-clob-client`
-  - `pip install -e upstreams/pykalshi`
-- fair values file exists: `runtime/fair_values.json`
-- safety state path chosen: `runtime/safety-state.json`
-- journal path chosen: `runtime/events.jsonl`
-- env vars present for the venue you intend to use
-- continuous run entrypoint now fails fast if required credentials or the fair-values file are missing
-- for Polymarket live user-state overlay, set `POLYMARKET_LIVE_USER_MARKETS` to the condition IDs you want the user stream to follow
-- operator knows how to run:
-  - `status`
-  - `pause`
-  - `unpause`
-  - `resume`
-  - `cancel-all`
-  - `cancel-stale`
+- `pip install -e upstreams/py-clob-client`
+- `runtime/fair_values.json` exists
+- chosen state file path exists or can be created
+- chosen journal path exists or can be created
+- required venue credentials are present
+- if using `--policy-file`, the file exists and matches schema version 1
 
-## Fair values file
+For Polymarket run mode:
 
-The polling loop requires a JSON file.
+- `POLYMARKET_PRIVATE_KEY` must be present
+- optional `POLYMARKET_FUNDER` and `POLYMARKET_ACCOUNT_ADDRESS` can be set when needed
+- optional `POLYMARKET_LIVE_USER_MARKETS` can be set to the condition IDs you want the user stream to follow
+- optional `POLYMARKET_USER_WS_HOST` can override the default user websocket endpoint
 
-Legacy flat-map format is still supported:
+`run-agent-loop` fails fast when the fair-values file, policy file, or required credentials are missing.
 
-```json
-{
-  "<market_key>": 0.61
-}
-```
+## Fair-value manifest guidance
 
-The safer manifest format adds provenance and freshness controls:
+The runtime accepts a legacy flat map, but the richer manifest is the safer path.
 
 ```json
 {
@@ -187,191 +198,149 @@ The safer manifest format adds provenance and freshness controls:
   "values": {
     "<market_key>": {
       "fair_value": 0.61,
-      "condition_id": "<condition-id>"
+      "calibrated_fair_value": 0.63,
+      "condition_id": "<condition-id>",
+      "event_key": "<event-key>"
     }
   }
 }
 ```
 
-Where `market_key` is typically:
+Operationally important points:
 
-- `symbol:yes`
-- `symbol:no`
+- stale manifests can be blocked with `--max-fair-value-age-seconds`
+- runtime policy can choose `raw` or `calibrated`
+- `condition_id` and `event_key` help fail closed on identity mismatch
+- event metadata can seed per-event exposure tracking
 
-Use `--max-fair-value-age-seconds` to fail closed on stale records at runtime, or set `max_age_seconds` inside the manifest. For Polymarket, include `condition_id` when you can so stale token/key mismatches are rejected instead of silently traded.
-
-The current system does **not** generate fair values by itself yet. You must provide them.
-
-For offline sports workflows, the repo now includes a local fair-value builder. Feed it normalized sportsbook odds rows and emit the runtime manifest directly:
-
-```bash
-python3 scripts/export_polymarket_markets.py \
-  --output runtime/polymarket_markets.json \
-  --limit 200
-
-python3 scripts/fetch_the_odds_api_rows.py \
-  --sport-key basketball_nba \
-  --event-map-file runtime/odds_event_map.json \
-  --output runtime/sportsbook_odds.json
-
-python3 scripts/build_sports_fair_values.py \
-  --input runtime/sportsbook_odds.json \
-  --markets-file runtime/polymarket_markets.json \
-  --output runtime/fair_values.json \
-  --book-aggregation best-line \
-  --devig-method multiplicative \
-  --max-age-seconds 900
-```
-
-The input is a JSON list (or `{ "rows": [...] }`) of normalized binary sportsbook rows such as:
-
-```json
-[
-  {
-    "market_key": "token-yes:yes",
-    "bookmaker": "book-a",
-    "outcome": "yes",
-    "captured_at": "2026-04-07T12:00:00Z",
-    "decimal_odds": 1.7,
-    "condition_id": "condition-1",
-    "event_key": "nba-finals-game-1",
-    "sport": "nba",
-    "sports_market_type": "moneyline"
-  },
-  {
-    "market_key": "token-no:no",
-    "bookmaker": "book-a",
-    "outcome": "no",
-    "captured_at": "2026-04-07T12:00:00Z",
-    "decimal_odds": 2.3,
-    "condition_id": "condition-1",
-    "event_key": "nba-finals-game-1",
-    "sport": "nba",
-    "sports_market_type": "moneyline"
-  }
-]
-```
-
-The collector currently supports The Odds API's event/bookmaker/market shape for read-only sportsbook intake. Use an `event_map` JSON keyed by source event id when you want rows normalized into the repo's yes/no outcome shape and Polymarket-facing `event_key` metadata. After collection, the builder supports deterministic offline binary books with `multiplicative` and `power` de-vig methods. If rows already contain `market_key`, `--markets-file` is optional. If they do not, the builder matches them against the exported Polymarket snapshot using the normalized sports metadata (`event_key`, `sport`, `series`, `game_id`, `sports_market_type`, `outcome`) and skips ambiguous matches instead of guessing. Use `--book-aggregation best-line` when you want the best decimal odds per outcome across multiple bookmakers before de-vigging.
-
-If another supervised process is refreshing `runtime/fair_values.json`, the polling loop can reload it without restart:
-
-```bash
-python3 scripts/run_agent_loop.py \
-  --venue polymarket \
-  --mode preview \
-  --fair-values-file runtime/fair_values.json \
-  --fair-values-reload-seconds 30 \
-  --max-cycles 100
-```
+If another supervised process is refreshing the manifest, `run-agent-loop` can reload it without restart through `--fair-values-reload-seconds`.
 
 ## Core operator commands
 
-### Inspect status
+### Status
 
 ```bash
-python3 scripts/operator_cli.py status --state-file runtime/safety-state.json
-python3 scripts/operator_cli.py status --state-file runtime/safety-state.json --journal runtime/events.jsonl
-python3 scripts/operator_cli.py status --state-file runtime/safety-state.json --venue polymarket --symbol <token-id> --outcome yes
+operator-cli status --state-file runtime/safety-state.json
+operator-cli status --state-file runtime/safety-state.json --journal runtime/events.jsonl
+operator-cli status --state-file runtime/safety-state.json --venue polymarket --symbol <token-id> --outcome yes
 ```
 
-For Polymarket, venue-backed `status` now also shows websocket live-state freshness/activity, subscribed condition IDs, and the deeper persisted-vs-venue reconciliation detail.
+Status can show:
+
+- persisted safety state
+- pending cancels, pending submissions, pending refresh requests, and recovery items
+- recent journal summaries
+- last persisted truth summary
+- venue snapshot and truth drift when `--venue` is supplied
+- Polymarket live-state and market-state overlay health
 
 ### Pause and unpause
 
 ```bash
-python3 scripts/operator_cli.py pause --state-file runtime/safety-state.json --reason "manual maintenance"
-python3 scripts/operator_cli.py unpause --state-file runtime/safety-state.json
+operator-cli pause --state-file runtime/safety-state.json --reason "manual maintenance"
+operator-cli unpause --state-file runtime/safety-state.json
+```
+
+### Hold and clear hold
+
+```bash
+operator-cli hold-new-orders --state-file runtime/safety-state.json --reason "hold for review"
+operator-cli clear-hold-new-orders --state-file runtime/safety-state.json
+```
+
+### Force refresh
+
+```bash
+operator-cli force-refresh --state-file runtime/safety-state.json --reason "operator requested refresh"
 ```
 
 ### Resume after halt
 
 ```bash
-python3 scripts/operator_cli.py resume --venue polymarket --symbol <token-id> --outcome yes --state-file runtime/safety-state.json
+operator-cli resume --venue polymarket --symbol <token-id> --outcome yes --state-file runtime/safety-state.json
 ```
-
-Resume remains contract-scoped and supervised. The command performs the engine-side clean-resume check and reports whether the halt can be cleared yet.
 
 ### Emergency cleanup
 
 ```bash
-python3 scripts/operator_cli.py cancel-all --venue polymarket --symbol <token-id> --outcome yes
-python3 scripts/operator_cli.py cancel-stale --venue polymarket --symbol <token-id> --outcome yes --max-order-age-seconds 30
-```
-
-### Review journal summary
-
-```bash
-python3 scripts/summarize_events.py --journal runtime/events.jsonl
+operator-cli cancel-all --venue polymarket --symbol <token-id> --outcome yes
+operator-cli cancel-stale --venue polymarket --symbol <token-id> --outcome yes --max-order-age-seconds 30
 ```
 
 ## What blocks new trading decisions
 
-The system will refuse new decisions when:
+The runtime can refuse new decisions when:
 
-- engine is manually paused
-- engine is safety-halted
-- pre-scan global account truth is incomplete
-- per-candidate preview fails policy gate
+- the engine is paused
+- the engine is halted
+- new orders are held by the operator
+- authoritative account truth is incomplete
+- pending recovery work is still open
+- the deterministic execution gate rejects the candidate
 
-The policy gate can veto for:
+The execution gate can reject for reasons such as:
 
 - stale book
-- unhealthy reconciliation
 - thin liquidity
 - wide spreads
+- unhealthy reconciliation
 - duplicate exposure
-- too many open orders
-- too much capital at risk
+- open-order count pressure
+- open-order notional pressure
+- contract capital-at-risk limits
 - unresolved partial fills
 - cooldown violations
 
-## What housekeeping can still run while paused
+Separate from that, risk limits can still reject for:
 
-Paused means **no new scan/rank decisions**, but the loop may still:
+- per-market exposure caps
+- global exposure caps
+- per-event exposure caps when event identity is known
+- max daily loss
+
+## What can still run while paused or held
+
+Pause and hold-new-orders do not shut off all runtime work.
+
+The system may still:
 
 - refresh account truth
+- observe overlay state
 - cancel stale orders
 - write journal events
 
-This is intentional.
+That is intentional. The design tries to stop new risk without blinding the operator.
 
-## Halt vs pause
+## Polymarket-specific notes
 
-- **pause** = operator intent
-- **halt** = system safety response to drift / unsafe truth
+Polymarket is the main supported venue path, and it has extra runtime behaviors.
 
-Do not treat them as the same thing.
+- heartbeat support can be required for live trading health
+- a phase-1 live user-state overlay tracks open-order and fill freshness
+- a market-state overlay can improve book freshness
+- runtime policy can apply depth-admission rules before order placement
 
-## Resume procedure
+Important caveat:
 
-If halted:
-
-1. inspect `status`
-2. inspect last truth summary
-3. inspect journal summary
-4. verify venue truth is healthy again
-5. run the supervised operator resume command for the affected contract
-6. require repeated fresh clean evidence before trusting it again
+These overlays improve freshness, but they do not replace authoritative REST-based reconciliation for balances, positions, and final account truth.
 
 ## Suggested 24/7 posture
 
-For now, the safest 24/7 setup is:
+The safest current posture is:
 
-1. **preview mode first**
-2. event journal enabled
-3. safety state persisted
-4. operator CLI available in another terminal/session
-5. frequent journal/status review
+1. preview mode first
+2. persisted safety state enabled
+3. journal enabled
+4. operator CLI available in another terminal or session
+5. frequent status and journal review
 6. only short supervised live windows
 
-## Missing before true unattended trading
+## Missing before unattended trading
 
-- richer reconciled runtime truth from Polymarket
-- better restart rebuild from exchange + journal history
-- stronger partial-fill / cancel-race handling
-- deeper live-state integration into the engine instead of adapter-local caching
-- portfolio-level exposure model
-- more trustworthy fair-value generation
+- deeper engine-native live-state integration
+- more trustworthy restart rebuild from venue plus journal history
+- stronger partial-fill and cancel-race handling
+- richer portfolio-level exposure modeling
+- more trustworthy fair-value generation and monitoring
 
-Until those exist, treat this as **supervised automation**, not unattended trading.
+Until then, treat the repo as supervised automation, not unattended production trading.

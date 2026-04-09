@@ -4,6 +4,7 @@ import json
 import tempfile
 from types import SimpleNamespace
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from adapters import MarketSummary
@@ -94,15 +95,17 @@ class RefreshSportsFairValuesTests(unittest.TestCase):
 
             status = refresh_sports_fair_values._run_refresh_cycle_impl(args)
 
-            manifest = json.loads(open(output_handle.name, encoding="utf-8").read())
-            status_payload = json.loads(
-                open(status_handle.name, encoding="utf-8").read()
-            )
+            manifest = json.loads(Path(output_handle.name).read_text())
+            status_payload = json.loads(Path(status_handle.name).read_text())
 
         self.assertTrue(status["ok"])
         self.assertEqual(
             sorted(manifest["values"].keys()), ["token-no:no", "token-yes:yes"]
         )
+        self.assertEqual(
+            manifest["metadata"]["provenance"]["book_aggregation"], "best-line"
+        )
+        self.assertEqual(manifest["metadata"]["coverage"]["value_count"], 2)
         self.assertTrue(status_payload["ok"])
 
     def test_main_keeps_last_good_manifest_on_failure(self):
@@ -154,10 +157,8 @@ class RefreshSportsFairValuesTests(unittest.TestCase):
                 parser_mock.return_value.parse_args.return_value.max_cycles = 2
                 refresh_sports_fair_values.main()
 
-            manifest = json.loads(open(output_handle.name, encoding="utf-8").read())
-            status_payload = json.loads(
-                open(status_handle.name, encoding="utf-8").read()
-            )
+            manifest = json.loads(Path(output_handle.name).read_text())
+            status_payload = json.loads(Path(status_handle.name).read_text())
 
         self.assertEqual(manifest["values"]["token-1:yes"]["fair_value"], 0.6)
         self.assertFalse(status_payload["ok"])

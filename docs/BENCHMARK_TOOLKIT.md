@@ -1,77 +1,73 @@
 # Sports Benchmark Toolkit
 
-This repo now includes an **offline sports fair-value and replay benchmark/toolkit** built from the existing research primitives.
+This repo includes an offline sports fair-value and replay benchmark toolkit built from the research layer that also feeds the Polymarket runtime workflow.
 
-The goal is to make one small, reproducible public slice easy to run:
+## What it is
 
-1. load normalized sportsbook-style rows and market snapshots,
-2. build a de-vigged fair-value manifest,
-3. replay a simple strategy over synthetic order-book steps,
-4. score the result with deterministic forecast and replay metrics.
+The toolkit is a reproducible offline slice of the repo.
 
-## Scope of v1
+It lets you:
 
-This toolkit is intentionally narrow:
+1. load normalized sportsbook-style rows
+2. resolve those rows to market identity when market snapshots are present
+3. de-vig binary books into fair-value manifests
+4. optionally fit and apply a calibration overlay
+5. replay a simple strategy with the paper execution model
+6. score forecasts and replay results, then aggregate suite artifacts
 
-- **offline only**
-- **binary sports markets only**
-- **synthetic/public-safe fixtures only**
-- **replay and fair-value evaluation only**
+## What it is not
 
-It is **not** a packaged live trading bot and it does **not** redistribute proprietary sportsbook odds history.
+- not live trading
+- not a queue-accurate venue simulator
+- not a distributor of proprietary sportsbook history
+- not a claim that replay results equal live execution results
 
-The replay lane reuses the repo's existing paper-execution model, so it is still a **controlled approximation** of real queue position, latency, and venue behavior rather than a claim of live execution realism.
+Replay uses the repo's paper broker, which models slippage, fill caps, resting-order delay, and reserved capital, but it is still approximate.
 
 ## Core modules
 
-- `research/fair_values.py` — sportsbook odds parsing, matching, de-vigging, manifest build
-- `research/paper.py` — paper broker with slippage and partial-fill realism knobs
-- `research/replay.py` — replay runner
-- `research/schemas.py` — benchmark case/fixture schema and loaders
-- `research/scoring.py` — forecast and replay scoring
-- `research/benchmark_runner.py` — orchestrated benchmark execution
-- `research/benchmark_cli.py` — package-friendly CLI entry point
+- `research/fair_values.py` - sportsbook row parsing, market matching, de-vig, manifest build
+- `research/calibration.py` - histogram calibration artifacts and fitting
+- `research/paper.py` - paper broker and fill realism knobs
+- `research/replay.py` - replay runner
+- `research/scoring.py` - forecast and replay scoring
+- `research/benchmark_runner.py` - single benchmark-case execution
+- `research/benchmark_suite.py` - multi-case suite aggregation and edge ledger
+- `research/datasets.py` - versioned dataset snapshots and walk-forward splits
+- `research/benchmark_cli.py` - single-case CLI
+- `research/benchmark_suite_cli.py` - suite CLI
 
-## Packaged fixture
+## Packaged fixtures and example artifacts
 
-The repo ships with one small fixture:
+Packaged fixtures in `research/fixtures/`:
 
-- `research/fixtures/sports_benchmark_tiny.json`
+- `sports_benchmark_tiny.json`
+- `sports_benchmark_best_line.json`
+- `sports_benchmark_round_trip.json`
 
-and additional packaged benchmark cases for suite runs:
+Checked-in example suite output:
 
-- `research/fixtures/sports_benchmark_best_line.json`
-- `research/fixtures/sports_benchmark_round_trip.json`
-
-It exercises both sides of the toolkit:
-
-- fair-value construction from normalized moneyline rows
-- replay of `FairValueBandStrategy` over two deterministic order-book steps
-
-## Benchmark case semantics
-
-`fair_value_case` supports two fields that make the benchmark **fail closed** instead of silently accepting partial resolution:
-
-- `expected_market_keys` — market keys that must be present in the resolved fair-value manifest. If any are missing, the runner raises an explicit benchmark error.
-- `outcome_labels` — binary labels keyed by resolved market key. If a labeled key is missing from the manifest, the runner also raises an explicit benchmark error instead of scoring a partial subset.
-
-Use these fields when you want fixture validity to be part of the benchmark contract, not just the reported metrics.
+- `runtime/benchmark-suite-e2e-check/benchmark_suite_summary.json`
+- `runtime/benchmark-suite-e2e-check/benchmark_suite_summary.md`
+- `runtime/benchmark-suite-e2e-check/cases/`
 
 ## Quick start
 
-After `pip install -e .`, run either:
+After `pip install -e .`, run either form.
+
+Single packaged fixture:
 
 ```bash
 prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
 ```
 
-or:
+Equivalent script form:
 
 ```bash
 python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
 ```
 
-To save the full report and the fair-value manifest separately:
+Write both report and manifest:
 
 ```bash
 python3 scripts/run_sports_benchmark.py \
@@ -80,61 +76,112 @@ python3 scripts/run_sports_benchmark.py \
   --write-manifest runtime/sports_benchmark_manifest.json
 ```
 
-To run the packaged benchmark suite and write aggregated artifacts:
-
-```bash
-python3 scripts/run_sports_benchmark_suite.py --output-dir runtime/benchmark-suite
-```
-
-or, after installation:
+Run the packaged suite:
 
 ```bash
 prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
 ```
 
-## Report shape
+## Fair-value lane
 
-The benchmark report includes two sections when both lanes are present in the case file:
+The fair-value lane currently supports:
+
+- binary groups only
+- `multiplicative` and `power` de-vig methods
+- `independent` and `best-line` bookmaker aggregation
+- fail-closed expected market-key checks
+- fail-closed labeled-outcome checks
+- optional calibration samples that produce calibrated probabilities and before-versus-after metrics
+
+When calibration is present, the benchmark report includes:
+
+- raw forecast metrics
+- calibrated forecast metrics
+- calibration artifact payload
+- calibrated market probabilities
+- per-market raw and calibrated evaluation rows
+
+That same calibrated value can be carried into runtime manifests through `calibrated_fair_value`, while preserving the original raw `fair_value`.
+
+## Replay lane
+
+The replay lane runs `FairValueBandStrategy` over benchmark steps and uses `PaperBroker` for simulated execution.
+
+Current paper realism knobs in `PaperExecutionConfig`:
+
+- `max_fill_ratio_per_step`
+- `slippage_bps`
+- `resting_max_fill_ratio_per_step`
+- `resting_fill_delay_steps`
+
+Those knobs make replay more useful for relative comparison, but not production-safe on their own.
+
+## Report and suite artifacts
+
+Single-case reports can include two sections:
 
 - `fair_value`
-  - row counts
-  - resolved market keys
-  - skipped-group count
-  - generated manifest payload
-  - optional forecast metrics: **Brier**, **log loss**, **accuracy**, **ECE**
 - `replay`
-  - trade counts
-  - rejection count
-  - ending cash
-  - ending portfolio value
-  - net PnL
-  - return percentage
 
-The suite runner also writes:
+The fair-value section can include:
+
+- row counts
+- resolved market keys
+- missing market keys
+- skipped-group count
+- manifest payload
+- raw forecast metrics
+- calibrated forecast metrics, when calibration exists
+- per-market `evaluation_rows`
+- fair-value baseline comparisons
+
+The replay section can include:
+
+- replay score
+- ending positions
+- mark prices
+- ending cash
+- ending portfolio value
+- net PnL
+- replay baselines such as `noop_strategy`
+
+Suite output writes:
 
 - `benchmark_suite_summary.json`
 - `benchmark_suite_summary.md`
-- `cases/<case-name>.json`
+- `benchmark_suite_edge_ledger.json`
+- `cases/<safe-case-name>.json`
 
-See `docs/BENCHMARK_PROTOCOL.md` and `docs/BENCHMARK_CASE_SCHEMA.md` for the broader protocol and case format.
+The edge ledger is useful for later attribution, calibration fitting, and error inspection across cases.
 
-## What belongs in the public benchmark slice
+## Dataset snapshots and walk-forward splits
 
-Public now:
+The benchmark toolkit is not limited to hand-authored fixtures.
 
-- fair-value math and manifest generation
-- replay and paper execution primitives
-- benchmark schema, scoring, runner, and fixture-driven CLI
+`research/datasets.py` supports:
 
-Private/internal for now:
+- `rows_jsonl` snapshots for dated row collections
+- `benchmark_cases` snapshots for case collections
+- manifest files per snapshot version
+- chronological walk-forward split generation
 
-- live venue adapters
-- account-truth recovery and live runtime orchestration
-- operator control plane and incident-time workflows
+This lets you turn ad hoc benchmark work into versioned local research artifacts.
 
-## Recommended next extensions
+## Connection to the runtime path
 
-1. add more synthetic/public-safe benchmark cases,
-2. add richer calibration and attribution reports,
-3. add optional event/context inputs for event-informed fair-value updates,
-4. only then consider a separate public repo extraction.
+The benchmark toolkit is offline, but it is not isolated from the runtime design.
+
+- the fair-value manifest format matches the runtime manifest contract
+- manifests can carry both raw and calibrated values
+- runtime policy can choose which field, `raw` or `calibrated`, to read
+- suite edge-ledger rows can seed later calibration work
+
+## Honest limitations
+
+- sports-focused benchmark scope only
+- binary markets only in the fair-value builder
+- approximate replay fills
+- no claim of Polymarket live-fill realism
+- no claim of Kalshi parity in this benchmark path
+
+For the broader evaluation protocol and case format, see `docs/BENCHMARK_PROTOCOL.md` and `docs/BENCHMARK_CASE_SCHEMA.md`.

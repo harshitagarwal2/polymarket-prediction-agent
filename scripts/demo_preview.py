@@ -43,6 +43,9 @@ class DemoAdapter:
             asks=[PriceLevel(price=0.50, quantity=10)],
         )
 
+    def list_markets(self, limit: int = 100):
+        return []
+
     def list_open_orders(self, contract: Contract | None = None):
         return []
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from research.calibration import load_calibration_artifact
 from research.fair_values import (
     build_fair_value_manifest,
     load_market_snapshot,
@@ -34,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-age-seconds", type=float, default=None)
     parser.add_argument("--source", default=None)
+    parser.add_argument("--calibration-artifact", default=None)
     return parser
 
 
@@ -41,6 +43,18 @@ def main() -> None:
     args = build_parser().parse_args()
     rows = load_sportsbook_rows(args.input)
     skipped_rows: list[dict[str, object]] = []
+    calibration_artifact = None
+    if args.calibration_artifact is not None:
+        try:
+            calibration_artifact = load_calibration_artifact(args.calibration_artifact)
+        except ValueError as exc:
+            print(
+                (
+                    "warning: calibration artifact could not be loaded; "
+                    f"continuing with raw fair values ({exc})"
+                ),
+                file=sys.stderr,
+            )
     if args.markets_file is not None:
         markets = load_market_snapshot(args.markets_file)
         rows, skipped_rows = resolve_rows_to_markets(rows, markets)
@@ -50,6 +64,7 @@ def main() -> None:
         source=args.source,
         max_age_seconds=args.max_age_seconds,
         aggregation=args.book_aggregation,
+        calibration_artifact=calibration_artifact,
     )
     if skipped_rows:
         manifest.skipped_groups.extend(skipped_rows)
@@ -66,6 +81,7 @@ def main() -> None:
                 "source": manifest.source,
                 "generated_at": manifest.generated_at.isoformat(),
                 "book_aggregation": args.book_aggregation,
+                "calibration_applied": calibration_artifact is not None,
             },
             indent=2,
             sort_keys=True,

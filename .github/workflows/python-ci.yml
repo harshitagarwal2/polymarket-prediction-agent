@@ -1,0 +1,53 @@
+name: Python CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+
+      - name: Compile key modules
+        run: >-
+          python -m py_compile
+          engine/runtime_policy.py
+          engine/discovery.py
+          engine/runner.py
+          engine/safety_state.py
+          engine/safety_store.py
+          risk/limits.py
+          research/calibration.py
+          research/datasets.py
+          research/fair_values.py
+          research/replay.py
+          research/paper.py
+          research/schemas.py
+          research/benchmark_runner.py
+          research/benchmark_suite.py
+          research/benchmark_reporting.py
+          research/storage.py
+          scripts/run_agent_loop.py
+          scripts/operator_cli.py
+          scripts/build_sports_fair_values.py
+          scripts/refresh_sports_fair_values.py
+
+      - name: Run unittest suite
+        run: python -m unittest discover -s tests -p "test_*.py"

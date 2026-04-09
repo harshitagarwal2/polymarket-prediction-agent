@@ -20,7 +20,7 @@ from research.scoring import (
     score_replay_result,
 )
 from research.schemas import FairValueBenchmarkCase, ReplayBenchmarkCase
-from risk.limits import RiskEngine, RiskLimits
+from risk.limits import RiskEngine, RiskLimits, RiskState
 
 
 @dataclass(frozen=True)
@@ -201,13 +201,19 @@ def evaluate_replay_baselines(
                 min_price=case.risk_limits.min_price,
                 max_price=case.risk_limits.max_price,
                 max_daily_loss=case.risk_limits.max_daily_loss,
-            )
+                enforce_atomic_batches=case.risk_limits.enforce_atomic_batches,
+            ),
+            state=RiskState(daily_realized_pnl=case.risk_limits.daily_realized_pnl),
         ),
         broker=PaperBroker(
             cash=case.broker.cash,
             config=PaperExecutionConfig(
                 max_fill_ratio_per_step=case.broker.max_fill_ratio_per_step,
                 slippage_bps=case.broker.slippage_bps,
+                resting_max_fill_ratio_per_step=(
+                    case.broker.resting_max_fill_ratio_per_step
+                ),
+                resting_fill_delay_steps=case.broker.resting_fill_delay_steps,
             ),
         ),
     )

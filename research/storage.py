@@ -53,6 +53,57 @@ def _normalize_for_json(value: Any) -> Any:
     return value
 
 
+def normalize_for_json(value: Any) -> Any:
+    return _normalize_for_json(value)
+
+
+def write_json(path: str | Path, payload: Any) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(
+            normalize_for_json(payload),
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        ),
+        encoding="utf-8",
+    )
+    return output_path
+
+
+def write_jsonl_records(path: str | Path, records: list[Any]) -> Path:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(
+                json.dumps(
+                    normalize_for_json(record),
+                    sort_keys=True,
+                    allow_nan=False,
+                )
+                + "\n"
+            )
+    return output_path
+
+
+def read_jsonl_records(path: str | Path) -> list[dict[str, Any]]:
+    path = Path(path)
+    if not path.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError("jsonl record must deserialize to an object")
+        records.append(payload)
+    return records
+
+
 class EventJournal:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -63,23 +114,14 @@ class EventJournal:
             "event_id": uuid.uuid4().hex,
             "ts": datetime.now(timezone.utc).isoformat(),
             "event_type": event_type,
-            "payload": _normalize_for_json(payload),
+            "payload": normalize_for_json(payload),
         }
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(envelope, sort_keys=True) + "\n")
 
 
 def read_jsonl_events(path: str | Path) -> list[dict[str, Any]]:
-    path = Path(path)
-    if not path.exists():
-        return []
-    events: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        events.append(json.loads(line))
-    return events
+    return read_jsonl_records(path)
 
 
 def summarize_scan_cycle_events(events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -134,6 +176,8 @@ def summarize_recent_runtime(events: list[dict[str, Any]]) -> dict[str, Any]:
         "last_execution_placement_count": 0,
         "last_execution_accepted_placement_count": 0,
         "last_execution_order_ids": [],
+        "last_gate_trace": [],
+        "last_blocking_gate": None,
     }
 
     for event in events:
@@ -156,6 +200,8 @@ def summarize_recent_runtime(events: list[dict[str, Any]]) -> dict[str, Any]:
             summary["last_selected_market_key"] = market_key
             summary["last_policy_allowed"] = payload.get("policy_allowed")
             summary["last_policy_reasons"] = list(payload.get("policy_reasons") or [])
+            summary["last_gate_trace"] = list(payload.get("gate_trace") or [])
+            summary["last_blocking_gate"] = payload.get("blocking_gate")
 
             execution = payload.get("execution") or {}
             placements = execution.get("placements") or []
@@ -171,6 +217,12 @@ def summarize_recent_runtime(events: list[dict[str, Any]]) -> dict[str, Any]:
                     for placement in placements
                     if placement.get("order_id") is not None
                 ]
+
+            if summary["last_blocking_gate"] is None:
+                for gate in reversed(summary["last_gate_trace"]):
+                    if gate.get("allowed") is False:
+                        summary["last_blocking_gate"] = gate
+                        break
 
         elif event_type == "scan_cycle_skipped":
             summary["last_scan_mode"] = payload.get("mode")

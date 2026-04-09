@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from engine.accounting import AccountTruthSummary, compare_truth_summaries
@@ -39,6 +41,38 @@ class JournalTests(unittest.TestCase):
             events = read_jsonl_events(path)
             self.assertEqual(events[0]["payload"]["cycle_id"], "cycle-123")
             self.assertTrue(events[0]["event_id"])
+
+    def test_append_preserves_event_envelope_and_normalizes_nested_payload_values(self):
+        @dataclass(frozen=True)
+        class NestedPayload:
+            flag: bool
+            seen_at: datetime
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "events.jsonl"
+            journal = EventJournal(path)
+
+            journal.append(
+                "scan_cycle",
+                {
+                    "cycle_id": "cycle-456",
+                    "nested": NestedPayload(
+                        flag=True,
+                        seen_at=datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc),
+                    ),
+                },
+            )
+
+            events = read_jsonl_events(path)
+
+        self.assertEqual(set(events[0]), {"event_id", "event_type", "payload", "ts"})
+        self.assertEqual(events[0]["event_type"], "scan_cycle")
+        self.assertEqual(events[0]["payload"]["cycle_id"], "cycle-456")
+        self.assertEqual(events[0]["payload"]["nested"]["flag"], True)
+        self.assertEqual(
+            events[0]["payload"]["nested"]["seen_at"],
+            "2026-04-07T12:00:00+00:00",
+        )
 
     def test_summarize_scan_cycle_events(self):
         events = [
@@ -118,6 +152,29 @@ class JournalTests(unittest.TestCase):
                     "selected": {"contract": {"symbol": "token-1", "outcome": "yes"}},
                     "policy_allowed": False,
                     "policy_reasons": ["thin liquidity"],
+                    "gate_trace": [
+                        {
+                            "market_key": "token-1:yes",
+                            "action": "buy",
+                            "stage": "sizer",
+                            "allowed": True,
+                            "reasons": [],
+                        },
+                        {
+                            "market_key": "token-1:yes",
+                            "action": "buy",
+                            "stage": "policy_gate",
+                            "allowed": False,
+                            "reasons": ["thin liquidity"],
+                        },
+                    ],
+                    "blocking_gate": {
+                        "market_key": "token-1:yes",
+                        "action": "buy",
+                        "stage": "policy_gate",
+                        "allowed": False,
+                        "reasons": ["thin liquidity"],
+                    },
                     "execution": {
                         "placements": [
                             {"accepted": True, "order_id": "abc-123"},
@@ -150,3 +207,41 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(summary["last_execution_placement_count"], 2)
         self.assertEqual(summary["last_execution_accepted_placement_count"], 1)
         self.assertEqual(summary["last_execution_order_ids"], ["abc-123"])
+        self.assertEqual(len(summary["last_gate_trace"]), 2)
+        self.assertEqual(summary["last_gate_trace"][-1]["stage"], "policy_gate")
+        self.assertEqual(summary["last_blocking_gate"]["stage"], "policy_gate")
+
+    def test_summarize_recent_runtime_derives_last_blocking_gate_from_gate_trace(self):
+        events = [
+            {
+                "ts": "2026-04-06T00:00:00+00:00",
+                "event_type": "scan_cycle",
+                "payload": {
+                    "mode": "preview",
+                    "selected": {"contract": {"symbol": "token-1", "outcome": "yes"}},
+                    "policy_allowed": False,
+                    "policy_reasons": ["thin liquidity"],
+                    "gate_trace": [
+                        {
+                            "market_key": "token-1:yes",
+                            "action": "buy",
+                            "stage": "sizer",
+                            "allowed": True,
+                            "reasons": [],
+                        },
+                        {
+                            "market_key": "token-1:yes",
+                            "action": "buy",
+                            "stage": "policy_gate",
+                            "allowed": False,
+                            "reasons": ["thin liquidity"],
+                        },
+                    ],
+                },
+            }
+        ]
+
+        summary = summarize_recent_runtime(events)
+
+        self.assertEqual(summary["last_gate_trace"][-1]["stage"], "policy_gate")
+        self.assertEqual(summary["last_blocking_gate"]["stage"], "policy_gate")

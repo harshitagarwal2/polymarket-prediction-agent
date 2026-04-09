@@ -125,6 +125,7 @@ class TradingEngine:
         self._sync_pending_cancel_attention_halt()
         self._applied_live_terminal_markers: dict[str, tuple[datetime | None, str]] = {}
         self._refresh_requests: dict[str, RefreshRequest] = {}
+        self._restore_daily_loss_state()
 
     def _persist_safety_state(self) -> None:
         if self.safety_store is not None:
@@ -547,6 +548,54 @@ class TradingEngine:
             or self.safety_state.persisted_balance is not None
         )
 
+    def _current_utc_day(self) -> str:
+        return datetime.now(timezone.utc).date().isoformat()
+
+    def _reset_daily_loss_state(self, *, day: str | None = None) -> None:
+        self.safety_state.daily_loss_date = day
+        self.safety_state.daily_loss_baseline_balance = None
+        self.safety_state.daily_loss_current_balance = None
+        self.safety_state.daily_loss_source = None
+        self.safety_state.daily_loss_approximation = None
+        self.safety_state.daily_realized_pnl = 0.0
+        self.safety_state.daily_loss_last_updated_at = None
+        self.risk_engine.state.daily_realized_pnl = 0.0
+
+    def _restore_daily_loss_state(self) -> None:
+        stored_day = self.safety_state.daily_loss_date
+        current_day = self._current_utc_day()
+        if stored_day is not None and stored_day != current_day:
+            self._reset_daily_loss_state(day=current_day)
+            self._persist_safety_state()
+            return
+        self.risk_engine.state.daily_realized_pnl = self.safety_state.daily_realized_pnl
+
+    def _daily_loss_balance_metric(
+        self, snapshot: AccountSnapshot
+    ) -> tuple[float, str]:
+        if snapshot.balance.total is not None:
+            return snapshot.balance.total, "balance_total"
+        return snapshot.balance.available, "balance_available"
+
+    def _update_daily_loss_state(self, snapshot: AccountSnapshot) -> None:
+        if not snapshot.complete:
+            return
+        balance_value, source = self._daily_loss_balance_metric(snapshot)
+        day = snapshot.observed_at.astimezone(timezone.utc).date().isoformat()
+        baseline = self.safety_state.daily_loss_baseline_balance
+        if self.safety_state.daily_loss_date != day or baseline is None:
+            baseline = balance_value
+        self.safety_state.daily_loss_date = day
+        self.safety_state.daily_loss_baseline_balance = baseline
+        self.safety_state.daily_loss_current_balance = balance_value
+        self.safety_state.daily_loss_source = source
+        self.safety_state.daily_loss_approximation = (
+            "balance delta from UTC day-start authoritative truth"
+        )
+        self.safety_state.daily_realized_pnl = balance_value - baseline
+        self.safety_state.daily_loss_last_updated_at = snapshot.observed_at
+        self.risk_engine.state.daily_realized_pnl = self.safety_state.daily_realized_pnl
+
     def reconcile_persisted_truth(
         self,
         contract: Contract,
@@ -578,9 +627,17 @@ class TradingEngine:
         return contract if isinstance(contract, str) else contract.market_key
 
     def _prune_pending_cancels(self) -> None:
-        self.safety_state.pending_cancels = [
+        unresolved = [
             item for item in self.safety_state.pending_cancels if not item.acknowledged
         ]
+        resolved = [
+            item for item in self.safety_state.pending_cancels if item.acknowledged
+        ]
+        resolved.sort(
+            key=lambda item: item.resolved_at or item.requested_at,
+            reverse=True,
+        )
+        self.safety_state.pending_cancels = unresolved + resolved[:20]
 
     def _pending_cancel_attention_records(
         self, contract: Contract | None = None
@@ -1127,6 +1184,7 @@ class TradingEngine:
         self.safety_state.last_truth_marked_position_notional = marked_position_notional
         self.safety_state.last_truth_observed_at = snapshot.observed_at
         self._persist_detailed_truth(snapshot)
+        self._update_daily_loss_state(snapshot)
         self._persist_safety_state()
 
     def _order_signature(self, order: NormalizedOrder) -> tuple[Any, ...]:
@@ -1641,6 +1699,28 @@ class TradingEngine:
         merged_metadata["overlay_last_suppression_duration_seconds"] = (
             self.safety_state.overlay_last_suppression_duration_seconds
         )
+        merged_metadata["daily_loss_date"] = self.safety_state.daily_loss_date
+        merged_metadata["daily_loss_baseline_balance"] = (
+            self.safety_state.daily_loss_baseline_balance
+        )
+        merged_metadata["daily_loss_current_balance"] = (
+            self.safety_state.daily_loss_current_balance
+        )
+        merged_metadata["daily_loss_source"] = self.safety_state.daily_loss_source
+        merged_metadata["daily_loss_approximation"] = (
+            self.safety_state.daily_loss_approximation
+        )
+        merged_metadata["daily_realized_pnl"] = (
+            self.risk_engine.state.daily_realized_pnl
+        )
+        merged_metadata["daily_loss_last_updated_at"] = (
+            self.safety_state.daily_loss_last_updated_at
+        )
+        merged_metadata["daily_loss_limit_reached"] = (
+            self.risk_engine.state.daily_loss_limit_reached(
+                self.risk_engine.limits.max_daily_loss
+            )
+        )
         return StrategyContext(
             contract=contract,
             book=book,
@@ -1789,6 +1869,198 @@ class TradingEngine:
             f"(age={age_seconds:.1f}s)"
         )
 
+    def _preview_result(
+        self,
+        context: StrategyContext,
+        *,
+        proposed: list[OrderIntent],
+        reconciliation_before: ReconciliationReport | None = None,
+    ) -> EngineRunResult:
+        if reconciliation_before is None:
+            reconciliation_before = self.reconciliation.reconcile(
+                context.contract,
+                pending_cancel_order_ids=self.pending_cancel_order_ids(
+                    context.contract, unresolved_only=True
+                ),
+            )
+        risk = self.risk_engine.evaluate(
+            proposed,
+            position=context.position,
+            positions=list(self.account_state.positions.values()),
+            open_orders=(
+                list(self.account_state.open_orders.values())
+                + self.pending_submission_reservations()
+            ),
+        )
+        return EngineRunResult(
+            context=context,
+            proposed=proposed,
+            risk=risk,
+            placements=[],
+            reconciliation_before=reconciliation_before,
+        )
+
+    def preview_context(
+        self,
+        context: StrategyContext,
+        *,
+        reconciliation_before: ReconciliationReport | None = None,
+    ) -> EngineRunResult:
+        proposed = self.strategy.generate_intents(context)
+        return self._preview_result(
+            context,
+            proposed=proposed,
+            reconciliation_before=reconciliation_before,
+        )
+
+    def preview_intents(
+        self,
+        contract: Contract,
+        intents: list[OrderIntent],
+        *,
+        fair_value: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> EngineRunResult:
+        context = self.build_context(contract, fair_value=fair_value, metadata=metadata)
+        return self._preview_result(context, proposed=list(intents))
+
+    def _blocked_execution(
+        self,
+        preview: EngineRunResult,
+        reason: str,
+        *,
+        stop_live_heartbeat: bool = False,
+    ) -> EngineRunResult:
+        if stop_live_heartbeat:
+            self._stop_live_heartbeat()
+        blocked_rejections = list(preview.risk.rejected)
+        blocked_rejections.extend(
+            Rejection(intent, reason) for intent in preview.risk.approved
+        )
+        return EngineRunResult(
+            context=preview.context,
+            proposed=preview.proposed,
+            risk=RiskDecision(approved=[], rejected=blocked_rejections),
+            placements=[],
+            reconciliation_before=preview.reconciliation_before,
+            reconciliation_after=None,
+        )
+
+    def _execution_contracts(
+        self,
+        preview: EngineRunResult,
+        contracts: list[Contract] | None = None,
+    ) -> list[Contract]:
+        ordered: dict[str, Contract] = {}
+        for contract in contracts or []:
+            ordered.setdefault(contract.market_key, contract)
+        for intent in preview.proposed:
+            ordered.setdefault(intent.contract.market_key, intent.contract)
+        for intent in preview.risk.approved:
+            ordered.setdefault(intent.contract.market_key, intent.contract)
+        for rejection in preview.risk.rejected:
+            ordered.setdefault(
+                rejection.intent.contract.market_key, rejection.intent.contract
+            )
+        ordered.setdefault(
+            preview.context.contract.market_key, preview.context.contract
+        )
+        return list(ordered.values())
+
+    def _contract_block_records(
+        self,
+        contracts: list[Contract],
+        reason_getter,
+    ) -> list[tuple[Contract, str]]:
+        records: list[tuple[Contract, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for contract in contracts:
+            reason = reason_getter(contract)
+            if reason is None:
+                continue
+            key = (contract.market_key, reason)
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append((contract, reason))
+        return records
+
+    def _apply_execution_blockers(
+        self,
+        preview: EngineRunResult,
+        *,
+        contracts: list[Contract] | None = None,
+    ) -> tuple[EngineRunResult, bool]:
+        self._sync_operator_control_state()
+        execution_contracts = self._execution_contracts(preview, contracts)
+        if self.safety_state.paused:
+            reason = self.safety_state.pause_reason or "engine paused by operator"
+            return (
+                self._blocked_execution(
+                    preview,
+                    reason,
+                    stop_live_heartbeat=True,
+                ),
+                True,
+            )
+        if self.safety_state.halted:
+            reason = (
+                self.safety_state.reason
+                or "engine halted after unsafe reconciliation drift"
+            )
+            return self._blocked_execution(preview, reason), True
+        if not preview.context.metadata.get("account_snapshot_complete", True):
+            issues = preview.context.metadata.get("account_snapshot_issues", [])
+            reason = "venue account snapshot incomplete"
+            if issues:
+                reason = f"{reason}: {'; '.join(issues)}"
+            return (
+                self._blocked_execution(
+                    preview,
+                    reason,
+                    stop_live_heartbeat=True,
+                ),
+                True,
+            )
+        heartbeat_reason = self.heartbeat_block_reason()
+        if heartbeat_reason is not None:
+            if self.safety_state.heartbeat_unhealthy:
+                self.halt(heartbeat_reason, execution_contracts[0])
+            return self._blocked_execution(preview, heartbeat_reason), True
+        cancel_block_records = self._contract_block_records(
+            execution_contracts,
+            self.pending_cancel_block_reason,
+        )
+        if cancel_block_records:
+            reason = "; ".join(reason for _, reason in cancel_block_records)
+            self.halt(cancel_block_records[0][1], cancel_block_records[0][0])
+            return self._blocked_execution(preview, reason), True
+        if self.safety_state.hold_new_orders and preview.risk.approved:
+            reason = self.safety_state.hold_reason or "new orders held by operator"
+            return self._blocked_execution(preview, reason), True
+        submission_guard_records = self._contract_block_records(
+            execution_contracts,
+            self.pending_cancel_submission_guard_reason,
+        )
+        if submission_guard_records and preview.risk.approved:
+            for contract, _ in submission_guard_records:
+                self.request_authoritative_refresh(
+                    "pending cancel awaiting authoritative observation",
+                    scope=contract.market_key,
+                )
+            reason = "; ".join(reason for _, reason in submission_guard_records)
+            return self._blocked_execution(preview, reason), True
+        return preview, False
+
+    def review_precomputed(
+        self,
+        preview: EngineRunResult,
+        *,
+        contracts: list[Contract] | None = None,
+    ) -> EngineRunResult:
+        reviewed, _ = self._apply_execution_blockers(preview, contracts=contracts)
+        return reviewed
+
     def _placement_acknowledgement_failures(
         self,
         placements: list[PlacementResult],
@@ -1926,6 +2198,16 @@ class TradingEngine:
             overlay_last_suppression_duration_seconds=self.safety_state.overlay_last_suppression_duration_seconds,
             overlay_last_live_state_active=self.safety_state.overlay_last_live_state_active,
             overlay_last_subscribed_markets=self.safety_state.overlay_last_subscribed_markets,
+            daily_loss_date=self.safety_state.daily_loss_date,
+            daily_loss_baseline_balance=self.safety_state.daily_loss_baseline_balance,
+            daily_loss_current_balance=self.safety_state.daily_loss_current_balance,
+            daily_loss_source=self.safety_state.daily_loss_source,
+            daily_loss_approximation=self.safety_state.daily_loss_approximation,
+            daily_realized_pnl=self.safety_state.daily_realized_pnl,
+            daily_loss_last_updated_at=self.safety_state.daily_loss_last_updated_at,
+            daily_loss_limit_reached=self.risk_engine.state.daily_loss_limit_reached(
+                self.risk_engine.limits.max_daily_loss
+            ),
             pending_cancels=self.pending_cancels(unresolved_only=True),
             pending_submissions=self.pending_submissions(unresolved_only=True),
             pending_refresh_requests=list(self.safety_state.pending_refresh_requests),
@@ -2013,30 +2295,7 @@ class TradingEngine:
         metadata: dict[str, Any] | None = None,
     ) -> EngineRunResult:
         context = self.build_context(contract, fair_value=fair_value, metadata=metadata)
-        reconciliation_before = self.reconciliation.reconcile(
-            contract,
-            pending_cancel_order_ids=self.pending_cancel_order_ids(
-                contract, unresolved_only=True
-            ),
-        )
-        proposed = self.strategy.generate_intents(context)
-        risk_open_orders = (
-            list(self.account_state.open_orders.values())
-            + self.pending_submission_reservations()
-        )
-        risk = self.risk_engine.evaluate(
-            proposed,
-            position=context.position,
-            positions=list(self.account_state.positions.values()),
-            open_orders=risk_open_orders,
-        )
-        return EngineRunResult(
-            context=context,
-            proposed=proposed,
-            risk=risk,
-            placements=[],
-            reconciliation_before=reconciliation_before,
-        )
+        return self.preview_context(context)
 
     def execute_precomputed(
         self,
@@ -2045,7 +2304,7 @@ class TradingEngine:
         contracts: list[Contract] | None = None,
     ) -> EngineRunResult:
         contract = preview.context.contract
-        reconciliation_contracts = contracts or [contract]
+        reconciliation_contracts = self._execution_contracts(preview, contracts)
         placements: list[PlacementResult] = []
         fail_closed_reasons: list[str] = []
         self._record_depth_assessment(None)
@@ -2271,6 +2530,17 @@ class TradingEngine:
             reconciliation_after=reconciliation_after,
         )
 
+    def run_precomputed(
+        self,
+        preview: EngineRunResult,
+        *,
+        contracts: list[Contract] | None = None,
+    ) -> EngineRunResult:
+        reviewed, blocked = self._apply_execution_blockers(preview, contracts=contracts)
+        if blocked:
+            return reviewed
+        return self.execute_precomputed(reviewed, contracts=contracts)
+
     def run_once(
         self,
         contract: Contract,
@@ -2278,31 +2548,4 @@ class TradingEngine:
         metadata: dict[str, Any] | None = None,
     ) -> EngineRunResult:
         preview = self.preview_once(contract, fair_value=fair_value, metadata=metadata)
-        if self.safety_state.paused:
-            return self._block_for_pause(preview)
-        if self.safety_state.halted:
-            return self._block_for_engine_halt(preview)
-        if not preview.context.metadata.get("account_snapshot_complete", True):
-            return self._block_for_incomplete_snapshot(preview)
-        heartbeat_reason = self.heartbeat_block_reason()
-        if heartbeat_reason is not None:
-            if self.safety_state.heartbeat_unhealthy:
-                self.halt(heartbeat_reason, contract)
-            return self._block_for_heartbeat(preview, heartbeat_reason)
-        cancel_reason = self.pending_cancel_block_reason(contract)
-        if cancel_reason is not None:
-            self.halt(cancel_reason, contract)
-            return self._block_for_heartbeat(preview, cancel_reason)
-        if self.safety_state.hold_new_orders and preview.risk.approved:
-            reason = self.safety_state.hold_reason or "new orders held by operator"
-            return self._block_for_heartbeat(preview, reason)
-        pending_cancel_submission_reason = self.pending_cancel_submission_guard_reason(
-            contract
-        )
-        if pending_cancel_submission_reason is not None and preview.risk.approved:
-            self.request_authoritative_refresh(
-                "pending cancel awaiting authoritative observation",
-                scope=contract.market_key,
-            )
-            return self._block_for_heartbeat(preview, pending_cancel_submission_reason)
-        return self.execute_precomputed(preview)
+        return self.run_precomputed(preview, contracts=[contract])

@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
+from typing import Iterable
 
-from adapters.types import NormalizedOrder, OrderIntent, PositionSnapshot
+from adapters.types import MarketSummary, NormalizedOrder, OrderIntent, PositionSnapshot
 
 
 @dataclass
 class RiskLimits:
     max_global_contracts: int = 20
     max_contracts_per_market: int = 5
+    max_contracts_per_event: int | None = None
     reserve_contracts_buffer: int = 0
     max_order_notional: float | None = None
     min_price: float = 0.01
     max_price: float = 0.99
     max_daily_loss: float | None = None
+    enforce_atomic_batches: bool = True
 
 
 @dataclass
@@ -32,11 +36,75 @@ class RiskDecision:
 class RiskState:
     daily_realized_pnl: float = 0.0
 
+    def daily_loss_limit_reached(self, max_daily_loss: float | None) -> bool:
+        if max_daily_loss is None:
+            return False
+        return self.daily_realized_pnl <= -abs(max_daily_loss)
+
 
 class RiskEngine:
     def __init__(self, limits: RiskLimits, state: RiskState | None = None):
         self.limits = limits
         self.state = state or RiskState()
+        self.market_key_to_event_exposure_key: dict[str, str] = {}
+
+    def _normalize_event_component(self, value: str | None) -> str | None:
+        if value in (None, ""):
+            return None
+        normalized = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
+        return normalized or None
+
+    def _event_exposure_key(
+        self,
+        *,
+        event_key: str | None = None,
+        sport: str | None = None,
+        series: str | None = None,
+        game_id: str | None = None,
+    ) -> str | None:
+        normalized_event_key = self._normalize_event_component(event_key)
+        if normalized_event_key is not None:
+            return f"event:{normalized_event_key}"
+        normalized_sport = self._normalize_event_component(sport)
+        normalized_series = self._normalize_event_component(series)
+        normalized_game_id = self._normalize_event_component(game_id)
+        if (
+            normalized_sport is None
+            or normalized_series is None
+            or normalized_game_id is None
+        ):
+            return None
+        return f"composite:{normalized_sport}:{normalized_series}:{normalized_game_id}"
+
+    def register_market_event(
+        self,
+        market_key: str,
+        *,
+        event_key: str | None = None,
+        sport: str | None = None,
+        series: str | None = None,
+        game_id: str | None = None,
+    ) -> str | None:
+        exposure_key = self._event_exposure_key(
+            event_key=event_key,
+            sport=sport,
+            series=series,
+            game_id=game_id,
+        )
+        if exposure_key is None:
+            return None
+        self.market_key_to_event_exposure_key[str(market_key)] = exposure_key
+        return exposure_key
+
+    def register_markets(self, markets: Iterable[MarketSummary]) -> None:
+        for market in markets:
+            self.register_market_event(
+                market.contract.market_key,
+                event_key=market.event_key,
+                sport=market.sport,
+                series=market.series,
+                game_id=market.game_id,
+            )
 
     def _order_exposure(self, order: NormalizedOrder) -> float:
         if order.action.value == "sell" and order.reduce_only:
@@ -70,6 +138,26 @@ class RiskEngine:
         resting = sum(self._order_exposure(order) for order in open_orders)
         return position_quantity + resting
 
+    def _current_event_exposure(
+        self,
+        event_exposure_key: str,
+        positions: list[PositionSnapshot],
+        open_orders: list[NormalizedOrder],
+    ) -> float:
+        position_quantity = sum(
+            abs(position.quantity)
+            for position in positions
+            if self.market_key_to_event_exposure_key.get(position.contract.market_key)
+            == event_exposure_key
+        )
+        resting = sum(
+            self._order_exposure(order)
+            for order in open_orders
+            if self.market_key_to_event_exposure_key.get(order.contract.market_key)
+            == event_exposure_key
+        )
+        return position_quantity + resting
+
     def _resolve_positions(
         self,
         position: PositionSnapshot,
@@ -80,6 +168,37 @@ class RiskEngine:
         }
         resolved[position.contract.market_key] = position
         return list(resolved.values())
+
+    def _finalize_atomic_batch(
+        self,
+        intents: list[OrderIntent],
+        decision: RiskDecision,
+    ) -> RiskDecision:
+        if (
+            not self.limits.enforce_atomic_batches
+            or len(intents) <= 1
+            or not decision.approved
+            or not decision.rejected
+        ):
+            return decision
+
+        rejection_by_intent = {
+            id(rejection.intent): rejection for rejection in decision.rejected
+        }
+        companion_reason = decision.rejected[0].reason
+        batch_rejections: list[Rejection] = []
+        for intent in intents:
+            rejection = rejection_by_intent.get(id(intent))
+            if rejection is not None:
+                batch_rejections.append(rejection)
+                continue
+            batch_rejections.append(
+                Rejection(
+                    intent,
+                    f"batched with rejected intent: {companion_reason}",
+                )
+            )
+        return RiskDecision(approved=[], rejected=batch_rejections)
 
     def evaluate(
         self,
@@ -92,10 +211,7 @@ class RiskEngine:
         decision = RiskDecision()
         current_positions = self._resolve_positions(position, positions)
 
-        if (
-            self.limits.max_daily_loss is not None
-            and self.state.daily_realized_pnl <= -abs(self.limits.max_daily_loss)
-        ):
+        if self.state.daily_loss_limit_reached(self.limits.max_daily_loss):
             for intent in intents:
                 decision.rejected.append(Rejection(intent, "daily loss limit reached"))
             return decision
@@ -111,6 +227,25 @@ class RiskEngine:
         running_global_exposure = self._current_global_exposure(
             current_positions, open_orders
         )
+        running_event_exposure = {
+            event_exposure_key: self._current_event_exposure(
+                event_exposure_key,
+                current_positions,
+                open_orders,
+            )
+            for event_exposure_key in {
+                self.market_key_to_event_exposure_key.get(
+                    current_position.contract.market_key
+                )
+                for current_position in current_positions
+            }.union(
+                {
+                    self.market_key_to_event_exposure_key.get(order.contract.market_key)
+                    for order in open_orders
+                }
+            )
+            if event_exposure_key is not None
+        }
         remaining_reduce_only_capacity = {
             current_position.contract.market_key: max(current_position.quantity, 0.0)
             for current_position in current_positions
@@ -157,6 +292,27 @@ class RiskEngine:
                 )
                 continue
 
+            event_exposure_key = self.market_key_to_event_exposure_key.get(market_key)
+            projected_event = None
+            if (
+                self.limits.max_contracts_per_event is not None
+                and event_exposure_key is not None
+            ):
+                current_event_exposure = running_event_exposure.get(
+                    event_exposure_key,
+                    self._current_event_exposure(
+                        event_exposure_key,
+                        current_positions,
+                        open_orders,
+                    ),
+                )
+                projected_event = current_event_exposure + exposure_increase
+                if projected_event > self.limits.max_contracts_per_event:
+                    decision.rejected.append(
+                        Rejection(intent, "per-event exposure cap exceeded")
+                    )
+                    continue
+
             projected_global = running_global_exposure + exposure_increase
             max_global = max(
                 0,
@@ -169,6 +325,8 @@ class RiskEngine:
                 continue
 
             running_market_exposure[market_key] = projected_market
+            if projected_event is not None and event_exposure_key is not None:
+                running_event_exposure[event_exposure_key] = projected_event
             running_global_exposure = projected_global
             if intent.action.value == "buy":
                 remaining_reduce_only_capacity[market_key] = (
@@ -183,4 +341,4 @@ class RiskEngine:
                 )
             decision.approved.append(intent)
 
-        return decision
+        return self._finalize_atomic_batch(intents, decision)

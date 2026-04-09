@@ -11,25 +11,32 @@ Each benchmark case is a JSON object with this top-level shape:
 }
 ```
 
-Both `fair_value_case` and `replay_case` are optional, but at least one should be present for a useful benchmark case.
+At least one of `fair_value_case` or `replay_case` should be present.
 
 ## `fair_value_case`
 
-Fields:
+Current fields:
 
-- `rows`: normalized sportsbook-style rows
-- `markets`: optional market snapshot rows for sportsbook-to-market resolution
-- `devig_method`: `multiplicative` or `power`
-- `book_aggregation`: `independent` or `best-line`
-- `max_age_seconds`: optional manifest freshness hint
-- `source`: optional source label
-- `expected_market_keys`: optional fail-closed list of keys that must appear in the manifest
-- `outcome_labels`: optional binary labels keyed by market key
+- `rows` - normalized sportsbook-style rows
+- `markets` - optional market snapshot rows used for sportsbook-to-market resolution
+- `devig_method` - `multiplicative` or `power`
+- `book_aggregation` - `independent` or `best-line`
+- `max_age_seconds` - optional manifest freshness hint
+- `source` - optional source label
+- `expected_market_keys` - optional fail-closed list of market keys that must resolve
+- `outcome_labels` - optional binary labels keyed by market key
+- `calibration_samples` - optional list of `{ "prediction": ..., "outcome": ... }`
+- `calibration_bin_count` - optional positive integer, default `5`
 
-Additional constraints inherited from the fair-value builder:
+### Identity and resolution rules
 
-- rows must resolve through at least one identity field: `event_key`, `condition_id`, or `game_id`
-- only binary outcome groups are supported in the current fair-value benchmark flow
+Rows must resolve through at least one identity field:
+
+- `event_key`
+- `condition_id`
+- `game_id`
+
+Only binary outcome groups are supported by the current fair-value builder.
 
 ### Fail-closed fields
 
@@ -38,9 +45,18 @@ Additional constraints inherited from the fair-value builder:
 - `outcome_labels`
   - if any labeled key is missing after resolution, the benchmark raises an error instead of scoring a partial subset
 
+### Calibration fields
+
+When `calibration_samples` are present:
+
+- the runner fits a histogram calibrator
+- the report includes raw and calibrated forecast metrics
+- the report includes calibrated market probabilities
+- per-market evaluation rows include both raw and calibrated error columns
+
 ## `replay_case`
 
-Fields:
+Current fields:
 
 - `strategy`
   - `quantity`
@@ -50,32 +66,52 @@ Fields:
   - `cash`
   - `max_fill_ratio_per_step`
   - `slippage_bps`
+  - `resting_max_fill_ratio_per_step`
+  - `resting_fill_delay_steps`
 - `risk_limits`
-  - mirrors `RiskLimits`
+  - `max_global_contracts`
+  - `max_contracts_per_market`
+  - `reserve_contracts_buffer`
+  - `max_order_notional`
+  - `min_price`
+  - `max_price`
+  - `max_daily_loss`
+  - `daily_realized_pnl`
+  - `enforce_atomic_batches`
 - `steps`
   - replay steps containing `book`, optional `fair_value`, and optional `metadata`
 
+### Important limitation
+
+The replay schema mirrors the current `ReplayRiskConfig`, not the full live runtime risk surface. For example, event-level exposure caps are a live runtime feature, but they are not part of the replay case schema today.
+
 ## Packaged examples
 
-- `sports_benchmark_tiny.json` — tiny fair-value + replay case
-- `sports_benchmark_best_line.json` — fair-value case with best-line aggregation and midpoint baseline
-- `sports_benchmark_round_trip.json` — replay-only round-trip case with no-trade baseline
+- `sports_benchmark_tiny.json` - tiny fair-value plus replay case
+- `sports_benchmark_best_line.json` - fair-value case with best-line aggregation and midpoint baseline
+- `sports_benchmark_round_trip.json` - replay-only round-trip case with no-trade baseline
 
-## Packaged CLI contract
+## CLI contract
 
-- `prediction-market-sports-benchmark --fixture ...` accepts only packaged fixture names shipped with the project
+- `prediction-market-sports-benchmark --fixture ...` accepts packaged fixture names shipped with the project
 - `prediction-market-sports-benchmark-suite --output-dir ...` runs the packaged multi-case suite
-- suite artifacts are written as:
-  - `benchmark_suite_summary.json`
-  - `benchmark_suite_summary.md`
-  - `cases/<safe-case-name>.json`
+- `python3 scripts/run_sports_benchmark.py --case /path/to/case.json` runs an explicit case file
+- `python3 scripts/run_sports_benchmark_suite.py --fixtures-dir /path/to/cases --output-dir ...` runs a directory of case files
 
-## Suite summary report shape
+## Suite artifact contract
 
-`benchmark_suite_summary.json` is emitted with these top-level keys:
+Suite artifacts are written as:
+
+- `benchmark_suite_summary.json`
+- `benchmark_suite_summary.md`
+- `benchmark_suite_edge_ledger.json`
+- `cases/<safe-case-name>.json`
+
+The suite summary JSON currently exposes:
 
 - `aggregate`
 - `case_results`
 - `failures`
+- `edge_ledger`
 
-`aggregate` includes cross-case metrics such as average fair-value scores, average replay scores, and baseline delta summaries.
+`edge_ledger.rows` contains the per-market fair-value evaluation rows, enriched with suite context such as `case_name` and `case_path`.

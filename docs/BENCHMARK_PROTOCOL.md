@@ -1,56 +1,71 @@
 # Benchmark Protocol
 
-This benchmark is designed as an **offline, public-safe evaluation workflow** for sports fair values and replay behavior.
+This protocol defines the current offline evaluation flow used by the sports benchmark toolkit.
+
+## Scope
+
+The protocol is designed for:
+
+- offline execution only
+- public-safe fixtures or local private inputs
+- binary fair-value evaluation
+- replay comparison with deterministic paper-execution assumptions
+
+It is not a live trading protocol.
 
 ## End-to-end flow
 
-1. **Case inputs**
+1. **Prepare case inputs**
    - normalized sportsbook-style rows
-   - optional market snapshots
+   - optional market snapshots for row-to-market resolution
    - optional replay steps
-   - optional labels keyed by market key
-2. **Fair-value lane**
-   - resolve sportsbook rows to market keys
-   - de-vig into fair probabilities
-   - require identity via `event_key`, `condition_id`, or `game_id`
-   - support binary groups only in the current fair-value builder
-   - validate `expected_market_keys`
-   - score against `outcome_labels`
-3. **Replay lane**
-   - run `FairValueBandStrategy` over replay steps
+   - optional binary outcome labels keyed by market key
+   - optional calibration samples
+2. **Run the fair-value lane**
+   - resolve row identity through `event_key`, `condition_id`, or `game_id`
+   - aggregate books as `independent` or `best-line`
+   - de-vig with `multiplicative` or `power`
+   - fail closed if `expected_market_keys` are missing
+   - fail closed if `outcome_labels` point at unresolved keys
+3. **Apply optional calibration overlay**
+   - fit a histogram calibrator from the case's calibration samples
+   - report raw and calibrated forecast metrics
+   - include calibrated market probabilities in the report payload
+4. **Run the replay lane**
+   - replay `FairValueBandStrategy` over the case steps
    - simulate fills with `PaperBroker`
-   - compare against a no-trade replay baseline
-4. **Suite layer**
-   - run all packaged or directory-provided cases
-   - emit per-case JSON
-   - emit aggregate JSON and Markdown summaries
+   - compare against replay baselines such as `noop_strategy`
+5. **Aggregate suite artifacts**
+   - write per-case reports
+   - write aggregate JSON and Markdown summaries
+   - write a suite-level edge ledger across fair-value evaluation rows
 
 ## Baselines
 
-The toolkit now reports several comparison points:
+The current benchmark layer reports several comparison points.
+
+Fair-value baselines:
 
 - `bookmaker_multiplicative_independent`
 - `bookmaker_power_independent`
 - `bookmaker_multiplicative_best_line`
 - `market_midpoint`
-- `noop_strategy` for replay-only comparison
 
-These are meant to make the benchmark more useful as a research artifact, not to claim production-quality market modeling.
+Replay baselines:
 
-## Public-safe scope
+- `noop_strategy`
 
-- offline only
-- fixture/case driven
-- no proprietary sportsbook history shipped in the repo
-- no live venue execution in the benchmark path
+These are research comparisons, not claims of production model quality.
 
-## Running a single case
+## Running the protocol
+
+### Single case
 
 ```bash
 python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
 ```
 
-## Running the packaged suite
+### Packaged suite
 
 ```bash
 python3 scripts/run_sports_benchmark_suite.py --output-dir runtime/benchmark-suite
@@ -62,22 +77,71 @@ Installed console entrypoint:
 prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
 ```
 
-This writes:
+## Output contract
+
+The suite currently writes:
 
 - `benchmark_suite_summary.json`
 - `benchmark_suite_summary.md`
-- `cases/<case-name>.json`
+- `benchmark_suite_edge_ledger.json`
+- `cases/<safe-case-name>.json`
 
-The suite summary JSON has three top-level sections:
+`benchmark_suite_summary.json` has four top-level sections:
 
-- `aggregate` — cross-case metrics and baseline deltas
-- `case_results` — per-case benchmark reports
-- `failures` — case-level execution failures captured by the suite runner
+- `aggregate`
+- `case_results`
+- `failures`
+- `edge_ledger`
 
-Suite case artifact names are normalized to filesystem-safe names before write. If normalization would produce an empty name, the fallback filename stem is `benchmark-case`.
+The aggregate section includes:
 
-The fair-value artifacts intentionally preserve the repo's runtime manifest contract: top-level `generated_at`, `source`, optional `max_age_seconds`, `values`, and optional `skipped_groups`, plus per-record provenance fields such as `condition_id`, `event_key`, and sport metadata.
+- fair-value case counts and averages
+- replay case counts and averages
+- calibrated metric aggregates when calibration is present
+- fair-value baseline deltas
+- replay baseline deltas
+- edge-ledger row count
 
-## Interpretation caveat
+## Manifest contract
 
-Replay results use the repo's paper-execution model. They are useful for relative offline comparison, but they are still an approximation of real queue position, latency, and venue behavior.
+The fair-value artifacts preserve the runtime-oriented manifest shape.
+
+Top-level fields can include:
+
+- `generated_at`
+- `source`
+- `max_age_seconds`
+- `values`
+- `skipped_groups`
+- `metadata`
+
+Per-value records can include:
+
+- `fair_value`
+- optional `calibrated_fair_value`
+- `condition_id`
+- `event_key`
+- sport metadata
+- provenance fields such as source bookmaker and match strategy
+
+This matters because the benchmark path can produce artifacts that the runtime path can read without inventing a separate format.
+
+## Dataset and walk-forward use
+
+For repeated research work, you can snapshot inputs and case collections with `DatasetRegistry` in `research/datasets.py`.
+
+That gives you:
+
+- versioned row snapshots
+- versioned benchmark-case snapshots
+- manifest metadata per snapshot
+- chronological walk-forward splits through `generate_walk_forward_splits(...)`
+
+This protocol does not require dataset snapshots, but it supports them cleanly.
+
+## Interpretation caveats
+
+- Replay metrics are relative offline signals, not live-fill predictions.
+- Calibration overlays are only as good as the samples that fit them.
+- The benchmark path is sports-focused and binary-market-only today.
+- The protocol does not imply Polymarket and Kalshi parity.

@@ -29,6 +29,8 @@ class BenchmarkSchemaTests(unittest.TestCase):
             case.fair_value_case.expected_market_keys,
             ("token-home:yes", "token-home:no"),
         )
+        self.assertEqual(case.fair_value_case.calibration_samples, ())
+        self.assertEqual(case.fair_value_case.calibration_bin_count, 5)
         self.assertEqual(len(case.replay_case.materialize_steps()), 2)
 
     def test_load_packaged_benchmark_case(self):
@@ -92,6 +94,50 @@ class BenchmarkSchemaTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError, r"replay_case.broker.cash must be finite"
+            ):
+                load_benchmark_case(handle.name)
+
+    def test_calibration_samples_are_loaded_when_present(self):
+        payload = {
+            "name": "calibrated-case",
+            "fair_value_case": {
+                "rows": [],
+                "calibration_samples": [
+                    {"prediction": 0.2, "outcome": 0},
+                    {"prediction": 0.8, "outcome": 1},
+                ],
+                "calibration_bin_count": 2,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            case = load_benchmark_case(handle.name)
+
+        if case.fair_value_case is None:
+            self.fail("expected fair-value case")
+        self.assertEqual(len(case.fair_value_case.calibration_samples), 2)
+        self.assertEqual(case.fair_value_case.calibration_bin_count, 2)
+
+    def test_invalid_calibration_bin_count_fails_closed(self):
+        payload = {
+            "name": "invalid-case",
+            "fair_value_case": {
+                "rows": [],
+                "calibration_samples": [{"prediction": 0.2, "outcome": 0}],
+                "calibration_bin_count": 0,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"fair_value_case.calibration_bin_count must be positive",
             ):
                 load_benchmark_case(handle.name)
 

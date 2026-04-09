@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from adapters.types import (
@@ -66,6 +67,7 @@ class BuildSportsFairValuesScriptTests(unittest.TestCase):
                 build_sports_fair_values.main()
 
             provider = run_agent_loop.build_fair_value_provider(output_handle.name)
+            output_payload = json.loads(Path(output_handle.name).read_text())
 
         self.assertIsInstance(provider, run_agent_loop.ManifestFairValueProvider)
         if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
@@ -73,6 +75,87 @@ class BuildSportsFairValuesScriptTests(unittest.TestCase):
         self.assertEqual(provider.max_age_seconds, 900.0)
         self.assertIn("token-yes:yes", provider.records)
         self.assertIn("token-no:no", provider.records)
+        metadata = output_payload.get("metadata")
+        self.assertIsInstance(metadata, dict)
+        if not isinstance(metadata, dict):
+            self.fail("expected manifest metadata")
+        self.assertEqual(metadata["provenance"]["book_aggregation"], "independent")
+        self.assertEqual(metadata["coverage"]["value_count"], 2)
+
+    def test_script_can_apply_optional_calibration_artifact(self):
+        input_payload = [
+            {
+                "market_key": "token-yes:yes",
+                "bookmaker": "book-a",
+                "outcome": "yes",
+                "captured_at": "2026-04-07T12:00:00Z",
+                "decimal_odds": 1.7,
+                "event_key": "event-1",
+            },
+            {
+                "market_key": "token-no:no",
+                "bookmaker": "book-a",
+                "outcome": "no",
+                "captured_at": "2026-04-07T12:00:00Z",
+                "decimal_odds": 2.3,
+                "event_key": "event-1",
+            },
+        ]
+        calibration_payload = {
+            "row_count": 4,
+            "rows": [
+                {"market_key": "a", "fair_value": 0.42, "outcome_label": 0},
+                {"market_key": "b", "fair_value": 0.45, "outcome_label": 0},
+                {"market_key": "c", "fair_value": 0.55, "outcome_label": 1},
+                {"market_key": "d", "fair_value": 0.58, "outcome_label": 1},
+            ],
+            "bin_count": 2,
+        }
+
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as input_handle,
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as artifact_handle,
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle,
+        ):
+            json.dump(input_payload, input_handle)
+            input_handle.flush()
+            json.dump(calibration_payload, artifact_handle)
+            artifact_handle.flush()
+
+            with patch(
+                "sys.argv",
+                [
+                    "build_sports_fair_values.py",
+                    "--input",
+                    input_handle.name,
+                    "--output",
+                    output_handle.name,
+                    "--calibration-artifact",
+                    artifact_handle.name,
+                ],
+            ):
+                build_sports_fair_values.main()
+
+            output_payload = json.loads(Path(output_handle.name).read_text())
+
+        self.assertAlmostEqual(
+            output_payload["values"]["token-yes:yes"]["fair_value"],
+            0.575,
+        )
+        self.assertEqual(
+            output_payload["values"]["token-yes:yes"]["calibrated_fair_value"],
+            1.0,
+        )
+        self.assertEqual(
+            output_payload["values"]["token-no:no"]["calibrated_fair_value"],
+            0.0,
+        )
+        metadata = output_payload.get("metadata")
+        self.assertIsInstance(metadata, dict)
+        if not isinstance(metadata, dict):
+            self.fail("expected manifest metadata")
+        self.assertEqual(metadata["calibration"]["bin_count"], 2)
+        self.assertEqual(metadata["calibration"]["sample_count"], 4)
 
     def test_script_can_match_rows_against_market_snapshot(self):
         input_payload = [
@@ -229,6 +312,10 @@ class BuildSportsFairValuesScriptTests(unittest.TestCase):
         self.assertEqual(
             payload["values"]["token-no:no"]["generated_at"],
             "2026-04-07T12:03:00Z",
+        )
+        self.assertEqual(payload["values"]["token-yes:yes"]["bookmaker"], "best-line")
+        self.assertEqual(
+            payload["values"]["token-yes:yes"]["source_bookmaker"], "book-b"
         )
 
     def test_collector_rows_can_build_without_event_map_for_moneyline_titles(self):

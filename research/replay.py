@@ -80,7 +80,10 @@ class ReplayRunner:
             )
             proposed = self.strategy.generate_intents(context)
             risk = self.risk_engine.evaluate(
-                proposed, position=context.position, open_orders=context.open_orders
+                proposed,
+                position=context.position,
+                positions=self.broker.positions_snapshot(),
+                open_orders=self.broker.open_order_snapshots(),
             )
             submitted_trades = self.broker.submit_intents(step.book, risk.approved)
             events.append(

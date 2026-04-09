@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 import unittest
 
 from adapters import MarketSummary
@@ -42,6 +43,9 @@ class PairArbAdapter:
         )
         self.second_leg_accepts = second_leg_accepts
         self.placements: list[str] = []
+        self.global_snapshot_calls = 0
+        self.contract_snapshot_calls = 0
+        self.order_book_calls = 0
 
     def health(self) -> AdapterHealth:
         return AdapterHealth(self.venue, True)
@@ -67,6 +71,7 @@ class PairArbAdapter:
         ]
 
     def get_order_book(self, contract: Contract) -> OrderBookSnapshot:
+        self.order_book_calls += 1
         ask = 0.47 if contract.market_key == self.yes_contract.market_key else 0.48
         return OrderBookSnapshot(
             contract=contract,
@@ -75,6 +80,10 @@ class PairArbAdapter:
         )
 
     def get_account_snapshot(self, contract: Contract | None = None) -> AccountSnapshot:
+        if contract is None:
+            self.global_snapshot_calls += 1
+        else:
+            self.contract_snapshot_calls += 1
         return AccountSnapshot(
             venue=self.venue,
             balance=BalanceSnapshot(venue=self.venue, available=100.0, total=100.0),
@@ -128,6 +137,37 @@ class PairArbAdapter:
         return None
 
 
+class IncompleteTruthPairAdapter(PairArbAdapter):
+    def get_account_snapshot(self, contract: Contract | None = None) -> AccountSnapshot:
+        snapshot = super().get_account_snapshot(contract)
+        snapshot.complete = False
+        snapshot.issues = ["incomplete venue truth"]
+        return snapshot
+
+    def place_limit_order(self, intent) -> PlacementResult:
+        raise AssertionError("pair run should fail closed before placement")
+
+
+class HeartbeatBlockedPairAdapter(PairArbAdapter):
+    def heartbeat_status(self):
+        return SimpleNamespace(
+            required=True,
+            active=True,
+            running=False,
+            healthy_for_trading=False,
+            unhealthy=True,
+            last_success_at=None,
+            consecutive_failures=2,
+            last_error="heartbeat failed",
+            last_heartbeat_id="hb-1",
+        )
+
+    def place_limit_order(self, intent) -> PlacementResult:
+        raise AssertionError(
+            "pair run should block before placement on heartbeat fault"
+        )
+
+
 class PairArbitrageTests(unittest.TestCase):
     def _orchestrator(self, adapter: PairArbAdapter) -> AgentOrchestrator:
         engine = TradingEngine(
@@ -151,9 +191,42 @@ class PairArbitrageTests(unittest.TestCase):
         result = orchestrator.preview_best_pair(quantity=1.0)
 
         self.assertIsNotNone(result.selected)
+        self.assertIsNotNone(result.execution)
         self.assertTrue(result.policy_allowed)
         self.assertEqual(len(result.intents), 2)
         self.assertEqual(len(result.risk.approved if result.risk else []), 2)
+
+    def test_preview_best_pair_rejects_entire_batch_when_second_leg_hits_global_cap(
+        self,
+    ):
+        adapter = PairArbAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1.0, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=1)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider({}),
+            pair_ranker=PairOpportunityRanker(edge_threshold=0.01),
+        )
+
+        result = orchestrator.preview_best_pair(quantity=1.0)
+
+        self.assertFalse(result.policy_allowed)
+        self.assertIsNotNone(result.risk)
+        if result.risk is None:
+            self.fail("expected pair risk result")
+        self.assertFalse(result.risk.approved)
+        self.assertEqual(len(result.risk.rejected), 2)
+        self.assertEqual(
+            result.risk.rejected[0].reason,
+            "batched with rejected intent: global exposure cap exceeded",
+        )
+        self.assertEqual(result.risk.rejected[1].reason, "global exposure cap exceeded")
 
     def test_run_best_pair_places_both_legs(self):
         adapter = PairArbAdapter()
@@ -184,6 +257,9 @@ class PairArbitrageTests(unittest.TestCase):
                 for item in orchestrator.engine.recovery_items(open_only=True)
             )
         )
+        self.assertEqual(adapter.global_snapshot_calls, 2)
+        self.assertEqual(adapter.contract_snapshot_calls, 1)
+        self.assertEqual(adapter.order_book_calls, 1)
 
     def test_run_best_pair_halts_when_second_leg_fails(self):
         adapter = PairArbAdapter(second_leg_accepts=False)
@@ -193,6 +269,49 @@ class PairArbitrageTests(unittest.TestCase):
 
         self.assertEqual(len(result.placements), 2)
         self.assertFalse(result.placements[1].accepted)
+        self.assertTrue(orchestrator.engine.status_snapshot().halted)
+
+    def test_preview_best_pair_blocks_when_engine_paused(self):
+        adapter = PairArbAdapter()
+        orchestrator = self._orchestrator(adapter)
+        orchestrator.engine.pause("manual maintenance")
+
+        result = orchestrator.preview_best_pair(quantity=1.0)
+
+        self.assertFalse(result.policy_allowed)
+        self.assertIsNotNone(result.risk)
+        if result.risk is None:
+            self.fail("expected pair risk result")
+        self.assertFalse(result.risk.approved)
+        self.assertIn("manual maintenance", result.risk.rejected[0].reason)
+
+    def test_run_best_pair_blocks_on_incomplete_snapshot(self):
+        adapter = IncompleteTruthPairAdapter()
+        orchestrator = self._orchestrator(adapter)
+
+        result = orchestrator.run_best_pair(quantity=1.0)
+
+        self.assertFalse(result.policy_allowed)
+        self.assertFalse(result.placements)
+        self.assertIsNotNone(result.risk)
+        if result.risk is None:
+            self.fail("expected pair risk result")
+        self.assertIn(
+            "venue account snapshot incomplete", result.risk.rejected[0].reason
+        )
+
+    def test_run_best_pair_halts_on_heartbeat_fault(self):
+        adapter = HeartbeatBlockedPairAdapter()
+        orchestrator = self._orchestrator(adapter)
+
+        result = orchestrator.run_best_pair(quantity=1.0)
+
+        self.assertFalse(result.policy_allowed)
+        self.assertFalse(result.placements)
+        self.assertIsNotNone(result.risk)
+        if result.risk is None:
+            self.fail("expected pair risk result")
+        self.assertIn("heartbeat unhealthy", result.risk.rejected[0].reason)
         self.assertTrue(orchestrator.engine.status_snapshot().halted)
 
     def test_pair_ranker_respects_sports_filters(self):

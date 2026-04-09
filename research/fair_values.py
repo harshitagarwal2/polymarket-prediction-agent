@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from adapters.types import MarketSummary, deserialize_market_summary
+from research.calibration import HistogramCalibrator, load_calibration_artifact
 
 
 DevigMethod = Literal["multiplicative", "power"]
@@ -31,6 +32,9 @@ class SportsbookFairValueRow:
     series: str | None = None
     game_id: str | None = None
     sports_market_type: str | None = None
+    source_bookmaker: str | None = None
+    source_captured_at: datetime | None = None
+    market_match_strategy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,19 @@ class FairValueManifestBuild:
     max_age_seconds: float | None
     values: dict[str, dict[str, object]]
     skipped_groups: list[dict[str, object]]
+    metadata: dict[str, object] | None = None
+
+    def _metadata_payload(self) -> dict[str, object] | None:
+        if not isinstance(self.metadata, dict):
+            return None
+
+        payload = dict(self.metadata)
+        coverage_payload = payload.get("coverage")
+        coverage = dict(coverage_payload) if isinstance(coverage_payload, dict) else {}
+        coverage["value_count"] = len(self.values)
+        coverage["skipped_group_count"] = len(self.skipped_groups)
+        payload["coverage"] = coverage
+        return payload
 
     def to_payload(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -47,11 +64,30 @@ class FairValueManifestBuild:
             "source": self.source,
             "values": self.values,
         }
+        metadata = self._metadata_payload()
+        if metadata:
+            payload["metadata"] = metadata
         if self.max_age_seconds is not None:
             payload["max_age_seconds"] = self.max_age_seconds
         if self.skipped_groups:
             payload["skipped_groups"] = self.skipped_groups
         return payload
+
+
+def _serialize_timestamp(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _resolve_calibration_artifact(
+    calibration_artifact: HistogramCalibrator | dict[str, object] | None,
+) -> HistogramCalibrator | None:
+    if calibration_artifact is None:
+        return None
+    if isinstance(calibration_artifact, HistogramCalibrator):
+        return calibration_artifact
+    if isinstance(calibration_artifact, dict):
+        return load_calibration_artifact(calibration_artifact)
+    raise ValueError("calibration_artifact must be a histogram calibrator or object")
 
 
 def parse_timestamp(value: object) -> datetime:
@@ -230,6 +266,8 @@ def parse_sportsbook_rows(
                     if item.get("sports_market_type") not in (None, "")
                     else None
                 ),
+                source_bookmaker=str(item.get("bookmaker") or "").strip() or None,
+                source_captured_at=parse_timestamp(item.get("captured_at")),
             )
         )
     return rows
@@ -257,7 +295,29 @@ def resolve_rows_to_markets(
     skipped: list[dict[str, object]] = []
     for row in rows:
         if row.market_key:
-            resolved.append(row)
+            resolved.append(
+                SportsbookFairValueRow(
+                    market_key=row.market_key,
+                    bookmaker=row.bookmaker,
+                    outcome=row.outcome,
+                    captured_at=row.captured_at,
+                    decimal_odds=row.decimal_odds,
+                    selection_name=row.selection_name,
+                    home_team=row.home_team,
+                    away_team=row.away_team,
+                    sport_key=row.sport_key,
+                    condition_id=row.condition_id,
+                    event_key=row.event_key,
+                    sport=row.sport,
+                    series=row.series,
+                    game_id=row.game_id,
+                    sports_market_type=row.sports_market_type,
+                    source_bookmaker=row.source_bookmaker,
+                    source_captured_at=row.source_captured_at,
+                    market_match_strategy=row.market_match_strategy
+                    or "input_market_key",
+                )
+            )
             continue
 
         candidate_markets = []
@@ -367,6 +427,9 @@ def resolve_rows_to_markets(
                 sports_market_type=(
                     row.sports_market_type or matched_market.sports_market_type
                 ),
+                source_bookmaker=row.source_bookmaker,
+                source_captured_at=row.source_captured_at,
+                market_match_strategy="market_snapshot",
             )
         )
 
@@ -442,6 +505,9 @@ def _aggregate_rows(
                     series=row.series,
                     game_id=row.game_id,
                     sports_market_type=row.sports_market_type,
+                    source_bookmaker=row.source_bookmaker or row.bookmaker,
+                    source_captured_at=row.source_captured_at or row.captured_at,
+                    market_match_strategy=row.market_match_strategy,
                 )
             )
 
@@ -455,10 +521,14 @@ def build_fair_value_manifest(
     source: str | None = None,
     max_age_seconds: float | None = None,
     aggregation: BookAggregation = "independent",
+    calibration_artifact: HistogramCalibrator | dict[str, object] | None = None,
 ) -> FairValueManifestBuild:
     if not rows:
         raise ValueError("sportsbook rows must not be empty")
 
+    calibrator = _resolve_calibration_artifact(calibration_artifact)
+    source_rows = list(rows)
+    source = source or f"sportsbook-devig:{method}:{aggregation}"
     rows = _aggregate_rows(rows, aggregation)
 
     grouped: dict[tuple[str, str, str, str, str], list[SportsbookFairValueRow]] = {}
@@ -519,8 +589,20 @@ def build_fair_value_manifest(
                 continue
             record: dict[str, object] = {
                 "fair_value": round(fair_value, 8),
-                "generated_at": row.captured_at.isoformat().replace("+00:00", "Z"),
+                "generated_at": _serialize_timestamp(row.captured_at),
+                "bookmaker": row.bookmaker,
+                "source_bookmaker": row.source_bookmaker or row.bookmaker,
+                "source_captured_at": _serialize_timestamp(
+                    row.source_captured_at or row.captured_at
+                ),
+                "outcome": row.outcome,
+                "match_strategy": row.market_match_strategy or "input_market_key",
             }
+            if calibrator is not None:
+                record["calibrated_fair_value"] = round(
+                    calibrator.apply(fair_value),
+                    8,
+                )
             if row.condition_id is not None:
                 record["condition_id"] = row.condition_id
             if row.event_key is not None:
@@ -533,13 +615,67 @@ def build_fair_value_manifest(
                 record["game_id"] = row.game_id
             if row.sports_market_type is not None:
                 record["sports_market_type"] = row.sports_market_type
-            record["source"] = source or f"sportsbook-devig:{method}:{aggregation}"
+            record["source"] = source
             values[row.market_key] = record
 
+    capture_times = [row.captured_at for row in source_rows]
+    match_strategy_counts: dict[str, int] = {}
+    for row in source_rows:
+        strategy = row.market_match_strategy or (
+            "input_market_key" if row.market_key else "unresolved"
+        )
+        match_strategy_counts[strategy] = match_strategy_counts.get(strategy, 0) + 1
+
+    source_bookmakers = sorted(
+        {
+            bookmaker
+            for bookmaker in (
+                (row.source_bookmaker or row.bookmaker).strip()
+                for row in source_rows
+                if (row.source_bookmaker or row.bookmaker).strip()
+            )
+            if bookmaker
+        }
+    )
+
+    freshness_metadata: dict[str, object] = {
+        "captured_at_min": _serialize_timestamp(min(capture_times)),
+        "captured_at_max": _serialize_timestamp(max(capture_times)),
+    }
+    if max_age_seconds is not None:
+        freshness_metadata["max_age_seconds"] = max_age_seconds
+
+    metadata: dict[str, object] = {
+        "provenance": {
+            "devig_method": method,
+            "book_aggregation": aggregation,
+            "bookmakers": source_bookmakers,
+            "bookmaker_count": len(source_bookmakers),
+        },
+        "freshness": freshness_metadata,
+        "coverage": {
+            "input_row_count": len(source_rows),
+            "value_count": len(values),
+            "skipped_group_count": len(skipped_groups),
+        },
+        "match_quality": {
+            "resolved_row_count": len(source_rows),
+            "match_strategy_counts": match_strategy_counts,
+        },
+    }
+    if calibrator is not None:
+        metadata["calibration"] = {
+            "method": "histogram",
+            "bin_count": calibrator.bin_count,
+            "sample_count": calibrator.sample_count,
+            "positive_rate": round(calibrator.positive_rate, 8),
+            "applied_field": "fair_value",
+        }
     return FairValueManifestBuild(
         generated_at=generated_at,
-        source=source or f"sportsbook-devig:{method}:{aggregation}",
+        source=source,
         max_age_seconds=max_age_seconds,
         values=values,
         skipped_groups=skipped_groups,
+        metadata=metadata,
     )

@@ -11,6 +11,12 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
+run-agent-loop = "scripts.run_agent_loop:main"
+operator-cli = "scripts.operator_cli:main"
+build-sports-fair-values = "scripts.build_sports_fair_values:main"
+refresh-sports-fair-values = "scripts.refresh_sports_fair_values:main"
+run-sports-benchmark = "research.benchmark_cli:main"
+run-sports-benchmark-suite = "research.benchmark_suite_cli:main"
 prediction-market-sports-benchmark = "research.benchmark_cli:main"
 prediction-market-sports-benchmark-suite = "research.benchmark_suite_cli:main"
 
@@ -21,4 +27,4 @@ include-package-data = true
 research = ["fixtures/*.json"]
 
 [tool.setuptools.packages.find]
-include = ["adapters*", "engine*", "risk*", "research*"]
+include = ["adapters*", "engine*", "risk*", "research*", "scripts*"]

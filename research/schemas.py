@@ -22,6 +22,7 @@ from research.fair_values import (
     parse_sportsbook_rows,
     parse_timestamp,
 )
+from research.calibration import CalibrationSample
 from research.replay import ReplayStep
 
 
@@ -57,6 +58,22 @@ def _coerce_optional_finite_float(name: str, value: object) -> float | None:
     if value is None:
         return None
     return _coerce_finite_float(name, value)
+
+
+def _coerce_unit_probability(name: str, value: object) -> float:
+    probability = _coerce_finite_float(name, value)
+    if probability < 0.0 or probability > 1.0:
+        raise ValueError(f"{name} must be between 0 and 1")
+    return probability
+
+
+def _coerce_binary_outcome(name: str, value: object) -> int:
+    if not isinstance(value, (int, float, str)):
+        raise ValueError(f"{name} must be 0 or 1")
+    outcome = int(value)
+    if outcome not in {0, 1}:
+        raise ValueError(f"{name} must be 0 or 1")
+    return outcome
 
 
 def _serialize_price_level(level: PriceLevel) -> dict[str, float]:
@@ -164,6 +181,8 @@ class FairValueBenchmarkCase:
     source: str | None = None
     expected_market_keys: tuple[str, ...] = ()
     outcome_labels: dict[str, int] = field(default_factory=dict)
+    calibration_samples: tuple[CalibrationSample, ...] = ()
+    calibration_bin_count: int = 5
 
     def materialize_rows(self) -> list[SportsbookFairValueRow]:
         return parse_sportsbook_rows(self.rows)
@@ -180,6 +199,11 @@ class FairValueBenchmarkCase:
             "expected_market_keys": list(self.expected_market_keys),
             "outcome_labels": self.outcome_labels,
         }
+        if self.calibration_samples:
+            payload["calibration_samples"] = [
+                sample.to_payload() for sample in self.calibration_samples
+            ]
+            payload["calibration_bin_count"] = self.calibration_bin_count
         if self.max_age_seconds is not None:
             payload["max_age_seconds"] = self.max_age_seconds
         if self.source is not None:
@@ -205,6 +229,34 @@ class FairValueBenchmarkCase:
         }
         if invalid_labels:
             raise ValueError("fair_value_case.outcome_labels values must be 0 or 1")
+        raw_calibration_samples = payload.get("calibration_samples", [])
+        if not isinstance(raw_calibration_samples, list):
+            raise ValueError("fair_value_case.calibration_samples must be a list")
+        calibration_samples: list[CalibrationSample] = []
+        for index, item in enumerate(raw_calibration_samples):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"fair_value_case.calibration_samples[{index}] must be an object"
+                )
+            prediction = _coerce_unit_probability(
+                f"fair_value_case.calibration_samples[{index}].prediction",
+                item.get("prediction"),
+            )
+            raw_outcome = item.get("outcome")
+            if raw_outcome is None:
+                raise ValueError(
+                    f"fair_value_case.calibration_samples[{index}].outcome is required"
+                )
+            outcome = _coerce_binary_outcome(
+                f"fair_value_case.calibration_samples[{index}].outcome",
+                raw_outcome,
+            )
+            calibration_samples.append(
+                CalibrationSample(prediction=prediction, outcome=outcome)
+            )
+        calibration_bin_count = int(payload.get("calibration_bin_count", 5))
+        if calibration_bin_count <= 0:
+            raise ValueError("fair_value_case.calibration_bin_count must be positive")
         return cls(
             rows=rows,
             markets=markets,
@@ -224,6 +276,8 @@ class FairValueBenchmarkCase:
                 str(item) for item in payload.get("expected_market_keys", [])
             ),
             outcome_labels=normalized_labels,
+            calibration_samples=tuple(calibration_samples),
+            calibration_bin_count=calibration_bin_count,
         )
 
 
@@ -259,12 +313,16 @@ class ReplayBrokerConfig:
     cash: float = 1000.0
     max_fill_ratio_per_step: float = 1.0
     slippage_bps: float = 0.0
+    resting_max_fill_ratio_per_step: float | None = None
+    resting_fill_delay_steps: int = 0
 
     def to_payload(self) -> dict[str, Any]:
         return {
             "cash": self.cash,
             "max_fill_ratio_per_step": self.max_fill_ratio_per_step,
             "slippage_bps": self.slippage_bps,
+            "resting_max_fill_ratio_per_step": self.resting_max_fill_ratio_per_step,
+            "resting_fill_delay_steps": self.resting_fill_delay_steps,
         }
 
     @classmethod
@@ -280,6 +338,15 @@ class ReplayBrokerConfig:
             slippage_bps=_coerce_finite_float(
                 "replay_case.broker.slippage_bps", payload.get("slippage_bps", 0.0)
             ),
+            resting_max_fill_ratio_per_step=(
+                _coerce_finite_float(
+                    "replay_case.broker.resting_max_fill_ratio_per_step",
+                    payload["resting_max_fill_ratio_per_step"],
+                )
+                if payload.get("resting_max_fill_ratio_per_step") is not None
+                else None
+            ),
+            resting_fill_delay_steps=int(payload.get("resting_fill_delay_steps", 0)),
         )
 
 
@@ -292,6 +359,8 @@ class ReplayRiskConfig:
     min_price: float = 0.01
     max_price: float = 0.99
     max_daily_loss: float | None = None
+    daily_realized_pnl: float = 0.0
+    enforce_atomic_batches: bool = True
 
     def to_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -305,6 +374,10 @@ class ReplayRiskConfig:
             payload["max_order_notional"] = self.max_order_notional
         if self.max_daily_loss is not None:
             payload["max_daily_loss"] = self.max_daily_loss
+        if self.daily_realized_pnl != 0.0:
+            payload["daily_realized_pnl"] = self.daily_realized_pnl
+        if not self.enforce_atomic_batches:
+            payload["enforce_atomic_batches"] = self.enforce_atomic_batches
         return payload
 
     @classmethod
@@ -335,6 +408,11 @@ class ReplayRiskConfig:
                 if payload.get("max_daily_loss") is not None
                 else None
             ),
+            daily_realized_pnl=_coerce_finite_float(
+                "replay_case.risk_limits.daily_realized_pnl",
+                payload.get("daily_realized_pnl", 0.0),
+            ),
+            enforce_atomic_batches=bool(payload.get("enforce_atomic_batches", True)),
         )
 
 

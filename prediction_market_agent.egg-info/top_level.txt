@@ -1,4 +1,0 @@
-adapters
-engine
-research
-risk

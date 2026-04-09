@@ -12,9 +12,22 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from adapters.base import AdapterHealth
 from adapters.kalshi import KalshiAdapter, KalshiConfig
 from adapters.polymarket import PolymarketAdapter, PolymarketConfig
-from adapters.types import Contract, OutcomeSide, Venue
+from adapters.types import (
+    AccountSnapshot,
+    BalanceSnapshot,
+    Contract,
+    FillSnapshot,
+    NormalizedOrder,
+    OrderBookSnapshot,
+    OrderIntent,
+    OutcomeSide,
+    PlacementResult,
+    PositionSnapshot,
+    Venue,
+)
 from engine.accounting import (
     AccountTruthSummary,
     compare_truth_summaries,
@@ -235,6 +248,72 @@ def _tracking_engine(args, adapter) -> TradingEngine:
     )
 
 
+class _StateOnlyAdapter:
+    venue = Venue.POLYMARKET
+
+    def __init__(self):
+        self._contract = Contract(
+            venue=self.venue,
+            symbol="state-only",
+            outcome=OutcomeSide.UNKNOWN,
+        )
+
+    def health(self):
+        return AdapterHealth(self.venue, True)
+
+    def get_order_book(self, contract: Contract):
+        raise RuntimeError("state-only adapter does not provide order books")
+
+    def list_markets(self, limit: int = 100):
+        return []
+
+    def list_open_orders(self, contract: Contract | None = None):
+        return []
+
+    def list_positions(self, contract: Contract | None = None):
+        return []
+
+    def list_fills(self, contract: Contract | None = None):
+        return []
+
+    def get_position(self, contract: Contract):
+        return PositionSnapshot(contract=contract, quantity=0.0)
+
+    def get_balance(self):
+        return BalanceSnapshot(venue=self.venue, available=0.0, total=0.0)
+
+    def get_account_snapshot(self, contract: Contract | None = None):
+        target_contract = contract or self._contract
+        return AccountSnapshot(
+            venue=self.venue,
+            balance=self.get_balance(),
+            positions=[PositionSnapshot(contract=target_contract, quantity=0.0)],
+            open_orders=[],
+            fills=[],
+        )
+
+    def place_limit_order(self, intent: OrderIntent):
+        raise RuntimeError("state-only adapter does not place orders")
+
+    def cancel_order(self, order_id: str):
+        return False
+
+    def cancel_all(self, contract: Contract | None = None):
+        return 0
+
+    def close(self):
+        return None
+
+
+def _control_engine(args) -> TradingEngine:
+    return TradingEngine(
+        adapter=_StateOnlyAdapter(),
+        strategy=NoopStrategy(),
+        risk_engine=RiskEngine(RiskLimits()),
+        safety_state_path=getattr(args, "state_file", "runtime/safety-state.json"),
+    )
+
+
 def _journal_action(args, action: str, payload: dict) -> None:
     journal_path = getattr(args, "journal", None)
     if not journal_path:
@@ -440,120 +519,70 @@ def cmd_status(args) -> int:
 
 
 def cmd_pause(args) -> int:
-    store = _load_store(args.state_file)
-    state = store.load()
-    state.paused = True
-    state.pause_reason = args.reason
-    store.save(state)
+    engine = _control_engine(args)
+    engine.pause(args.reason)
     _journal_action(
-        args, "operator_pause", {"reason": args.reason, "state": _state_payload(state)}
+        args,
+        "operator_pause",
+        {"reason": args.reason, "state": _state_payload(engine.safety_state)},
     )
     print(f"paused: {args.reason}")
     return 0
 
 
 def cmd_unpause(args) -> int:
-    store = _load_store(args.state_file)
-    state = store.load()
-    state.paused = False
-    state.pause_reason = None
-    store.save(state)
-    _journal_action(args, "operator_unpause", {"state": _state_payload(state)})
+    engine = _control_engine(args)
+    engine.clear_pause()
+    _journal_action(
+        args,
+        "operator_unpause",
+        {"state": _state_payload(engine.safety_state)},
+    )
     print("unpaused")
     return 0
 
 
 def cmd_hold_new_orders(args) -> int:
-    store = _load_store(args.state_file)
-    state = store.load()
-    state.hold_new_orders = True
-    state.hold_reason = args.reason
-    state.hold_since = datetime.now().astimezone()
-    store.save(state)
+    engine = _control_engine(args)
+    engine.set_new_order_hold(args.reason)
     _journal_action(
         args,
         "operator_hold_new_orders",
-        {"reason": args.reason, "state": _state_payload(state)},
+        {"reason": args.reason, "state": _state_payload(engine.safety_state)},
     )
     print(f"holding new orders: {args.reason}")
     return 0
 
 
 def cmd_clear_hold_new_orders(args) -> int:
-    store = _load_store(args.state_file)
-    state = store.load()
-    state.hold_new_orders = False
-    state.hold_reason = None
-    state.hold_since = None
-    store.save(state)
+    engine = _control_engine(args)
+    engine.clear_new_order_hold()
     _journal_action(
         args,
         "operator_clear_hold_new_orders",
-        {"state": _state_payload(state)},
+        {"state": _state_payload(engine.safety_state)},
     )
     print("cleared new-order hold")
     return 0
 
 
 def cmd_force_refresh(args) -> int:
-    store = _load_store(args.state_file)
-    state = store.load()
+    engine = _control_engine(args)
     scope = "account"
     if getattr(args, "venue", None):
         venue = Venue.POLYMARKET if args.venue == "polymarket" else Venue.KALSHI
         contract = _parse_contract(args, venue)
         if contract is not None:
             scope = contract.market_key
-    if not any(
-        item.scope == scope and item.reason == args.reason
-        for item in state.pending_refresh_requests
-    ):
-        state.pending_refresh_requests.append(
-            PendingRefreshRequestState(
-                scope=scope,
-                reason=args.reason,
-                requested_at=datetime.now().astimezone(),
-            )
-        )
-    recovery_id = (
-        f"account-refresh-needed:{scope}"
-        if scope == "account"
-        else f"market-refresh-needed:{scope}"
-    )
-    existing_recovery = next(
-        (item for item in state.recovery_items if item.recovery_id == recovery_id),
-        None,
-    )
-    now = datetime.now().astimezone()
-    if existing_recovery is None:
-        state.recovery_items.append(
-            RecoveryItemState(
-                recovery_id=recovery_id,
-                item_type=(
-                    "account-refresh-needed"
-                    if scope == "account"
-                    else "market-refresh-needed"
-                ),
-                scope=scope,
-                reason=args.reason,
-                clear_source="authoritative_snapshot",
-                opened_at=now,
-                last_evidence_at=now,
-                last_evidence=args.reason,
-            )
-        )
-    else:
-        existing_recovery.status = "open"
-        existing_recovery.reason = args.reason
-        existing_recovery.last_evidence_at = now
-        existing_recovery.last_evidence = args.reason
-        existing_recovery.cleared_at = None
-        existing_recovery.clear_reason = None
-    store.save(state)
+    engine.queue_authoritative_refresh_request(args.reason, scope=scope)
     _journal_action(
         args,
         "operator_force_refresh",
-        {"scope": scope, "reason": args.reason, "state": _state_payload(state)},
+        {
+            "scope": scope,
+            "reason": args.reason,
+            "state": _state_payload(engine.safety_state),
+        },
     )
     print(json.dumps({"scope": scope, "reason": args.reason}, indent=2))
     return 0

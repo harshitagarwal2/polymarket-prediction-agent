@@ -9,13 +9,11 @@ from typing import Any, Callable, Literal, Protocol
 from adapters import MarketSummary, OpportunityCandidate
 from adapters.base import TradingAdapter
 from adapters.types import (
-    AccountSnapshot,
     Contract,
     OrderAction,
     OrderIntent,
     OrderStatus,
     PlacementResult,
-    PositionSnapshot,
 )
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.runner import EngineRunResult, TradingEngine
@@ -27,13 +25,26 @@ class FairValueProvider(Protocol):
     def fair_value_for(self, market: MarketSummary) -> float | None: ...
 
 
+FairValueField = Literal["raw", "calibrated"]
+
+
 @dataclass(frozen=True)
 class FairValueManifestEntry:
     fair_value: float
+    calibrated_fair_value: float | None = None
     generated_at: datetime | None = None
     source: str | None = None
     condition_id: str | None = None
     event_key: str | None = None
+    sport: str | None = None
+    series: str | None = None
+    game_id: str | None = None
+    sports_market_type: str | None = None
+
+    def selected_fair_value(self, fair_value_field: FairValueField = "raw") -> float:
+        if fair_value_field == "calibrated" and self.calibrated_fair_value is not None:
+            return self.calibrated_fair_value
+        return self.fair_value
 
 
 @dataclass(frozen=True)
@@ -50,6 +61,7 @@ class ManifestFairValueProvider:
     generated_at: datetime | None = None
     source: str | None = None
     max_age_seconds: float | None = None
+    fair_value_field: FairValueField = "raw"
 
     def _market_condition_id(self, market: MarketSummary) -> str | None:
         raw = market.raw
@@ -95,7 +107,27 @@ class ManifestFairValueProvider:
             if market.event_key is None or market.event_key != record.event_key:
                 return None
 
-        return record.fair_value
+        if record.sport is not None:
+            if market.sport is None or market.sport.lower() != record.sport.lower():
+                return None
+
+        if record.series is not None:
+            if market.series is None or market.series.lower() != record.series.lower():
+                return None
+
+        if record.game_id is not None:
+            if market.game_id is None or market.game_id != record.game_id:
+                return None
+
+        if record.sports_market_type is not None:
+            if (
+                market.sports_market_type is None
+                or market.sports_market_type.lower()
+                != record.sports_market_type.lower()
+            ):
+                return None
+
+        return record.selected_fair_value(self.fair_value_field)
 
 
 @dataclass(frozen=True)
@@ -281,6 +313,7 @@ class PairScanCycleResult:
     markets: list[MarketSummary]
     candidates: list[PairOpportunityCandidate]
     selected: PairOpportunityCandidate | None = None
+    execution: EngineRunResult | None = None
     intents: list[OrderIntent] = field(default_factory=list)
     risk: RiskDecision | None = None
     policy_allowed: bool | None = None
@@ -584,6 +617,7 @@ class ScanCycleResult:
     policy_allowed: bool | None = None
     policy_reasons: list[str] = field(default_factory=list)
     skipped_candidates: list[dict[str, object]] = field(default_factory=list)
+    gate_trace: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -905,6 +939,8 @@ class AgentOrchestrator:
                 "policy_allowed": cycle.policy_allowed,
                 "policy_reasons": cycle.policy_reasons,
                 "skipped_candidates": cycle.skipped_candidates,
+                "gate_trace": cycle.gate_trace,
+                "blocking_gate": self._last_blocking_gate(cycle),
                 **self._status_payload(),
             },
         )
@@ -953,6 +989,7 @@ class AgentOrchestrator:
 
     def scan(self, market_limit: int = 100) -> ScanCycleResult:
         markets = self.adapter.list_markets(limit=market_limit)
+        self.engine.risk_engine.register_markets(markets)
         candidates = self.ranker.rank(markets, self.fair_value_provider)
         selected = candidates[0] if candidates else None
         return ScanCycleResult(
@@ -973,13 +1010,52 @@ class AgentOrchestrator:
         cycle: ScanCycleResult,
         candidate: OpportunityCandidate,
         reasons: list[str],
+        *,
+        stage: str,
     ) -> None:
         cycle.skipped_candidates.append(
             {
                 "market_key": candidate.contract.market_key,
                 "action": candidate.action.value,
+                "stage": stage,
                 "reasons": list(reasons),
             }
+        )
+
+    def _record_gate_trace(
+        self,
+        cycle: ScanCycleResult,
+        candidate: OpportunityCandidate,
+        *,
+        stage: str,
+        allowed: bool,
+        reasons: list[str] | None = None,
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        trace_entry: dict[str, object] = {
+            "market_key": candidate.contract.market_key,
+            "action": candidate.action.value,
+            "stage": stage,
+            "allowed": allowed,
+            "reasons": list(reasons or []),
+        }
+        if metadata:
+            trace_entry["metadata"] = dict(metadata)
+        cycle.gate_trace.append(trace_entry)
+
+    def _last_blocking_gate(self, cycle: ScanCycleResult) -> dict[str, object] | None:
+        for entry in reversed(cycle.gate_trace):
+            if entry.get("allowed") is False:
+                return dict(entry)
+        return None
+
+    def _execution_rejection_reasons(self, execution: EngineRunResult) -> list[str]:
+        return list(
+            dict.fromkeys(
+                rejection.reason
+                for rejection in execution.risk.rejected
+                if rejection.reason
+            )
         )
 
     def _select_executable_candidate(
@@ -999,7 +1075,20 @@ class AgentOrchestrator:
             trade_quantity = self.sizer.size(candidate, preview)
             if trade_quantity <= 0:
                 reasons = ["sizer produced zero trade quantity"]
-                self._record_skipped_candidate(cycle, candidate, reasons)
+                self._record_skipped_candidate(
+                    cycle,
+                    candidate,
+                    reasons,
+                    stage="sizer",
+                )
+                self._record_gate_trace(
+                    cycle,
+                    candidate,
+                    stage="sizer",
+                    allowed=False,
+                    reasons=reasons,
+                    metadata={"trade_quantity": trade_quantity},
+                )
                 if index == 0:
                     cycle.selected = top_candidate
                     cycle.execution = preview
@@ -1008,20 +1097,64 @@ class AgentOrchestrator:
                 continue
 
             preview_metadata["trade_quantity"] = trade_quantity
-            preview = self.engine.preview_once(
-                candidate.contract,
-                fair_value=candidate.fair_value,
-                metadata=preview_metadata,
+            preview.context.metadata["trade_quantity"] = trade_quantity
+            preview = self.engine.preview_context(
+                preview.context,
+                reconciliation_before=preview.reconciliation_before,
             )
+            preview = self.engine.review_precomputed(preview)
+            if not preview.risk.approved:
+                reasons = self._execution_rejection_reasons(preview)
+                if not reasons:
+                    reasons = ["engine preview yielded no approved intents"]
+                self._record_skipped_candidate(
+                    cycle,
+                    candidate,
+                    reasons,
+                    stage="engine_review",
+                )
+                self._record_gate_trace(
+                    cycle,
+                    candidate,
+                    stage="engine_review",
+                    allowed=False,
+                    reasons=reasons,
+                )
+                if index == 0:
+                    cycle.selected = top_candidate
+                    cycle.execution = preview
+                    cycle.policy_allowed = False
+                    cycle.policy_reasons = reasons
+                continue
             decision = self.policy_gate.evaluate(candidate, preview)
             if not decision.allowed:
-                self._record_skipped_candidate(cycle, candidate, list(decision.reasons))
+                self._record_skipped_candidate(
+                    cycle,
+                    candidate,
+                    list(decision.reasons),
+                    stage="policy_gate",
+                )
+                self._record_gate_trace(
+                    cycle,
+                    candidate,
+                    stage="policy_gate",
+                    allowed=False,
+                    reasons=list(decision.reasons),
+                )
                 if index == 0:
                     cycle.selected = top_candidate
                     cycle.execution = preview
                     cycle.policy_allowed = False
                     cycle.policy_reasons = list(decision.reasons)
                 continue
+
+            self._record_gate_trace(
+                cycle,
+                candidate,
+                stage="policy_gate",
+                allowed=True,
+                metadata={"approved_intent_count": len(preview.risk.approved)},
+            )
 
             cycle.selected = candidate
             cycle.execution = preview
@@ -1044,20 +1177,48 @@ class AgentOrchestrator:
     ) -> ScanCycleResult:
         cycle = self.scan(market_limit=market_limit)
         selection = self._select_executable_candidate(cycle)
-        if selection is not None:
-            candidate, preview_metadata = selection
-            cycle.execution = self.engine.run_once(
-                candidate.contract,
-                fair_value=candidate.fair_value,
-                metadata=preview_metadata,
-            )
+        if selection is not None and cycle.execution is not None:
+            candidate, _preview_metadata = selection
+            cycle.execution = self.engine.run_precomputed(cycle.execution)
+            if not cycle.execution.risk.approved and cycle.execution.risk.rejected:
+                cycle.policy_allowed = False
+                cycle.policy_reasons = self._execution_rejection_reasons(
+                    cycle.execution
+                )
             if any(placement.accepted for placement in cycle.execution.placements):
                 self.policy_gate.record_execution(candidate)
+            placements = cycle.execution.placements
+            accepted_count = sum(1 for placement in placements if placement.accepted)
+            self._record_gate_trace(
+                cycle,
+                candidate,
+                stage="placement",
+                allowed=accepted_count > 0,
+                reasons=list(
+                    dict.fromkeys(
+                        [
+                            placement.message or "placement rejected"
+                            for placement in placements
+                            if not placement.accepted
+                        ]
+                    )
+                ),
+                metadata={
+                    "placement_count": len(placements),
+                    "accepted_count": accepted_count,
+                    "order_ids": [
+                        placement.order_id
+                        for placement in placements
+                        if placement.order_id is not None
+                    ],
+                },
+            )
         self._log_cycle(cycle, mode="run", cycle_id=cycle_id)
         return cycle
 
     def scan_pairs(self, market_limit: int = 100) -> PairScanCycleResult:
         markets = self.adapter.list_markets(limit=market_limit)
+        self.engine.risk_engine.register_markets(markets)
         candidates = self.pair_ranker.rank(markets)
         selected = candidates[0] if candidates else None
         return PairScanCycleResult(
@@ -1091,60 +1252,26 @@ class AgentOrchestrator:
             ),
         ]
 
-    def _account_snapshot_for_pair(self) -> AccountSnapshot:
-        try:
-            return self.adapter.get_account_snapshot(None)
-        except TypeError:
-            balance = self.adapter.get_balance()
-            return AccountSnapshot(
-                venue=balance.venue,
-                balance=balance,
-                positions=self.adapter.list_positions(None),
-                open_orders=self.adapter.list_open_orders(None),
-                fills=self.adapter.list_fills(None),
-            )
+    def _pair_preview_metadata(
+        self, candidate: PairOpportunityCandidate, *, quantity: float
+    ) -> dict[str, object]:
+        return {
+            "pair_market_key": candidate.market_key,
+            "pair_net_edge": candidate.net_edge,
+            "pair_rationale": candidate.rationale,
+            "trade_quantity": quantity,
+        }
 
     def _preview_pair_candidate(
         self, candidate: PairOpportunityCandidate, *, quantity: float
-    ) -> tuple[list[OrderIntent], RiskDecision, list[str], bool]:
-        snapshot = self._account_snapshot_for_pair()
+    ) -> EngineRunResult:
         intents = self._pair_intents(candidate, quantity=quantity)
-        primary_position = next(
-            (
-                existing
-                for existing in snapshot.positions
-                if existing.contract.market_key == candidate.yes_contract.market_key
-            ),
-            PositionSnapshot(contract=candidate.yes_contract, quantity=0.0),
-        )
-        risk = self.engine.risk_engine.evaluate(
+        preview = self.engine.preview_intents(
+            candidate.yes_contract,
             intents,
-            position=primary_position,
-            positions=snapshot.positions,
-            open_orders=snapshot.open_orders,
+            metadata=self._pair_preview_metadata(candidate, quantity=quantity),
         )
-        reasons = [rejection.reason for rejection in risk.rejected]
-        policy_allowed = len(risk.approved) == 2 and not reasons
-        if not policy_allowed:
-            return intents, risk, reasons, False
-
-        admission_getter = getattr(self.adapter, "admit_limit_order", None)
-        for intent in risk.approved:
-            policy = self.engine.evaluate_order_action_policy(
-                "submit", contract=intent.contract, intent=intent
-            )
-            if policy.action != "allow":
-                reasons.append(policy.reason or f"action policy {policy.action}")
-                policy_allowed = False
-            if callable(admission_getter):
-                admission = admission_getter(intent)
-                if getattr(admission, "action", "allow") != "allow":
-                    reasons.append(
-                        getattr(admission, "reason", None)
-                        or "admission guard blocked paired order"
-                    )
-                    policy_allowed = False
-        return intents, risk, reasons, policy_allowed
+        return self.engine.review_precomputed(preview)
 
     def preview_best_pair(
         self, market_limit: int = 100, *, quantity: float = 1.0
@@ -1152,58 +1279,49 @@ class AgentOrchestrator:
         cycle = self.scan_pairs(market_limit=market_limit)
         if cycle.selected is None:
             return cycle
-        intents, risk, reasons, policy_allowed = self._preview_pair_candidate(
+        execution = self._preview_pair_candidate(
             cycle.selected,
             quantity=quantity,
         )
-        cycle.intents = intents
-        cycle.risk = risk
+        cycle.execution = execution
+        cycle.intents = list(execution.proposed)
+        cycle.risk = execution.risk
+        reasons = self._execution_rejection_reasons(execution)
         cycle.policy_reasons = reasons
-        cycle.policy_allowed = policy_allowed
+        cycle.policy_allowed = (
+            len(execution.risk.approved) == len(execution.proposed) and not reasons
+        )
         return cycle
 
     def run_best_pair(
         self, market_limit: int = 100, *, quantity: float = 1.0
     ) -> PairScanCycleResult:
         cycle = self.preview_best_pair(market_limit=market_limit, quantity=quantity)
-        if cycle.selected is None or not cycle.policy_allowed or cycle.risk is None:
+        if cycle.selected is None or cycle.execution is None or cycle.risk is None:
+            return cycle
+        if not cycle.policy_allowed:
             return cycle
 
-        preview_context = self.engine.build_context(
-            cycle.selected.yes_contract,
-            fair_value=None,
-            metadata={
-                "pair_market_key": cycle.selected.market_key,
-                "pair_net_edge": cycle.selected.net_edge,
-                "pair_rationale": cycle.selected.rationale,
-            },
-        )
-        reconciliation_before = self.engine.reconciliation.reconcile(
-            cycle.selected.yes_contract,
-            pending_cancel_order_ids=self.engine.pending_cancel_order_ids(
-                cycle.selected.yes_contract,
-                unresolved_only=True,
-            ),
-        )
-        execution = self.engine.execute_precomputed(
-            EngineRunResult(
-                context=preview_context,
-                proposed=cycle.intents,
-                risk=cycle.risk,
-                placements=[],
-                reconciliation_before=reconciliation_before,
-            ),
-            contracts=[cycle.selected.yes_contract, cycle.selected.no_contract],
-        )
+        execution = self.engine.run_precomputed(cycle.execution)
+        cycle.execution = execution
+        cycle.intents = list(execution.proposed)
+        cycle.risk = execution.risk
         cycle.placements = execution.placements
+        if not execution.risk.approved and execution.risk.rejected:
+            cycle.policy_allowed = False
+            cycle.policy_reasons = self._execution_rejection_reasons(execution)
+            return cycle
         accepted_count = sum(1 for placement in cycle.placements if placement.accepted)
         if accepted_count != len(cycle.placements):
-            cycle.policy_reasons.extend(
-                [
-                    placement.message or "paired placement failed"
-                    for placement in cycle.placements
-                    if not placement.accepted
-                ]
+            cycle.policy_reasons = list(
+                dict.fromkeys(
+                    cycle.policy_reasons
+                    + [
+                        placement.message or "paired placement failed"
+                        for placement in cycle.placements
+                        if not placement.accepted
+                    ]
+                )
             )
 
         if accepted_count and accepted_count != len(cycle.risk.approved):

@@ -135,6 +135,13 @@ class EngineSafetyState:
     persisted_positions: list[dict[str, Any]] = field(default_factory=list)
     persisted_fills: list[dict[str, Any]] = field(default_factory=list)
     persisted_balance: dict[str, Any] | None = None
+    daily_loss_date: str | None = None
+    daily_loss_baseline_balance: float | None = None
+    daily_loss_current_balance: float | None = None
+    daily_loss_source: str | None = None
+    daily_loss_approximation: str | None = None
+    daily_realized_pnl: float = 0.0
+    daily_loss_last_updated_at: datetime | None = None
     pending_cancels: list[PendingCancelState] = field(default_factory=list)
     pending_submissions: list[PendingSubmissionState] = field(default_factory=list)
     pending_refresh_requests: list[PendingRefreshRequestState] = field(
@@ -205,6 +212,14 @@ class EngineStatusSnapshot:
     overlay_last_suppression_duration_seconds: float | None
     overlay_last_live_state_active: bool
     overlay_last_subscribed_markets: list[str]
+    daily_loss_date: str | None
+    daily_loss_baseline_balance: float | None
+    daily_loss_current_balance: float | None
+    daily_loss_source: str | None
+    daily_loss_approximation: str | None
+    daily_realized_pnl: float
+    daily_loss_last_updated_at: datetime | None
+    daily_loss_limit_reached: bool
     pending_cancels: list[PendingCancelState]
     pending_submissions: list[PendingSubmissionState]
     pending_refresh_requests: list[PendingRefreshRequestState]

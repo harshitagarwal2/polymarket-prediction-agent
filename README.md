@@ -1,67 +1,188 @@
-# Prediction Market Agent Workspace
+# Prediction Market Agent
 
-This workspace is a monorepo-style seed for building a single evolving Kalshi/Polymarket trading agent.
+This repository is a Polymarket-first prediction market trading and research workspace.
 
-It is organized around one core idea:
+Today it has two mature user-facing paths:
 
-- **execution and risk live in your codebase**
-- **venue connectivity comes from official or battle-tested clients**
-- **research and model training stay separate from the live trading loop**
+- a supervised Polymarket runtime for preview, operator-controlled live runs, and runtime-state recovery
+- an offline sports fair-value and replay benchmark toolkit for reproducible research work
 
-## What is here
+It is not an unattended live trading system. The live path is still supervised, fail-closed, and conservative by design.
 
-- `upstreams/poly-market-maker/` — execution-kernel reference and fork-first base
-- `upstreams/py-clob-client/` — official Polymarket CLOB client
-- `upstreams/KalshiMarketMaker/` — Kalshi risk/ops and cleanup patterns
-- `upstreams/prediction-market-analysis/` — historical data, indexing, and analysis backbone
-- `upstreams/pykalshi/` — Kalshi client dependency/reference layer
-- `upstreams/TradingAgents/` — optional research/orchestration patterns for analyst-style agents
-- `upstreams/OpenBB/` — optional data platform layer for broader market/news ingestion
-- `upstreams/qlib/` — optional model/research workflow layer for training, evaluation, and experiment management
+## Current state, in plain terms
 
-## Workspace layout
+- **Polymarket is the primary mature venue path.** The Polymarket adapter, polling loop, operator CLI, runtime policy loader, and benchmark-to-runtime fair-value flow are the main supported workflow.
+- **Kalshi support exists, but it is thinner.** The adapter is useful for interface compatibility and early experiments, but the repo does not claim Polymarket and Kalshi parity.
+- **Runtime policy is real and schema-validated.** `engine/runtime_policy.py` loads a versioned JSON policy file and rejects unknown keys or wrong types.
+- **Fair-value manifests can carry raw and calibrated values.** Runtime can choose which field to trade from through policy.
+- **Risk caps include event-level exposure.** `risk/limits.py` enforces per-market, global, and optional per-event caps when event identity is available.
+- **Replay is approximate.** The paper broker models resting orders, reserved capital, fill caps, delay, and slippage, but it is still not a claim of venue-true queue or latency realism.
 
-- `adapters/` — your venue adapters and normalization layer
-- `engine/` — strategy loop, order intent generation, orchestration
-- `risk/` — authoritative risk engine, kill switch, caps, stale-market checks
-- `research/` — replay, labeling, backtests, feature generation, calibration
-- `infra/` — deployment, monitoring, environment wiring
-- `scripts/` — operational and bootstrap scripts
-- `docs/` — architecture and integration notes
-- `upstreams/` — reference repos cloned locally for selective reuse
+## What the repo does
 
-## Recommended build order
+- wraps venue APIs behind normalized adapters in `adapters/`
+- runs preview, live, and pair-mode polling loops from `scripts/run_agent_loop.py`
+- persists safety state, operator pause state, pending recovery items, and recent truth summaries
+- exposes operator actions through `scripts/operator_cli.py`
+- builds Polymarket-facing fair-value manifests from normalized sportsbook rows
+- supports optional benchmark calibration overlays and suite-level edge-ledger artifacts
+- snapshots local research datasets and generates chronological walk-forward splits
+- runs unit tests in CI and compiles the key runtime and research modules on every push and pull request
 
-1. Fork `poly-market-maker` concepts into `engine/` as your live execution shell.
-2. Wrap `py-clob-client` behind your own Polymarket adapter in `adapters/`.
-3. Add a Kalshi adapter using `pykalshi` and patterns from `KalshiMarketMaker`.
-4. Build a shared `risk/` module before adding more strategies.
-5. Use `prediction-market-analysis` patterns inside `research/` for replay, labeling, and model evaluation.
-6. Pull from `TradingAgents`, `OpenBB`, and `qlib` only as optional support layers after the execution/risk core is stable.
+## Repository map
 
-## Important rule
+- `adapters/` - venue wrappers and normalized types
+- `engine/` - polling loop, orchestration, runtime policy, reconciliation, safety state
+- `risk/` - exposure caps, cleanup helpers, deterministic risk checks
+- `research/` - fair-value builder, calibration, replay, benchmark runner, dataset registry
+- `scripts/` - user-facing CLI entrypoints
+- `docs/` - onboarding, architecture, runbook, and benchmark docs
+- `tests/` - unit coverage for runtime policy, risk, replay, benchmark, and CLI behavior
+- `upstreams/` - pinned references and dependency sources, not the product core
 
-Do **not** turn `upstreams/` into production code by importing everything directly. Use it as one of:
+## Install
 
-- a pinned dependency,
-- a reference implementation,
-- or a source for small selective ports.
+From the repo root:
 
-The product should converge into _your_ `adapters/`, `engine/`, `risk/`, and `research/` layers.
+```bash
+pip install -e .
+pip install -e upstreams/py-clob-client
+pip install -e upstreams/pykalshi
+```
 
-See `docs/ARCHITECTURE.md` for the full system design.
+Optional research helpers:
 
-## Offline sports benchmark toolkit
+```bash
+pip install pandas pyarrow duckdb
+```
 
-This repo now also contains an **offline sports fair-value and replay benchmark/toolkit** built around the existing research primitives.
+The package installs these console entrypoints from `pyproject.toml`:
 
-The public-facing slice is intentionally small:
+- `run-agent-loop`
+- `operator-cli`
+- `build-sports-fair-values`
+- `refresh-sports-fair-values`
+- `run-sports-benchmark`
+- `run-sports-benchmark-suite`
+- `prediction-market-sports-benchmark`
+- `prediction-market-sports-benchmark-suite`
 
-- normalized sportsbook-style rows -> de-vigged fair-value manifest
-- deterministic replay/paper execution
-- benchmark scoring for forecasts and replay outcomes
+## Fast start paths
 
-The benchmark path is offline and reproducible, but the replay lane is still an approximation of real queue position, latency, and venue behavior.
+### 1. Run the offline benchmark first
 
-Start with `docs/BENCHMARK_TOOLKIT.md` for the fixture-driven flow.
-For the fuller end-to-end benchmark workflow, see `docs/BENCHMARK_PROTOCOL.md` and `docs/BENCHMARK_CASE_SCHEMA.md`.
+```bash
+prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
+prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+```
+
+Packaged fixtures live in `research/fixtures/`:
+
+- `sports_benchmark_tiny.json`
+- `sports_benchmark_best_line.json`
+- `sports_benchmark_round_trip.json`
+
+The suite writes:
+
+- `benchmark_suite_summary.json`
+- `benchmark_suite_summary.md`
+- `benchmark_suite_edge_ledger.json`
+- `cases/<case-name>.json`
+
+There is also a checked-in example suite output under `runtime/benchmark-suite-e2e-check/`.
+
+### 2. Build a Polymarket fair-value manifest
+
+```bash
+python3 scripts/export_polymarket_markets.py --output runtime/polymarket_markets.json --limit 200
+python3 scripts/fetch_the_odds_api_rows.py --sport-key basketball_nba --event-map-file runtime/odds_event_map.json --output runtime/sportsbook_odds.json
+python3 scripts/build_sports_fair_values.py --input runtime/sportsbook_odds.json --markets-file runtime/polymarket_markets.json --output runtime/fair_values.json --book-aggregation best-line --devig-method multiplicative --max-age-seconds 900
+```
+
+The emitted manifest can include:
+
+- `fair_value`
+- optional `calibrated_fair_value`
+- `condition_id`
+- `event_key`
+- sport metadata such as `sport`, `series`, `game_id`, and `sports_market_type`
+
+### 3. Run one supervised Polymarket preview cycle
+
+```bash
+run-agent-loop \
+  --venue polymarket \
+  --mode preview \
+  --fair-values-file runtime/fair_values.json \
+  --max-cycles 1
+```
+
+You can also run pair ranking modes:
+
+- `--mode pair-preview`
+- `--mode pair-run`
+
+### 4. Put trading thresholds in a runtime policy file
+
+```bash
+run-agent-loop \
+  --venue polymarket \
+  --mode preview \
+  --fair-values-file runtime/fair_values.json \
+  --policy-file runtime/policy.json
+```
+
+The policy file is the source of truth for:
+
+- fair-value field selection, `raw` or `calibrated`
+- base quantity and edge threshold
+- shared risk limits, including `max_contracts_per_event`
+- ranker and pair-ranker filters
+- deterministic execution gate settings
+- engine timing and overlay recovery settings
+- lifecycle cleanup policy
+- Polymarket depth admission settings
+
+### 5. Inspect runtime state
+
+```bash
+operator-cli status --state-file runtime/safety-state.json
+operator-cli status --state-file runtime/safety-state.json --journal runtime/events.jsonl
+```
+
+## Runtime safety model
+
+The supervised runtime is built to fail closed.
+
+- New trading can be blocked by pause, halt, hold-new-orders, incomplete truth, pending recovery work, or policy-gate rejection.
+- Polymarket has a phase-1 live-state overlay for open-order and fill freshness, but REST truth is still the final source for balances, positions, and reconciliation.
+- The operator CLI exposes `pause`, `unpause`, `hold-new-orders`, `clear-hold-new-orders`, `force-refresh`, `resume`, `cancel-all`, and `cancel-stale`.
+
+This is meant for supervised operation, not for fire-and-forget deployment.
+
+## Benchmark and research artifacts
+
+The benchmark stack is useful when you want a reproducible offline slice of the repo.
+
+- `research/benchmark_cli.py` runs a single case
+- `research/benchmark_suite_cli.py` runs a multi-case suite
+- `research/benchmark_runner.py` reports raw and calibrated forecast metrics when calibration samples are present
+- `research/benchmark_suite.py` writes a suite-level edge ledger for later attribution work
+- `research/datasets.py` snapshots row datasets or benchmark cases and generates walk-forward splits
+
+## CI
+
+`.github/workflows/python-ci.yml` currently does three things on pushes and pull requests:
+
+- installs the package
+- compiles the key runtime and research modules with `py_compile`
+- runs `python -m unittest discover -s tests -p "test_*.py"`
+
+## Read next
+
+- `docs/GETTING_STARTED.md` for the new-engineer setup path
+- `docs/ARCHITECTURE.md` for the current system shape
+- `docs/OPERATOR_RUNBOOK.md` for supervised runtime operation
+- `docs/BENCHMARK_TOOLKIT.md` for the offline benchmark flow
+- `docs/BENCHMARK_PROTOCOL.md` for suite artifacts and evaluation rules
+- `docs/BENCHMARK_CASE_SCHEMA.md` for case file structure

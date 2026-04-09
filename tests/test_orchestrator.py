@@ -254,6 +254,39 @@ class FallbackCandidateAdapter(OrchestratorAdapter):
         )
 
 
+class EventRegistryAdapter(OrchestratorAdapter):
+    def list_markets(self, limit: int = 100):
+        return [
+            MarketSummary(
+                contract=self.contract,
+                title="Event market",
+                best_bid=0.45,
+                best_ask=0.50,
+                active=True,
+                event_key="NBA Finals Game 1",
+            )
+        ]
+
+
+class CountingOrchestratorAdapter(OrchestratorAdapter):
+    def __init__(self):
+        super().__init__()
+        self.global_snapshot_calls = 0
+        self.contract_snapshot_calls = 0
+        self.order_book_calls = 0
+
+    def get_order_book(self, contract: Contract):
+        self.order_book_calls += 1
+        return super().get_order_book(contract)
+
+    def get_account_snapshot(self, contract: Contract | None = None):
+        if contract is None:
+            self.global_snapshot_calls += 1
+        else:
+            self.contract_snapshot_calls += 1
+        return super().get_account_snapshot(contract)
+
+
 class OrchestratorTests(unittest.TestCase):
     def test_preview_top_selects_and_previews_best_candidate(self):
         adapter = OrchestratorAdapter()
@@ -350,7 +383,11 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(
             result.skipped_candidates[0]["market_key"], adapter.contract.market_key
         )
+        self.assertEqual(result.skipped_candidates[0]["stage"], "policy_gate")
         self.assertTrue(result.skipped_candidates[0]["reasons"])
+        self.assertTrue(result.gate_trace)
+        self.assertEqual(result.gate_trace[0]["stage"], "policy_gate")
+        self.assertFalse(result.gate_trace[0]["allowed"])
 
     def test_sizer_uses_multi_level_visible_depth(self):
         adapter = MultiLevelLiquidityAdapter()
@@ -411,6 +448,32 @@ class OrchestratorTests(unittest.TestCase):
         if execution is None:
             self.fail("expected execution result")
         self.assertTrue(execution.placements)
+
+    def test_run_top_reuses_precomputed_engine_preview(self):
+        adapter = CountingOrchestratorAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider(
+                {adapter.contract.market_key: 0.60}
+            ),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+        )
+
+        result = orchestrator.run_top()
+
+        self.assertEqual(adapter.placed, 1)
+        self.assertIsNotNone(result.execution)
+        self.assertEqual(adapter.global_snapshot_calls, 1)
+        self.assertEqual(adapter.order_book_calls, 1)
+        self.assertEqual(adapter.contract_snapshot_calls, 2)
 
     def test_policy_gate_blocks_duplicate_position_entry(self):
         adapter = ExistingPositionAdapter()
@@ -473,7 +536,11 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(
             result.skipped_candidates[0]["market_key"], adapter.contract.market_key
         )
+        self.assertEqual(result.skipped_candidates[0]["stage"], "policy_gate")
         self.assertTrue(result.skipped_candidates[0]["reasons"])
+        self.assertTrue(
+            any(entry["stage"] == "placement" for entry in result.gate_trace)
+        )
 
     def test_policy_gate_blocks_thin_liquidity(self):
         adapter = ThinLiquidityAdapter()
@@ -500,6 +567,33 @@ class OrchestratorTests(unittest.TestCase):
         self.assertTrue(result.policy_reasons)
         self.assertIn("top-level liquidity too low", result.policy_reasons[0])
         self.assertEqual(adapter.placed, 0)
+
+    def test_scan_refreshes_event_registry_from_discovered_markets(self):
+        adapter = EventRegistryAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider(
+                {adapter.contract.market_key: 0.60}
+            ),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+        )
+
+        orchestrator.scan()
+
+        self.assertEqual(
+            engine.risk_engine.market_key_to_event_exposure_key[
+                adapter.contract.market_key
+            ],
+            "event:nba-finals-game-1",
+        )
 
     def test_policy_gate_blocks_when_visible_depth_too_thin(self):
         adapter = MultiLevelLiquidityAdapter()

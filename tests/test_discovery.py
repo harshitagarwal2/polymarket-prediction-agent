@@ -435,6 +435,130 @@ class DiscoveryTests(unittest.TestCase):
 
         self.assertIsNone(provider.fair_value_for(market))
 
+    def test_manifest_fair_value_provider_rejects_extended_market_identity_mismatch(
+        self,
+    ):
+        market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="token-a", outcome=OutcomeSide.YES
+            ),
+            active=True,
+            sport="nba",
+            series="nba-finals",
+            game_id="game-1",
+            sports_market_type="moneyline",
+        )
+        provider = ManifestFairValueProvider(
+            records={
+                market.contract.market_key: FairValueManifestEntry(
+                    fair_value=0.61,
+                    sport="nba",
+                    series="nba-finals",
+                    game_id="game-1",
+                    sports_market_type="moneyline",
+                )
+            }
+        )
+
+        self.assertEqual(provider.fair_value_for(market), 0.61)
+        self.assertIsNone(
+            provider.fair_value_for(
+                MarketSummary(
+                    contract=market.contract,
+                    active=True,
+                    sport="nfl",
+                    series="nba-finals",
+                    game_id="game-1",
+                    sports_market_type="moneyline",
+                )
+            )
+        )
+        self.assertIsNone(
+            provider.fair_value_for(
+                MarketSummary(
+                    contract=market.contract,
+                    active=True,
+                    sport="nba",
+                    series="eastern-conference",
+                    game_id="game-1",
+                    sports_market_type="moneyline",
+                )
+            )
+        )
+        self.assertIsNone(
+            provider.fair_value_for(
+                MarketSummary(
+                    contract=market.contract,
+                    active=True,
+                    sport="nba",
+                    series="nba-finals",
+                    game_id="game-2",
+                    sports_market_type="moneyline",
+                )
+            )
+        )
+        self.assertIsNone(
+            provider.fair_value_for(
+                MarketSummary(
+                    contract=market.contract,
+                    active=True,
+                    sport="nba",
+                    series="nba-finals",
+                    game_id="game-1",
+                    sports_market_type="spread",
+                )
+            )
+        )
+
+    def test_manifest_fair_value_provider_can_select_calibrated_field(self):
+        market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="token-a", outcome=OutcomeSide.YES
+            ),
+            active=True,
+        )
+        raw_provider = ManifestFairValueProvider(
+            records={
+                market.contract.market_key: FairValueManifestEntry(
+                    fair_value=0.61,
+                    calibrated_fair_value=0.67,
+                )
+            },
+            fair_value_field="raw",
+        )
+        calibrated_provider = ManifestFairValueProvider(
+            records={
+                market.contract.market_key: FairValueManifestEntry(
+                    fair_value=0.61,
+                    calibrated_fair_value=0.67,
+                )
+            },
+            fair_value_field="calibrated",
+        )
+
+        self.assertEqual(raw_provider.fair_value_for(market), 0.61)
+        self.assertEqual(calibrated_provider.fair_value_for(market), 0.67)
+
+    def test_manifest_fair_value_provider_falls_back_to_raw_when_calibrated_missing(
+        self,
+    ):
+        market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="token-a", outcome=OutcomeSide.YES
+            ),
+            active=True,
+        )
+        provider = ManifestFairValueProvider(
+            records={
+                market.contract.market_key: FairValueManifestEntry(
+                    fair_value=0.61,
+                )
+            },
+            fair_value_field="calibrated",
+        )
+
+        self.assertEqual(provider.fair_value_for(market), 0.61)
+
 
 if __name__ == "__main__":
     unittest.main()

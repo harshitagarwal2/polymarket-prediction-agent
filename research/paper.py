@@ -29,6 +29,8 @@ class PaperTrade:
 class PaperExecutionConfig:
     max_fill_ratio_per_step: float = 1.0
     slippage_bps: float = 0.0
+    resting_max_fill_ratio_per_step: float | None = None
+    resting_fill_delay_steps: int = 0
 
 
 @dataclass
@@ -38,24 +40,43 @@ class PaperBroker:
     trades: list[PaperTrade] = field(default_factory=list)
     open_orders: dict[str, NormalizedOrder] = field(default_factory=dict)
     config: PaperExecutionConfig = field(default_factory=PaperExecutionConfig)
+    contracts: dict[str, Contract] = field(default_factory=dict)
+    current_step: int = 0
     _order_sequence: count = field(default_factory=lambda: count(1), repr=False)
     initial_cash: float = field(init=False)
 
     def __post_init__(self) -> None:
         self.initial_cash = self.cash
 
+    def _remember_contract(self, contract: Contract) -> None:
+        self.contracts[contract.market_key] = contract
+
     def position_for(self, contract: Contract) -> PositionSnapshot:
+        self._remember_contract(contract)
         return PositionSnapshot(
             contract=contract, quantity=self.positions.get(contract.market_key, 0.0)
         )
 
     def open_orders_for(self, contract: Contract) -> list[NormalizedOrder]:
+        self._remember_contract(contract)
         return [
             order
             for order in self.open_orders.values()
             if order.contract.market_key == contract.market_key
             and order.status in {OrderStatus.RESTING, OrderStatus.PARTIALLY_FILLED}
         ]
+
+    def positions_snapshot(self) -> list[PositionSnapshot]:
+        snapshots: list[PositionSnapshot] = []
+        for market_key, quantity in self.positions.items():
+            contract = self.contracts.get(market_key)
+            if contract is None:
+                continue
+            snapshots.append(PositionSnapshot(contract=contract, quantity=quantity))
+        return snapshots
+
+    def open_order_snapshots(self) -> list[NormalizedOrder]:
+        return list(self.open_orders.values())
 
     def _next_order_id(self) -> str:
         return f"paper-{next(self._order_sequence)}"
@@ -103,6 +124,7 @@ class PaperBroker:
         quantity: float,
         reason: str,
     ) -> PaperTrade:
+        self._remember_contract(contract)
         trade = PaperTrade(
             order_id=order_id,
             contract=contract,
@@ -120,6 +142,7 @@ class PaperBroker:
     ) -> None:
         if quantity <= 0:
             return
+        self._remember_contract(contract)
         if action is OrderAction.BUY:
             self.cash -= price * quantity
             self.positions[contract.market_key] = (
@@ -137,6 +160,8 @@ class PaperBroker:
         book: OrderBookSnapshot,
         limit_price: float,
         quantity: float,
+        *,
+        fill_ratio: float,
     ) -> tuple[list[tuple[float, float]], float]:
         fills: list[tuple[float, float]] = []
         remaining = quantity
@@ -149,11 +174,25 @@ class PaperBroker:
             )
             if not crosses or remaining <= 0:
                 break
-            effective_level_qty = level.quantity * self.config.max_fill_ratio_per_step
+            effective_level_qty = level.quantity * fill_ratio
             fill_qty = min(remaining, effective_level_qty)
             fills.append((level.price, fill_qty))
             remaining -= fill_qty
         return fills, remaining
+
+    def _resting_fill_ratio(self) -> float:
+        if self.config.resting_max_fill_ratio_per_step is not None:
+            return self.config.resting_max_fill_ratio_per_step
+        return self.config.max_fill_ratio_per_step
+
+    def _resting_order_ready(self, order: NormalizedOrder) -> bool:
+        raw = order.raw if isinstance(order.raw, dict) else {}
+        submitted_step = raw.get("_submitted_step")
+        if not isinstance(submitted_step, int):
+            return True
+        return (
+            self.current_step - submitted_step
+        ) > self.config.resting_fill_delay_steps
 
     def _apply_slippage(self, action: OrderAction, price: float) -> float:
         multiplier = self.config.slippage_bps / 10000.0
@@ -162,10 +201,20 @@ class PaperBroker:
         return price * (1 - multiplier)
 
     def _execute_order(
-        self, book: OrderBookSnapshot, order: NormalizedOrder
+        self, book: OrderBookSnapshot, order: NormalizedOrder, *, resting: bool
     ) -> list[PaperTrade]:
+        if resting and not self._resting_order_ready(order):
+            return []
         fills, remaining = self._walk_levels(
-            order.action, book, order.price, order.remaining_quantity
+            order.action,
+            book,
+            order.price,
+            order.remaining_quantity,
+            fill_ratio=(
+                self._resting_fill_ratio()
+                if resting
+                else self.config.max_fill_ratio_per_step
+            ),
         )
         if (
             order.action is OrderAction.SELL
@@ -245,6 +294,8 @@ class PaperBroker:
     ) -> list[PaperTrade]:
         results: list[PaperTrade] = []
         for intent in intents:
+            raw = dict(intent.metadata)
+            raw["_submitted_step"] = self.current_step
             order = NormalizedOrder(
                 order_id=self._next_order_id(),
                 contract=intent.contract,
@@ -253,18 +304,19 @@ class PaperBroker:
                 quantity=intent.quantity,
                 remaining_quantity=intent.quantity,
                 status=OrderStatus.PENDING,
-                raw=intent.metadata,
+                raw=raw,
             )
-            results.extend(self._execute_order(book, order))
+            results.extend(self._execute_order(book, order, resting=False))
         return results
 
     def advance(self, book: OrderBookSnapshot) -> list[PaperTrade]:
+        self.current_step += 1
         results: list[PaperTrade] = []
         current_orders = list(self.open_orders.values())
         for order in current_orders:
             if order.contract.market_key != book.contract.market_key:
                 continue
-            results.extend(self._execute_order(book, order))
+            results.extend(self._execute_order(book, order, resting=True))
         return results
 
     def execute(

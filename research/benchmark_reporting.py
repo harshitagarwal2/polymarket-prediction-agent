@@ -25,8 +25,18 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
             f"- Average log loss: {_format_float(aggregate.average_log_loss)}",
             f"- Average accuracy: {_format_float(aggregate.average_accuracy)}",
             f"- Average ECE: {_format_float(aggregate.average_expected_calibration_error)}",
+            f"- Calibrated fair-value cases: {aggregate.calibrated_case_count}",
+            f"- Average calibrated Brier score: {_format_float(aggregate.average_calibrated_brier_score)}",
+            f"- Average calibrated log loss: {_format_float(aggregate.average_calibrated_log_loss)}",
+            f"- Average calibrated accuracy: {_format_float(aggregate.average_calibrated_accuracy)}",
+            f"- Average calibrated ECE: {_format_float(aggregate.average_calibrated_expected_calibration_error)}",
+            f"- Average calibrated Brier improvement: {_format_float(aggregate.average_calibrated_brier_improvement)}",
+            f"- Average calibrated log loss improvement: {_format_float(aggregate.average_calibrated_log_loss_improvement)}",
+            f"- Average calibrated accuracy delta: {_format_float(aggregate.average_calibrated_accuracy_delta)}",
+            f"- Average calibrated ECE improvement: {_format_float(aggregate.average_calibrated_expected_calibration_error_improvement)}",
             f"- Average replay net PnL: {_format_float(aggregate.average_replay_net_pnl, 4)}",
             f"- Average replay return %: {_format_float(aggregate.average_replay_return_pct, 4)}",
+            f"- Edge ledger rows: {aggregate.edge_ledger_row_count}",
             "",
         ]
     )
@@ -41,6 +51,11 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
     for case in report.case_results:
         fair_value_score = (
             case.report.fair_value_report.forecast_score
+            if case.report.fair_value_report is not None
+            else None
+        )
+        calibrated_fair_value_score = (
+            case.report.fair_value_report.calibrated_forecast_score
             if case.report.fair_value_report is not None
             else None
         )
@@ -69,6 +84,66 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
             )
         )
     lines.append("")
+
+    calibrated_cases = [
+        case
+        for case in report.case_results
+        if case.report.fair_value_report is not None
+        and case.report.fair_value_report.calibrated_forecast_score is not None
+        and case.report.fair_value_report.calibration is not None
+    ]
+    if calibrated_cases:
+        lines.extend(
+            [
+                "## Calibration deltas",
+                "",
+                "| Case | Raw Brier | Calibrated Brier | Brier Improvement | Raw Log Loss | Calibrated Log Loss | Log Loss Improvement | Raw ECE | Calibrated ECE | ECE Improvement |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for case in calibrated_cases:
+            fair_value_report = case.report.fair_value_report
+            if fair_value_report is None:
+                continue
+            raw_score = fair_value_report.forecast_score
+            calibrated_score = fair_value_report.calibrated_forecast_score
+            calibration = fair_value_report.calibration
+            if (
+                raw_score is None
+                or calibrated_score is None
+                or not isinstance(calibration, dict)
+            ):
+                continue
+            metric_delta = calibration.get("metric_delta")
+            lines.append(
+                "| {case_name} | {raw_brier} | {calibrated_brier} | {brier_improvement} | {raw_log_loss} | {calibrated_log_loss} | {log_loss_improvement} | {raw_ece} | {calibrated_ece} | {ece_improvement} |".format(
+                    case_name=case.report.case_name,
+                    raw_brier=_format_float(raw_score.brier_score),
+                    calibrated_brier=_format_float(calibrated_score.brier_score),
+                    brier_improvement=_format_float(
+                        metric_delta.get("brier_improvement")
+                        if isinstance(metric_delta, dict)
+                        else None
+                    ),
+                    raw_log_loss=_format_float(raw_score.log_loss),
+                    calibrated_log_loss=_format_float(calibrated_score.log_loss),
+                    log_loss_improvement=_format_float(
+                        metric_delta.get("log_loss_improvement")
+                        if isinstance(metric_delta, dict)
+                        else None
+                    ),
+                    raw_ece=_format_float(raw_score.expected_calibration_error),
+                    calibrated_ece=_format_float(
+                        calibrated_score.expected_calibration_error
+                    ),
+                    ece_improvement=_format_float(
+                        metric_delta.get("expected_calibration_error_improvement")
+                        if isinstance(metric_delta, dict)
+                        else None
+                    ),
+                )
+            )
+        lines.append("")
 
     if aggregate.fair_value_baseline_deltas:
         lines.extend(

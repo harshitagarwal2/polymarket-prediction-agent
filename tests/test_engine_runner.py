@@ -217,6 +217,27 @@ class LiveDeltaPreviewAdapter(SequencedAdapter):
         )
 
 
+class TwoIntentStrategy:
+    def __init__(self, contract: Contract):
+        self.contract = contract
+
+    def generate_intents(self, context):
+        return [
+            OrderIntent(
+                contract=self.contract,
+                action=OrderAction.BUY,
+                price=0.50,
+                quantity=1.0,
+            ),
+            OrderIntent(
+                contract=self.contract,
+                action=OrderAction.BUY,
+                price=0.50,
+                quantity=1.0,
+            ),
+        ]
+
+
 class IncompleteLiveDeltaAdapter(LiveDeltaPreviewAdapter):
     def get_account_snapshot(self, contract: Contract | None = None) -> AccountSnapshot:
         snapshot = super().get_account_snapshot(contract)
@@ -596,6 +617,26 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertFalse(result.risk.approved)
         self.assertTrue(result.risk.rejected)
         self.assertEqual(result.risk.rejected[0].reason, "global exposure cap exceeded")
+
+    def test_preview_once_rejects_entire_multi_intent_batch(self):
+        adapter = SequencedAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=TwoIntentStrategy(adapter.contract),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=1)
+            ),
+        )
+
+        result = engine.preview_once(adapter.contract, fair_value=0.60)
+
+        self.assertFalse(result.risk.approved)
+        self.assertEqual(len(result.risk.rejected), 2)
+        self.assertEqual(
+            result.risk.rejected[0].reason,
+            "batched with rejected intent: global exposure cap exceeded",
+        )
+        self.assertEqual(result.risk.rejected[1].reason, "global exposure cap exceeded")
 
     def test_build_context_applies_live_user_state_delta_after_snapshot(self):
         adapter = LiveDeltaPreviewAdapter()

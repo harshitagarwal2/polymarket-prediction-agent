@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from datetime import datetime, timezone
@@ -15,6 +16,9 @@ from adapters.polymarket import PolymarketAdapter, PolymarketConfig
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.discovery import (
     AgentOrchestrator,
+    DeterministicSizer,
+    FairValueField,
+    ExecutionPolicyGate,
     FairValueManifestEntry,
     ManifestFairValueProvider,
     OpportunityRanker,
@@ -23,6 +27,7 @@ from engine.discovery import (
     PollingLoopConfig,
     StaticFairValueProvider,
 )
+from engine.runtime_policy import RuntimePolicy, load_runtime_policy
 from engine.runner import TradingEngine
 from engine.safety_store import SafetyStateStore
 from engine.strategies import FairValueBandStrategy
@@ -37,25 +42,31 @@ def _parse_comma_separated(value: str | None) -> list[str] | None:
     return items or None
 
 
-def build_adapter(venue_name: str, args=None):
+def build_adapter(
+    venue_name: str,
+    args=None,
+    *,
+    policy: RuntimePolicy | None = None,
+):
     if venue_name == "polymarket":
         markets = _parse_comma_separated(
             getattr(args, "polymarket_live_user_markets", None)
             or os.getenv("POLYMARKET_LIVE_USER_MARKETS")
         )
-        return PolymarketAdapter(
-            PolymarketConfig(
-                private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
-                funder=os.getenv("POLYMARKET_FUNDER"),
-                account_address=os.getenv("POLYMARKET_ACCOUNT_ADDRESS"),
-                user_ws_host=(
-                    getattr(args, "polymarket_user_ws_host", None)
-                    or os.getenv("POLYMARKET_USER_WS_HOST")
-                    or PolymarketConfig.user_ws_host
-                ),
-                live_user_markets=markets,
-            )
+        config = PolymarketConfig(
+            private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
+            funder=os.getenv("POLYMARKET_FUNDER"),
+            account_address=os.getenv("POLYMARKET_ACCOUNT_ADDRESS"),
+            user_ws_host=(
+                getattr(args, "polymarket_user_ws_host", None)
+                or os.getenv("POLYMARKET_USER_WS_HOST")
+                or PolymarketConfig.user_ws_host
+            ),
+            live_user_markets=markets,
         )
+        if policy is not None:
+            config = policy.venues.polymarket.apply(config)
+        return PolymarketAdapter(config)
     if venue_name == "kalshi":
         return KalshiAdapter(
             KalshiConfig(
@@ -83,7 +94,39 @@ def _parse_fair_value_timestamp(value: object) -> datetime | None:
     return parsed
 
 
-def build_fair_value_provider(path: str, *, max_age_seconds: float | None = None):
+def _parse_manifest_numeric(
+    value: object,
+    *,
+    context: str,
+    required: bool = False,
+) -> float | None:
+    if value in (None, ""):
+        if required:
+            raise RuntimeError(f"{context} is required")
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        if required:
+            raise RuntimeError(f"{context} must be numeric")
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        if required:
+            raise RuntimeError(f"{context} must be numeric") from exc
+        return None
+    if not math.isfinite(parsed):
+        if required:
+            raise RuntimeError(f"{context} must be finite")
+        return None
+    return parsed
+
+
+def build_fair_value_provider(
+    path: str,
+    *,
+    max_age_seconds: float | None = None,
+    fair_value_field: FairValueField = "raw",
+):
     payload = json.loads(Path(path).read_text())
     if not isinstance(payload, dict):
         raise RuntimeError("fair values file must contain a JSON object")
@@ -100,12 +143,23 @@ def build_fair_value_provider(path: str, *, max_age_seconds: float | None = None
         records: dict[str, FairValueManifestEntry] = {}
         for market_key, item in manifest_values.items():
             if isinstance(item, dict):
-                if item.get("fair_value") in (None, ""):
-                    raise RuntimeError(
-                        f"manifest fair value missing for market key: {market_key}"
-                    )
                 records[str(market_key)] = FairValueManifestEntry(
-                    fair_value=float(item["fair_value"]),
+                    fair_value=(
+                        _parse_manifest_numeric(
+                            item.get("fair_value"),
+                            context=(
+                                f"manifest fair value missing for market key: {market_key}"
+                            ),
+                            required=True,
+                        )
+                        or 0.0
+                    ),
+                    calibrated_fair_value=_parse_manifest_numeric(
+                        item.get("calibrated_fair_value"),
+                        context=(
+                            f"manifest calibrated_fair_value for market key: {market_key}"
+                        ),
+                    ),
                     generated_at=_parse_fair_value_timestamp(item.get("generated_at")),
                     source=(
                         str(item.get("source"))
@@ -122,6 +176,26 @@ def build_fair_value_provider(path: str, *, max_age_seconds: float | None = None
                         if item.get("event_key") not in (None, "")
                         else None
                     ),
+                    sport=(
+                        str(item.get("sport"))
+                        if item.get("sport") not in (None, "")
+                        else None
+                    ),
+                    series=(
+                        str(item.get("series"))
+                        if item.get("series") not in (None, "")
+                        else None
+                    ),
+                    game_id=(
+                        str(item.get("game_id"))
+                        if item.get("game_id") not in (None, "")
+                        else None
+                    ),
+                    sports_market_type=(
+                        str(item.get("sports_market_type"))
+                        if item.get("sports_market_type") not in (None, "")
+                        else None
+                    ),
                 )
                 continue
             records[str(market_key)] = FairValueManifestEntry(fair_value=float(item))
@@ -135,6 +209,7 @@ def build_fair_value_provider(path: str, *, max_age_seconds: float | None = None
                 else None
             ),
             max_age_seconds=resolved_max_age,
+            fair_value_field=fair_value_field,
         )
 
     return StaticFairValueProvider(
@@ -181,6 +256,12 @@ def validate_runtime(args) -> None:
     if not fair_values_path.exists():
         raise RuntimeError(f"fair values file not found: {fair_values_path}")
 
+    policy_file = getattr(args, "policy_file", None)
+    if policy_file:
+        policy_path = Path(policy_file)
+        if not policy_path.exists():
+            raise RuntimeError(f"policy file not found: {policy_path}")
+
     missing_env_vars = [
         name for name in _required_env_vars(args.venue) if not os.getenv(name)
     ]
@@ -211,6 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="preview",
     )
     parser.add_argument("--fair-values-file", required=True)
+    parser.add_argument("--policy-file", default=None)
     parser.add_argument("--market-limit", type=int, default=100)
     parser.add_argument("--interval-seconds", type=float, default=5.0)
     parser.add_argument("--max-cycles", type=int, default=1)
@@ -233,59 +315,124 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _seed_event_exposure_registry(risk_engine: RiskEngine, provider: object) -> None:
+    if not isinstance(provider, ManifestFairValueProvider):
+        return
+    for market_key, record in provider.records.items():
+        risk_engine.register_market_event(
+            market_key,
+            event_key=record.event_key,
+            sport=record.sport,
+            series=record.series,
+            game_id=record.game_id,
+        )
+
+
 def main() -> int:
     args = build_parser().parse_args()
     validate_runtime(args)
-    adapter = build_adapter(args.venue, args)
+    policy = load_runtime_policy(args.policy_file) if args.policy_file else None
+    adapter = build_adapter(args.venue, args, policy=policy)
     try:
+        fair_value_field = policy.fair_value.field if policy is not None else "raw"
         loader = lambda: build_fair_value_provider(
             args.fair_values_file,
             max_age_seconds=args.max_fair_value_age_seconds,
+            fair_value_field=fair_value_field,
         )
         provider = loader()
+        seeded_provider = provider
         if args.fair_values_reload_seconds is not None:
             provider = ReloadingFairValueProvider(
                 loader,
                 reload_interval_seconds=args.fair_values_reload_seconds,
             )
-        categories = _parse_comma_separated(args.categories)
-        ranker = OpportunityRanker(
-            edge_threshold=args.edge_threshold,
-            taker_fee_rate=args.taker_fee_rate,
-            allowed_categories=tuple(categories) if categories else None,
-            min_volume=args.min_volume,
-            max_spread=args.max_spread,
-            min_hours_to_expiry=args.min_hours_to_expiry,
-            max_hours_to_expiry=args.max_hours_to_expiry,
-        )
-        pair_ranker = PairOpportunityRanker(
-            edge_threshold=args.edge_threshold,
-            taker_fee_rate=args.taker_fee_rate,
-            allowed_categories=tuple(categories) if categories else None,
-            min_volume=args.min_volume,
-            max_spread=args.max_spread,
-            min_hours_to_expiry=args.min_hours_to_expiry,
-            max_hours_to_expiry=args.max_hours_to_expiry,
-        )
-        engine = TradingEngine(
-            adapter=adapter,
-            strategy=FairValueBandStrategy(
-                quantity=args.quantity, edge_threshold=args.edge_threshold
-            ),
-            risk_engine=RiskEngine(
+        if policy is None:
+            categories = _parse_comma_separated(args.categories)
+            ranker = OpportunityRanker(
+                edge_threshold=args.edge_threshold,
+                taker_fee_rate=args.taker_fee_rate,
+                allowed_categories=tuple(categories) if categories else None,
+                min_volume=args.min_volume,
+                max_spread=args.max_spread,
+                min_hours_to_expiry=args.min_hours_to_expiry,
+                max_hours_to_expiry=args.max_hours_to_expiry,
+            )
+            pair_ranker = PairOpportunityRanker(
+                edge_threshold=args.edge_threshold,
+                taker_fee_rate=args.taker_fee_rate,
+                allowed_categories=tuple(categories) if categories else None,
+                min_volume=args.min_volume,
+                max_spread=args.max_spread,
+                min_hours_to_expiry=args.min_hours_to_expiry,
+                max_hours_to_expiry=args.max_hours_to_expiry,
+            )
+            strategy = FairValueBandStrategy(
+                quantity=args.quantity,
+                edge_threshold=args.edge_threshold,
+            )
+            risk_engine = RiskEngine(
                 RiskLimits(
                     max_contracts_per_market=args.max_contracts_per_market,
                     max_global_contracts=args.max_global_contracts,
                 )
-            ),
-            safety_state_path=args.state_file,
-        )
+            )
+            policy_gate = ExecutionPolicyGate()
+            sizer = DeterministicSizer()
+            trading_engine_policy = None
+            lifecycle_policy = OrderLifecyclePolicy()
+            pair_quantity = args.quantity
+        else:
+            ranker = policy.opportunity_ranker.build()
+            pair_ranker = policy.pair_opportunity_ranker.build()
+            strategy = policy.strategy.build_strategy()
+            risk_engine = RiskEngine(policy.risk_limits.build())
+            policy_gate = policy.execution_policy_gate.build()
+            sizer = policy.strategy.build_sizer()
+            trading_engine_policy = policy.trading_engine
+            lifecycle_policy = policy.order_lifecycle_policy.build()
+            pair_quantity = policy.strategy.base_quantity
+
+        _seed_event_exposure_registry(risk_engine, seeded_provider)
+        if trading_engine_policy is None:
+            engine = TradingEngine(
+                adapter=adapter,
+                strategy=strategy,
+                risk_engine=risk_engine,
+                safety_state_path=args.state_file,
+            )
+        else:
+            engine = TradingEngine(
+                adapter=adapter,
+                strategy=strategy,
+                risk_engine=risk_engine,
+                safety_state_path=args.state_file,
+                cancel_retry_interval_seconds=(
+                    trading_engine_policy.cancel_retry_interval_seconds
+                ),
+                cancel_retry_max_attempts=trading_engine_policy.cancel_retry_max_attempts,
+                cancel_attention_timeout_seconds=(
+                    trading_engine_policy.cancel_attention_timeout_seconds
+                ),
+                overlay_max_age_seconds=trading_engine_policy.overlay_max_age_seconds,
+                forced_refresh_debounce_seconds=(
+                    trading_engine_policy.forced_refresh_debounce_seconds
+                ),
+                pending_submission_recovery_seconds=(
+                    trading_engine_policy.pending_submission_recovery_seconds
+                ),
+                pending_submission_expiry_seconds=(
+                    trading_engine_policy.pending_submission_expiry_seconds
+                ),
+            )
         orchestrator = AgentOrchestrator(
             adapter=adapter,
             engine=engine,
             fair_value_provider=provider,
             ranker=ranker,
             pair_ranker=pair_ranker,
+            policy_gate=policy_gate,
+            sizer=sizer,
             journal=EventJournal(args.journal),
         )
         loop = PollingAgentLoop(
@@ -295,11 +442,11 @@ def main() -> int:
                 market_limit=args.market_limit,
                 interval_seconds=args.interval_seconds,
                 max_cycles=args.max_cycles,
-                quantity=args.quantity,
+                quantity=pair_quantity,
             ),
             lifecycle_manager=OrderLifecycleManager(
                 adapter=adapter,
-                policy=OrderLifecyclePolicy(),
+                policy=lifecycle_policy,
                 cancel_handler=getattr(engine, "request_cancel_order", None),
             ),
         )

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Callable
 
 from adapters.types import OrderAction
 from engine.safety_state import (
@@ -13,6 +15,166 @@ from engine.safety_state import (
     RecoveryItemState,
     PendingSubmissionState,
 )
+
+
+def _load_failure_item(message: str, *, observed_at: datetime) -> RecoveryItemState:
+    return RecoveryItemState(
+        recovery_id="safety-state-load-failure:account",
+        item_type="safety-state-load-failure",
+        scope="account",
+        reason=message,
+        clear_source="operator_review",
+        opened_at=observed_at,
+        last_evidence_at=observed_at,
+        last_evidence=message,
+    )
+
+
+def _load_failure_state(message: str) -> EngineSafetyState:
+    observed_at = datetime.now().astimezone()
+    return EngineSafetyState(
+        halted=True,
+        reason=message,
+        recovery_items=[_load_failure_item(message, observed_at=observed_at)],
+    )
+
+
+def _append_load_warnings(
+    state: EngineSafetyState, warnings: list[str]
+) -> EngineSafetyState:
+    if not warnings:
+        return state
+    message = "safety state recovered with warnings: " + "; ".join(warnings)
+    observed_at = datetime.now().astimezone()
+    state.halted = True
+    state.clean_resume_streak = 0
+    state.last_clean_resume_observed_at = None
+    state.reason = f"{state.reason}; {message}" if state.reason else message
+    state.recovery_items = [
+        item
+        for item in state.recovery_items
+        if item.recovery_id != "safety-state-load-failure:account"
+    ]
+    state.recovery_items.append(_load_failure_item(message, observed_at=observed_at))
+    return state
+
+
+def _safe_bool(value: Any, field_name: str, warnings: list[str], default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off"}:
+            return False
+    warnings.append(f"{field_name} invalid; using {default!r}")
+    return default
+
+
+def _safe_int(value: Any, field_name: str, warnings: list[str], default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        warnings.append(f"{field_name} invalid; using {default!r}")
+        return default
+
+
+def _safe_float(
+    value: Any, field_name: str, warnings: list[str], default: float | None
+) -> float | None:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        warnings.append(f"{field_name} invalid; using {default!r}")
+        return default
+
+
+def _safe_str(
+    value: Any, field_name: str, warnings: list[str], default: str | None = None
+) -> str | None:
+    if value is None:
+        return default
+    try:
+        return str(value)
+    except Exception:
+        warnings.append(f"{field_name} invalid; using {default!r}")
+        return default
+
+
+def _safe_list(
+    value: Any,
+    field_name: str,
+    warnings: list[str],
+    *,
+    default: list[Any] | None = None,
+) -> list[Any]:
+    if value is None:
+        return list(default or [])
+    if isinstance(value, list):
+        return list(value)
+    warnings.append(f"{field_name} invalid; using {default or []!r}")
+    return list(default or [])
+
+
+def _safe_dict(
+    value: Any,
+    field_name: str,
+    warnings: list[str],
+    *,
+    default: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if value is None:
+        return default
+    if isinstance(value, dict):
+        return dict(value)
+    warnings.append(f"{field_name} invalid; using {default!r}")
+    return default
+
+
+def _safe_datetime(
+    value: Any,
+    field_name: str,
+    warnings: list[str],
+    *,
+    default: datetime | None = None,
+) -> datetime | None:
+    if value in (None, ""):
+        return default
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        warnings.append(f"{field_name} invalid; using {default!r}")
+        return default
+
+
+def _safe_deserialize_items(
+    value: Any,
+    field_name: str,
+    warnings: list[str],
+    deserializer: Callable[[dict[str, Any]], Any],
+) -> list[Any]:
+    items = _safe_list(value, field_name, warnings)
+    deserialized: list[Any] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            warnings.append(f"{field_name}[{index}] invalid; dropping entry")
+            continue
+        try:
+            deserialized.append(deserializer(item))
+        except (KeyError, TypeError, ValueError) as exc:
+            warnings.append(f"{field_name}[{index}] invalid ({exc}); dropping entry")
+    return deserialized
 
 
 def _serialize_pending_cancel(state: PendingCancelState) -> dict:
@@ -30,6 +192,10 @@ def _serialize_pending_cancel(state: PendingCancelState) -> dict:
         "acknowledged": state.acknowledged,
         "operator_attention_required": state.operator_attention_required,
         "post_cancel_fill_seen": state.post_cancel_fill_seen,
+        "status": state.status,
+        "resolved_at": (
+            state.resolved_at.isoformat() if state.resolved_at is not None else None
+        ),
     }
 
 
@@ -49,11 +215,12 @@ def _deserialize_pending_cancel(payload: dict) -> PendingCancelState:
         operator_attention_required=bool(
             payload.get("operator_attention_required", False)
         ),
-        post_cancel_fill_seen=bool(
-            payload.get(
-                "post_cancel_fill_seen",
-                payload.get("post_cancel_fill_seen", False),
-            )
+        post_cancel_fill_seen=bool(payload.get("post_cancel_fill_seen", False)),
+        status=str(payload.get("status", "pending")),
+        resolved_at=(
+            datetime.fromisoformat(payload["resolved_at"])
+            if payload.get("resolved_at")
+            else None
         ),
     )
 
@@ -196,179 +363,465 @@ class SafetyStateStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
 
-    def load(self) -> EngineSafetyState:
-        if not self.path.exists():
-            return EngineSafetyState()
-        payload = json.loads(self.path.read_text())
-        observed_at = payload.get("last_clean_resume_observed_at")
-        heartbeat_success_at = payload.get("heartbeat_last_success_at")
-        live_delta_applied_at = payload.get("last_live_delta_applied_at")
-        snapshot_correction_at = payload.get("last_snapshot_correction_at")
-        overlay_degraded_since = payload.get("overlay_degraded_since")
-        overlay_last_live_event_at = payload.get("overlay_last_live_event_at")
-        overlay_last_confirmed_snapshot_at = payload.get(
-            "overlay_last_confirmed_snapshot_at"
-        )
-        overlay_last_recovery_at = payload.get("overlay_last_recovery_at")
-        return EngineSafetyState(
-            halted=bool(payload.get("halted", False)),
-            reason=payload.get("reason"),
-            contract_key=payload.get("contract_key"),
-            clean_resume_streak=int(payload.get("clean_resume_streak", 0)),
-            last_clean_resume_observed_at=(
-                datetime.fromisoformat(observed_at) if observed_at else None
+    def _temp_path(self) -> Path:
+        return self.path.with_name(f"{self.path.name}.tmp")
+
+    def _fsync_parent_dir(self) -> None:
+        try:
+            directory_fd = os.open(self.path.parent, os.O_RDONLY)
+        except OSError:
+            return
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+    def _write_payload_atomically(self, encoded_payload: str) -> None:
+        temp_path = self._temp_path()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with temp_path.open("w", encoding="utf-8") as handle:
+                handle.write(encoded_payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, self.path)
+            self._fsync_parent_dir()
+        finally:
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+
+    def _candidate_paths(self) -> list[Path]:
+        return [
+            candidate
+            for candidate in (self.path, self._temp_path())
+            if candidate.exists()
+        ]
+
+    def _recover_candidate(self, candidate: Path) -> None:
+        if candidate == self.path:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.replace(candidate, self.path)
+            self._fsync_parent_dir()
+        except OSError:
+            return
+
+    def _deserialize_state_payload(self, payload: dict[str, Any]) -> EngineSafetyState:
+        warnings: list[str] = []
+        state = EngineSafetyState(
+            halted=_safe_bool(payload.get("halted"), "halted", warnings, False),
+            reason=_safe_str(payload.get("reason"), "reason", warnings),
+            contract_key=_safe_str(
+                payload.get("contract_key"), "contract_key", warnings
             ),
-            paused=bool(payload.get("paused", False)),
-            pause_reason=payload.get("pause_reason"),
-            hold_new_orders=bool(payload.get("hold_new_orders", False)),
-            hold_reason=payload.get("hold_reason"),
-            hold_since=(
-                datetime.fromisoformat(payload["hold_since"])
-                if payload.get("hold_since")
-                else None
+            clean_resume_streak=_safe_int(
+                payload.get("clean_resume_streak"),
+                "clean_resume_streak",
+                warnings,
+                0,
             ),
-            last_action_gate_action=payload.get("last_action_gate_action"),
-            last_action_gate_reason=payload.get("last_action_gate_reason"),
-            last_depth_assessment=payload.get("last_depth_assessment"),
-            last_truth_complete=bool(payload.get("last_truth_complete", False)),
-            last_truth_issues=payload.get("last_truth_issues"),
-            last_truth_open_orders=int(payload.get("last_truth_open_orders", 0)),
-            last_truth_positions=int(payload.get("last_truth_positions", 0)),
-            last_truth_fills=int(payload.get("last_truth_fills", 0)),
-            last_truth_partial_fills=int(payload.get("last_truth_partial_fills", 0)),
-            last_truth_balance_available=payload.get("last_truth_balance_available"),
-            last_truth_balance_total=payload.get("last_truth_balance_total"),
+            last_clean_resume_observed_at=_safe_datetime(
+                payload.get("last_clean_resume_observed_at"),
+                "last_clean_resume_observed_at",
+                warnings,
+            ),
+            paused=_safe_bool(payload.get("paused"), "paused", warnings, False),
+            pause_reason=_safe_str(
+                payload.get("pause_reason"), "pause_reason", warnings
+            ),
+            hold_new_orders=_safe_bool(
+                payload.get("hold_new_orders"), "hold_new_orders", warnings, False
+            ),
+            hold_reason=_safe_str(payload.get("hold_reason"), "hold_reason", warnings),
+            hold_since=_safe_datetime(
+                payload.get("hold_since"), "hold_since", warnings
+            ),
+            last_action_gate_action=_safe_str(
+                payload.get("last_action_gate_action"),
+                "last_action_gate_action",
+                warnings,
+            ),
+            last_action_gate_reason=_safe_str(
+                payload.get("last_action_gate_reason"),
+                "last_action_gate_reason",
+                warnings,
+            ),
+            last_depth_assessment=_safe_dict(
+                payload.get("last_depth_assessment"),
+                "last_depth_assessment",
+                warnings,
+            ),
+            last_truth_complete=_safe_bool(
+                payload.get("last_truth_complete"),
+                "last_truth_complete",
+                warnings,
+                False,
+            ),
+            last_truth_issues=_safe_list(
+                payload.get("last_truth_issues"), "last_truth_issues", warnings
+            ),
+            last_truth_open_orders=_safe_int(
+                payload.get("last_truth_open_orders"),
+                "last_truth_open_orders",
+                warnings,
+                0,
+            ),
+            last_truth_positions=_safe_int(
+                payload.get("last_truth_positions"),
+                "last_truth_positions",
+                warnings,
+                0,
+            ),
+            last_truth_fills=_safe_int(
+                payload.get("last_truth_fills"), "last_truth_fills", warnings, 0
+            ),
+            last_truth_partial_fills=_safe_int(
+                payload.get("last_truth_partial_fills"),
+                "last_truth_partial_fills",
+                warnings,
+                0,
+            ),
+            last_truth_balance_available=_safe_float(
+                payload.get("last_truth_balance_available"),
+                "last_truth_balance_available",
+                warnings,
+                None,
+            ),
+            last_truth_balance_total=_safe_float(
+                payload.get("last_truth_balance_total"),
+                "last_truth_balance_total",
+                warnings,
+                None,
+            ),
             last_truth_open_order_notional=float(
-                payload.get("last_truth_open_order_notional", 0.0)
+                _safe_float(
+                    payload.get("last_truth_open_order_notional"),
+                    "last_truth_open_order_notional",
+                    warnings,
+                    0.0,
+                )
+                or 0.0
             ),
             last_truth_reserved_buy_notional=float(
-                payload.get("last_truth_reserved_buy_notional", 0.0)
+                _safe_float(
+                    payload.get("last_truth_reserved_buy_notional"),
+                    "last_truth_reserved_buy_notional",
+                    warnings,
+                    0.0,
+                )
+                or 0.0
             ),
             last_truth_marked_position_notional=float(
-                payload.get("last_truth_marked_position_notional", 0.0)
+                _safe_float(
+                    payload.get("last_truth_marked_position_notional"),
+                    "last_truth_marked_position_notional",
+                    warnings,
+                    0.0,
+                )
+                or 0.0
             ),
-            last_truth_observed_at=(
-                datetime.fromisoformat(payload["last_truth_observed_at"])
-                if payload.get("last_truth_observed_at")
-                else None
+            last_truth_observed_at=_safe_datetime(
+                payload.get("last_truth_observed_at"),
+                "last_truth_observed_at",
+                warnings,
             ),
-            heartbeat_required=bool(payload.get("heartbeat_required", False)),
-            heartbeat_active=bool(payload.get("heartbeat_active", False)),
-            heartbeat_running=bool(payload.get("heartbeat_running", False)),
-            heartbeat_healthy_for_trading=bool(
-                payload.get("heartbeat_healthy_for_trading", True)
+            heartbeat_required=_safe_bool(
+                payload.get("heartbeat_required"),
+                "heartbeat_required",
+                warnings,
+                False,
             ),
-            heartbeat_unhealthy=bool(payload.get("heartbeat_unhealthy", False)),
-            heartbeat_last_success_at=(
-                datetime.fromisoformat(heartbeat_success_at)
-                if heartbeat_success_at
-                else None
+            heartbeat_active=_safe_bool(
+                payload.get("heartbeat_active"), "heartbeat_active", warnings, False
             ),
-            heartbeat_consecutive_failures=int(
-                payload.get("heartbeat_consecutive_failures", 0)
+            heartbeat_running=_safe_bool(
+                payload.get("heartbeat_running"),
+                "heartbeat_running",
+                warnings,
+                False,
             ),
-            heartbeat_last_error=payload.get("heartbeat_last_error"),
-            heartbeat_last_id=payload.get("heartbeat_last_id"),
-            last_live_delta_applied_at=(
-                datetime.fromisoformat(live_delta_applied_at)
-                if live_delta_applied_at
-                else None
+            heartbeat_healthy_for_trading=_safe_bool(
+                payload.get("heartbeat_healthy_for_trading"),
+                "heartbeat_healthy_for_trading",
+                warnings,
+                True,
             ),
-            last_live_delta_source=payload.get("last_live_delta_source"),
-            last_live_delta_order_upserts=int(
-                payload.get("last_live_delta_order_upserts", 0)
+            heartbeat_unhealthy=_safe_bool(
+                payload.get("heartbeat_unhealthy"),
+                "heartbeat_unhealthy",
+                warnings,
+                False,
             ),
-            last_live_delta_fill_upserts=int(
-                payload.get("last_live_delta_fill_upserts", 0)
+            heartbeat_last_success_at=_safe_datetime(
+                payload.get("heartbeat_last_success_at"),
+                "heartbeat_last_success_at",
+                warnings,
             ),
-            last_live_delta_terminal_orders=int(
-                payload.get("last_live_delta_terminal_orders", 0)
+            heartbeat_consecutive_failures=_safe_int(
+                payload.get("heartbeat_consecutive_failures"),
+                "heartbeat_consecutive_failures",
+                warnings,
+                0,
             ),
-            last_live_terminal_marker_applied_count=int(
-                payload.get("last_live_terminal_marker_applied_count", 0)
+            heartbeat_last_error=_safe_str(
+                payload.get("heartbeat_last_error"),
+                "heartbeat_last_error",
+                warnings,
             ),
-            last_snapshot_correction_at=(
-                datetime.fromisoformat(snapshot_correction_at)
-                if snapshot_correction_at
-                else None
+            heartbeat_last_id=_safe_str(
+                payload.get("heartbeat_last_id"), "heartbeat_last_id", warnings
             ),
-            last_snapshot_correction_order_count=int(
-                payload.get("last_snapshot_correction_order_count", 0)
+            last_live_delta_applied_at=_safe_datetime(
+                payload.get("last_live_delta_applied_at"),
+                "last_live_delta_applied_at",
+                warnings,
             ),
-            last_snapshot_correction_fill_count=int(
-                payload.get("last_snapshot_correction_fill_count", 0)
+            last_live_delta_source=_safe_str(
+                payload.get("last_live_delta_source"),
+                "last_live_delta_source",
+                warnings,
             ),
-            last_snapshot_terminal_confirmation_count=int(
-                payload.get("last_snapshot_terminal_confirmation_count", 0)
+            last_live_delta_order_upserts=_safe_int(
+                payload.get("last_live_delta_order_upserts"),
+                "last_live_delta_order_upserts",
+                warnings,
+                0,
             ),
-            last_snapshot_terminal_reversal_count=int(
-                payload.get("last_snapshot_terminal_reversal_count", 0)
+            last_live_delta_fill_upserts=_safe_int(
+                payload.get("last_live_delta_fill_upserts"),
+                "last_live_delta_fill_upserts",
+                warnings,
+                0,
             ),
-            overlay_degraded=bool(payload.get("overlay_degraded", False)),
-            overlay_degraded_since=(
-                datetime.fromisoformat(overlay_degraded_since)
-                if overlay_degraded_since
-                else None
+            last_live_delta_terminal_orders=_safe_int(
+                payload.get("last_live_delta_terminal_orders"),
+                "last_live_delta_terminal_orders",
+                warnings,
+                0,
             ),
-            overlay_degraded_reason=payload.get("overlay_degraded_reason"),
-            overlay_delta_suppressed=bool(
-                payload.get("overlay_delta_suppressed", False)
+            last_live_terminal_marker_applied_count=_safe_int(
+                payload.get("last_live_terminal_marker_applied_count"),
+                "last_live_terminal_marker_applied_count",
+                warnings,
+                0,
             ),
-            overlay_last_live_event_at=(
-                datetime.fromisoformat(overlay_last_live_event_at)
-                if overlay_last_live_event_at
-                else None
+            last_snapshot_correction_at=_safe_datetime(
+                payload.get("last_snapshot_correction_at"),
+                "last_snapshot_correction_at",
+                warnings,
             ),
-            overlay_last_confirmed_snapshot_at=(
-                datetime.fromisoformat(overlay_last_confirmed_snapshot_at)
-                if overlay_last_confirmed_snapshot_at
-                else None
+            last_snapshot_correction_order_count=_safe_int(
+                payload.get("last_snapshot_correction_order_count"),
+                "last_snapshot_correction_order_count",
+                warnings,
+                0,
             ),
-            overlay_forced_snapshot_count=int(
-                payload.get("overlay_forced_snapshot_count", 0)
+            last_snapshot_correction_fill_count=_safe_int(
+                payload.get("last_snapshot_correction_fill_count"),
+                "last_snapshot_correction_fill_count",
+                warnings,
+                0,
             ),
-            overlay_last_forced_snapshot_reason=payload.get(
-                "overlay_last_forced_snapshot_reason"
+            last_snapshot_terminal_confirmation_count=_safe_int(
+                payload.get("last_snapshot_terminal_confirmation_count"),
+                "last_snapshot_terminal_confirmation_count",
+                warnings,
+                0,
             ),
-            overlay_last_forced_snapshot_scope=payload.get(
-                "overlay_last_forced_snapshot_scope"
+            last_snapshot_terminal_reversal_count=_safe_int(
+                payload.get("last_snapshot_terminal_reversal_count"),
+                "last_snapshot_terminal_reversal_count",
+                warnings,
+                0,
             ),
-            overlay_last_recovery_outcome=payload.get("overlay_last_recovery_outcome"),
-            overlay_last_recovery_scope=payload.get("overlay_last_recovery_scope"),
-            overlay_last_recovery_at=(
-                datetime.fromisoformat(overlay_last_recovery_at)
-                if overlay_last_recovery_at
-                else None
+            overlay_degraded=_safe_bool(
+                payload.get("overlay_degraded"), "overlay_degraded", warnings, False
             ),
-            overlay_last_suppression_duration_seconds=payload.get(
-                "overlay_last_suppression_duration_seconds"
+            overlay_degraded_since=_safe_datetime(
+                payload.get("overlay_degraded_since"),
+                "overlay_degraded_since",
+                warnings,
             ),
-            overlay_last_live_state_active=bool(
-                payload.get("overlay_last_live_state_active", False)
+            overlay_degraded_reason=_safe_str(
+                payload.get("overlay_degraded_reason"),
+                "overlay_degraded_reason",
+                warnings,
             ),
-            overlay_last_subscribed_markets=list(
-                payload.get("overlay_last_subscribed_markets") or []
+            overlay_delta_suppressed=_safe_bool(
+                payload.get("overlay_delta_suppressed"),
+                "overlay_delta_suppressed",
+                warnings,
+                False,
             ),
-            persisted_open_orders=list(payload.get("persisted_open_orders") or []),
-            persisted_positions=list(payload.get("persisted_positions") or []),
-            persisted_fills=list(payload.get("persisted_fills") or []),
-            persisted_balance=payload.get("persisted_balance"),
-            pending_cancels=[
-                _deserialize_pending_cancel(item)
-                for item in payload.get("pending_cancels") or []
+            overlay_last_live_event_at=_safe_datetime(
+                payload.get("overlay_last_live_event_at"),
+                "overlay_last_live_event_at",
+                warnings,
+            ),
+            overlay_last_confirmed_snapshot_at=_safe_datetime(
+                payload.get("overlay_last_confirmed_snapshot_at"),
+                "overlay_last_confirmed_snapshot_at",
+                warnings,
+            ),
+            overlay_forced_snapshot_count=_safe_int(
+                payload.get("overlay_forced_snapshot_count"),
+                "overlay_forced_snapshot_count",
+                warnings,
+                0,
+            ),
+            overlay_last_forced_snapshot_reason=_safe_str(
+                payload.get("overlay_last_forced_snapshot_reason"),
+                "overlay_last_forced_snapshot_reason",
+                warnings,
+            ),
+            overlay_last_forced_snapshot_scope=_safe_str(
+                payload.get("overlay_last_forced_snapshot_scope"),
+                "overlay_last_forced_snapshot_scope",
+                warnings,
+            ),
+            overlay_last_recovery_outcome=_safe_str(
+                payload.get("overlay_last_recovery_outcome"),
+                "overlay_last_recovery_outcome",
+                warnings,
+            ),
+            overlay_last_recovery_scope=_safe_str(
+                payload.get("overlay_last_recovery_scope"),
+                "overlay_last_recovery_scope",
+                warnings,
+            ),
+            overlay_last_recovery_at=_safe_datetime(
+                payload.get("overlay_last_recovery_at"),
+                "overlay_last_recovery_at",
+                warnings,
+            ),
+            overlay_last_suppression_duration_seconds=_safe_float(
+                payload.get("overlay_last_suppression_duration_seconds"),
+                "overlay_last_suppression_duration_seconds",
+                warnings,
+                None,
+            ),
+            overlay_last_live_state_active=_safe_bool(
+                payload.get("overlay_last_live_state_active"),
+                "overlay_last_live_state_active",
+                warnings,
+                False,
+            ),
+            overlay_last_subscribed_markets=[
+                str(item)
+                for item in _safe_list(
+                    payload.get("overlay_last_subscribed_markets"),
+                    "overlay_last_subscribed_markets",
+                    warnings,
+                )
             ],
-            pending_submissions=[
-                _deserialize_pending_submission(item)
-                for item in payload.get("pending_submissions") or []
-            ],
-            pending_refresh_requests=[
-                _deserialize_pending_refresh_request(item)
-                for item in payload.get("pending_refresh_requests") or []
-            ],
-            recovery_items=[
-                _deserialize_recovery_item(item)
-                for item in payload.get("recovery_items") or []
-            ],
+            persisted_open_orders=_safe_list(
+                payload.get("persisted_open_orders"),
+                "persisted_open_orders",
+                warnings,
+            ),
+            persisted_positions=_safe_list(
+                payload.get("persisted_positions"),
+                "persisted_positions",
+                warnings,
+            ),
+            persisted_fills=_safe_list(
+                payload.get("persisted_fills"), "persisted_fills", warnings
+            ),
+            persisted_balance=_safe_dict(
+                payload.get("persisted_balance"), "persisted_balance", warnings
+            ),
+            daily_loss_date=_safe_str(
+                payload.get("daily_loss_date"), "daily_loss_date", warnings
+            ),
+            daily_loss_baseline_balance=_safe_float(
+                payload.get("daily_loss_baseline_balance"),
+                "daily_loss_baseline_balance",
+                warnings,
+                None,
+            ),
+            daily_loss_current_balance=_safe_float(
+                payload.get("daily_loss_current_balance"),
+                "daily_loss_current_balance",
+                warnings,
+                None,
+            ),
+            daily_loss_source=_safe_str(
+                payload.get("daily_loss_source"), "daily_loss_source", warnings
+            ),
+            daily_loss_approximation=_safe_str(
+                payload.get("daily_loss_approximation"),
+                "daily_loss_approximation",
+                warnings,
+            ),
+            daily_realized_pnl=float(
+                _safe_float(
+                    payload.get("daily_realized_pnl"),
+                    "daily_realized_pnl",
+                    warnings,
+                    0.0,
+                )
+                or 0.0
+            ),
+            daily_loss_last_updated_at=_safe_datetime(
+                payload.get("daily_loss_last_updated_at"),
+                "daily_loss_last_updated_at",
+                warnings,
+            ),
+            pending_cancels=_safe_deserialize_items(
+                payload.get("pending_cancels"),
+                "pending_cancels",
+                warnings,
+                _deserialize_pending_cancel,
+            ),
+            pending_submissions=_safe_deserialize_items(
+                payload.get("pending_submissions"),
+                "pending_submissions",
+                warnings,
+                _deserialize_pending_submission,
+            ),
+            pending_refresh_requests=_safe_deserialize_items(
+                payload.get("pending_refresh_requests"),
+                "pending_refresh_requests",
+                warnings,
+                _deserialize_pending_refresh_request,
+            ),
+            recovery_items=_safe_deserialize_items(
+                payload.get("recovery_items"),
+                "recovery_items",
+                warnings,
+                _deserialize_recovery_item,
+            ),
+        )
+        return _append_load_warnings(state, warnings)
+
+    def load(self) -> EngineSafetyState:
+        candidates = self._candidate_paths()
+        if not candidates:
+            return EngineSafetyState()
+        failures: list[str] = []
+        for candidate in candidates:
+            try:
+                payload = json.loads(candidate.read_text(encoding="utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("top-level payload must be an object")
+                state = self._deserialize_state_payload(payload)
+                self._recover_candidate(candidate)
+                return state
+            except (
+                OSError,
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                ValueError,
+            ) as exc:
+                failures.append(f"{candidate.name}: {exc}")
+        return _load_failure_state(
+            "safety state load failed; manual recovery required ("
+            + "; ".join(failures)
+            + ")"
         )
 
     def save(self, state: EngineSafetyState) -> None:
@@ -409,6 +862,11 @@ class SafetyStateStore:
         overlay_last_recovery_at = payload.get("overlay_last_recovery_at")
         if isinstance(overlay_last_recovery_at, datetime):
             payload["overlay_last_recovery_at"] = overlay_last_recovery_at.isoformat()
+        daily_loss_last_updated_at = payload.get("daily_loss_last_updated_at")
+        if isinstance(daily_loss_last_updated_at, datetime):
+            payload["daily_loss_last_updated_at"] = (
+                daily_loss_last_updated_at.isoformat()
+            )
         payload["pending_cancels"] = [
             _serialize_pending_cancel(item) for item in state.pending_cancels
         ]
@@ -422,5 +880,4 @@ class SafetyStateStore:
         payload["recovery_items"] = [
             _serialize_recovery_item(item) for item in state.recovery_items
         ]
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+        self._write_payload_atomically(json.dumps(payload, indent=2, sort_keys=True))
