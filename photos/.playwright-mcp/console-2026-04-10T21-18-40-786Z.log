@@ -1,5 +1,0 @@
-[      56ms] [LOG] DEBUG - (ATS-ENVELOPE-MODULE) Consent is rejected. Envelope will be removed and module will shutdown! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
-[      56ms] [LOG] DEBUG - (ATS-DETECTION-MODULE) Consent is rejected. Module will shutdown! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
-[      57ms] [LOG] DEBUG - (ATS-ENVELOPE-MODULE) Consent is rejected. Envelope will be removed and module will shutdown! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
-[      57ms] [LOG] DEBUG - (ATS-DETECTION-MODULE) Consent is rejected. Module will shutdown! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
-[     197ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://ups.analytics.yahoo.com/ups/58813/fed?gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7&v=1&url=https%3A%2F%2Fhealth.usnews.com%2Fdoctors%2Fsanjay-agarwal-254942:0
