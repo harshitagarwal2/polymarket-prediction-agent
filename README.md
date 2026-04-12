@@ -46,14 +46,19 @@ From the repo root:
 
 ```bash
 pip install -e .
-pip install -e upstreams/py-clob-client
-pip install -e upstreams/pykalshi
 ```
 
-Optional research helpers:
+For the reproducible offline benchmark path:
 
 ```bash
-pip install pandas pyarrow duckdb
+pip install -e ".[research]"
+```
+
+For venue-specific runtime integrations:
+
+```bash
+pip install -e ".[polymarket]"
+pip install -e ".[kalshi]"
 ```
 
 The package installs these console entrypoints from `pyproject.toml`:
@@ -72,8 +77,18 @@ The package installs these console entrypoints from `pyproject.toml`:
 ### 1. Run the offline benchmark first
 
 ```bash
+make reproduce
+
+# or run the suite command directly
 prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
 prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+```
+
+Containerized reproduction path:
+
+```bash
+docker build -t polymarket-prediction-agent:v0.1.0 .
+docker run --rm polymarket-prediction-agent:v0.1.0
 ```
 
 Packaged fixtures live in `research/fixtures/`:
@@ -177,6 +192,12 @@ The benchmark stack is useful when you want a reproducible offline slice of the 
 - installs the package
 - compiles the key runtime and research modules with `py_compile`
 - runs `python -m unittest discover -s tests -p "test_*.py"`
+
+## Citation and release metadata
+
+- `CITATION.cff` at the repo root provides software citation metadata for GitHub's **Cite this repository** surface.
+- `v0.1.0` is the first intended reproducible software release tag for this benchmark toolkit.
+- Zenodo DOI minting still requires Zenodo-side GitHub linking and repository enablement in addition to the repo metadata in this project.
 
 ## Read next
 

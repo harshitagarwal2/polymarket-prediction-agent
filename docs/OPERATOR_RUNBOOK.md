@@ -170,7 +170,8 @@ The policy file can control:
 Before any continuous run:
 
 - `pip install -e .`
-- `pip install -e upstreams/py-clob-client`
+- `pip install -e ".[polymarket]"` for Polymarket operation
+- `pip install -e ".[kalshi]"` for Kalshi operation
 - `runtime/fair_values.json` exists
 - chosen state file path exists or can be created
 - chosen journal path exists or can be created

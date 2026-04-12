@@ -22,14 +22,19 @@ From the repo root:
 
 ```bash
 pip install -e .
-pip install -e upstreams/py-clob-client
-pip install -e upstreams/pykalshi
 ```
 
-Optional research helpers:
+For the reproducible offline benchmark path:
 
 ```bash
-pip install pandas pyarrow duckdb
+pip install -e ".[research]"
+```
+
+For venue-specific runtime integrations:
+
+```bash
+pip install -e ".[polymarket]"
+pip install -e ".[kalshi]"
 ```
 
 ## Know the entrypoints
@@ -50,8 +55,18 @@ Common entrypoints:
 This is the easiest way to touch the repo without live credentials.
 
 ```bash
+make reproduce
+
+# or run the suite command directly
 prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
 prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+```
+
+Containerized reproduction path:
+
+```bash
+docker build -t polymarket-prediction-agent:v0.1.0 .
+docker run --rm polymarket-prediction-agent:v0.1.0
 ```
 
 What this gives you:

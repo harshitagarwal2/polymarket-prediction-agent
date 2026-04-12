@@ -53,7 +53,20 @@ Checked-in example suite output:
 
 ## Quick start
 
-After `pip install -e .`, run either form.
+After `pip install -e ".[research]"`, run either form.
+
+Canonical local reproduction path:
+
+```bash
+make reproduce
+```
+
+Containerized reproduction path:
+
+```bash
+docker build -t polymarket-prediction-agent:v0.1.0 .
+docker run --rm polymarket-prediction-agent:v0.1.0
+```
 
 Single packaged fixture:
 
