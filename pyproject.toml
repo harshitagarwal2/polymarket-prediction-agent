@@ -8,7 +8,32 @@ version = "0.1.0"
 description = "Unified Kalshi/Polymarket prediction-market trading agent scaffold"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+license = { file = "LICENSE" }
+authors = [
+  { name = "Pulkit Agarwal" },
+  { name = "Harshit Agarwal" },
+]
+dependencies = [
+  "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+research = [
+  "pyarrow>=14",
+  "duckdb>=0.10",
+]
+polymarket = [
+  "httpx>=0.27",
+  "websockets>=12",
+  "py-clob-client",
+]
+kalshi = [
+  "pykalshi",
+]
+
+[project.urls]
+Repository = "https://github.com/harshitagarwal2/polymarket-prediction-agent"
+Issues = "https://github.com/harshitagarwal2/polymarket-prediction-agent/issues"
 
 [project.scripts]
 run-agent-loop = "scripts.run_agent_loop:main"
