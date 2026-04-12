@@ -1,0 +1,30 @@
+- iframe [ref=e2]:
+  - generic [ref=f773e2]:
+    - img [ref=f773e6]
+    - generic [ref=f773e8]:
+      - paragraph [ref=f773e9]: Verification Required
+      - paragraph [ref=f773e10]: "The visual verification might not be accessible to you. We recommend you to use the audio verification instead. Important: after clicking play, you will hear 6 digits. Please wait until the audio finishes before typing or interacting with the page."
+    - generic [ref=f773e12]:
+      - generic [ref=f773e13]:
+        - generic [ref=f773e14]:
+          - button "Switch to the visual verification" [expanded] [ref=f773e15]
+          - button "Switch to the audio verification" [ref=f773e16]
+        - button "Reload the verification" [ref=f773e17]
+      - generic [ref=f773e18]:
+        - status [ref=f773e19]
+        - paragraph [ref=f773e23]: Slide right to secure your access
+      - generic [ref=f773e30]: No Internet access
+    - generic [ref=f773e32]:
+      - generic [ref=f773e33]:
+        - paragraph [ref=f773e34]: Why is this step needed?
+        - paragraph [ref=f773e35]: "We detected unusual activity from your device or network. Reasons may include:"
+        - list [ref=f773e36]:
+          - listitem [ref=f773e37]: "- Rapid taps or clicks"
+          - listitem [ref=f773e38]: "- JavaScript disabled or not working"
+          - listitem [ref=f773e39]: "- Automated (bot) activity on your network (IP 160.34.113.84)"
+          - listitem [ref=f773e40]: "- Use of developer or inspection tools"
+      - generic [ref=f773e41]:
+        - paragraph [ref=f773e42]:
+          - text: Need help?
+          - button "Submit feedback." [ref=f773e43] [cursor=pointer]
+        - paragraph [ref=f773e44]: "ID: d7876f58-2698-17b6-c2dc-574efd55bdf9"

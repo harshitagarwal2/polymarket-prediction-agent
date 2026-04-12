@@ -1,0 +1,2166 @@
+- generic [ref=e1]:
+  - banner "Site header" [ref=e2]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - link "Skip navigation" [ref=e7] [cursor=pointer]:
+          - /url: "#ariaSkipNav"
+        - generic [ref=e8]:
+          - button "Open Menu Navigation" [ref=e9] [cursor=pointer]:
+            - img [ref=e10]
+          - navigation "Menu" [ref=e14]:
+            - button "Close navigation menu" [ref=e16] [cursor=pointer]:
+              - img [ref=e17]
+            - generic [ref=e19]:
+              - generic [ref=e20]: Menu
+              - list [ref=e21]:
+                - listitem [ref=e22]:
+                  - generic [ref=e23]:
+                    - button "Find a Doctor" [ref=e24] [cursor=pointer]:
+                      - generic [ref=e25]: Find a Doctor
+                      - img [ref=e26]
+                    - generic [ref=e29]:
+                      - generic [ref=e30]:
+                        - button "Back to previous menu" [ref=e31] [cursor=pointer]:
+                          - img [ref=e32]
+                        - text: Find a Doctor
+                      - list [ref=e34]:
+                        - listitem [ref=e35]:
+                          - link "Find a Doctor Home" [ref=e36] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/find-a-doctor
+                        - listitem [ref=e37]:
+                          - generic [ref=e38]:
+                            - button "Find Doctors by Specialty" [ref=e39] [cursor=pointer]:
+                              - generic [ref=e40]: Find Doctors by Specialty
+                              - img [ref=e41]
+                            - generic [ref=e44]:
+                              - generic [ref=e45]:
+                                - button "Back to previous menu" [ref=e46] [cursor=pointer]:
+                                  - img [ref=e47]
+                                - text: Find Doctors by Specialty
+                              - list [ref=e49]:
+                                - listitem [ref=e50]:
+                                  - link "Family Medicine" [ref=e51] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/family-practice-directory
+                                - listitem [ref=e52]:
+                                  - link "Internal Medicine" [ref=e53] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/internal-medicine-directory
+                                - listitem [ref=e54]:
+                                  - link "Obstetrics & Gynecology" [ref=e55] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/obstetrics-gynecology-directory
+                                - listitem [ref=e56]:
+                                  - link "Dentistry" [ref=e57] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/dentistry-general-directory
+                                - listitem [ref=e58]:
+                                  - link "Orthopedic Surgery" [ref=e59] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/orthopedic-surgery-directory
+                                - listitem [ref=e60]:
+                                  - link "See All Specialities" [ref=e61] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/specialty-directory
+                        - listitem [ref=e62]:
+                          - generic [ref=e63]:
+                            - button "Find Doctors by Condition" [ref=e64] [cursor=pointer]:
+                              - generic [ref=e65]: Find Doctors by Condition
+                              - img [ref=e66]
+                            - generic [ref=e69]:
+                              - generic [ref=e70]:
+                                - button "Back to previous menu" [ref=e71] [cursor=pointer]:
+                                  - img [ref=e72]
+                                - text: Find Doctors by Condition
+                              - list [ref=e74]:
+                                - listitem [ref=e75]:
+                                  - link "Fibromyalgia" [ref=e76] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Fibromyalgia
+                                - listitem [ref=e77]:
+                                  - link "Anxiety" [ref=e78] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Anxiety
+                                - listitem [ref=e79]:
+                                  - link "ADHD" [ref=e80] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Attention%20Deficit%20Hyperactivity%20Disorder%20(ADHD)&entityCode=1673&searchType=Condition
+                                - listitem [ref=e81]:
+                                  - link "Sleep Apnea" [ref=e82] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Sleep%20Apnea
+                                - listitem [ref=e83]:
+                                  - link "Migraine" [ref=e84] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Migraine
+                        - listitem [ref=e85]:
+                          - generic [ref=e86]:
+                            - button "Find Doctors by Procedure" [ref=e87] [cursor=pointer]:
+                              - generic [ref=e88]: Find Doctors by Procedure
+                              - img [ref=e89]
+                            - generic [ref=e92]:
+                              - generic [ref=e93]:
+                                - button "Back to previous menu" [ref=e94] [cursor=pointer]:
+                                  - img [ref=e95]
+                                - text: Find Doctors by Procedure
+                              - list [ref=e97]:
+                                - listitem [ref=e98]:
+                                  - link "Pain Management" [ref=e99] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Pain%20Management
+                                - listitem [ref=e100]:
+                                  - link "Orthopedic Spine Surgery" [ref=e101] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Orthopedic%20Spine%20Surgery
+                                - listitem [ref=e102]:
+                                  - link "Marriage Counseling" [ref=e103] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Marriage%20Counseling
+                                - listitem [ref=e104]:
+                                  - link "Hernia Repair" [ref=e105] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Hernia%20Repair
+                                - listitem [ref=e106]:
+                                  - link "Colonoscopy" [ref=e107] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?what=Colonoscopy
+                        - listitem [ref=e108]:
+                          - link "Find a Doctor by Insurance" [ref=e109] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/insurance-search
+                        - listitem [ref=e110]:
+                          - link "Review Your Doctor" [ref=e111] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/doctor-reviews
+                - listitem [ref=e112]:
+                  - generic [ref=e113]:
+                    - button "Find a Facility" [ref=e114] [cursor=pointer]:
+                      - generic [ref=e115]: Find a Facility
+                      - img [ref=e116]
+                    - generic [ref=e119]:
+                      - generic [ref=e120]:
+                        - button "Back to previous menu" [ref=e121] [cursor=pointer]:
+                          - img [ref=e122]
+                        - text: Find a Facility
+                      - list [ref=e124]:
+                        - listitem [ref=e125]:
+                          - generic [ref=e126]:
+                            - button "Top Hospitals by Specialty" [ref=e127] [cursor=pointer]:
+                              - generic [ref=e128]: Top Hospitals by Specialty
+                              - img [ref=e129]
+                            - generic [ref=e132]:
+                              - generic [ref=e133]:
+                                - button "Back to previous menu" [ref=e134] [cursor=pointer]:
+                                  - img [ref=e135]
+                                - text: Top Hospitals by Specialty
+                              - list [ref=e137]:
+                                - listitem [ref=e138]:
+                                  - link "Appendectomy" [ref=e139] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?category=Facility&FacilityRating=Appendectomy%7CAPP
+                                - listitem [ref=e140]:
+                                  - link "Back and Neck Surgery (Except Spinal Fusion)" [ref=e141] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?category=Facility&FacilityRating=Back%20and%20Neck%20Surgeries%20(without%20Spinal%20Fusion)%7CBAK
+                                - listitem [ref=e142]:
+                                  - link "Bariatric Surgery" [ref=e143] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?category=Facility&FacilityRating=Bariatric%20Surgery%7CBAR
+                                - listitem [ref=e144]:
+                                  - link "Carotid Surgery" [ref=e145] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?category=Facility&FacilityRating=Carotid%20Procedures%7CCAR
+                                - listitem [ref=e146]:
+                                  - link "See All" [ref=e147] [cursor=pointer]:
+                                    - /url: https://www.healthgrades.com/usearch?category=Facility
+                        - listitem [ref=e148]:
+                          - link "Find a Hospital" [ref=e149] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/find-a-hospital
+                        - listitem [ref=e150]:
+                          - link "Find a Group Practice" [ref=e151] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/find-a-group-practice
+                        - listitem [ref=e152]:
+                          - link "Find a Pharmacy" [ref=e153] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/find-a-pharmacy
+                        - listitem [ref=e154]:
+                          - link "Find an Urgent Care" [ref=e155] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/find-an-urgent-care
+                - listitem [ref=e156]:
+                  - generic [ref=e157]:
+                    - button "Hospital Awards & Ratings" [ref=e158] [cursor=pointer]:
+                      - generic [ref=e159]: Hospital Awards & Ratings
+                      - img [ref=e160]
+                    - generic [ref=e163]:
+                      - generic [ref=e164]:
+                        - button "Back to previous menu" [ref=e165] [cursor=pointer]:
+                          - img [ref=e166]
+                        - text: Hospital Awards & Ratings
+                      - list [ref=e168]:
+                        - listitem [ref=e169]:
+                          - link "Hospital Awards & Ratings Home" [ref=e170] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/quality/hospital-ratings-awards
+                        - listitem [ref=e171]:
+                          - link "America's Best Hospitals" [ref=e172] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/quality/americas-best-hospitals
+                        - listitem [ref=e173]:
+                          - link "Specialty Excellence" [ref=e174] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/quality/specialty-excellence-americas-best-care
+                        - listitem [ref=e175]:
+                          - link "Ob-Gyn Care" [ref=e176] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/quality/ob-gyn-care-excellence-awards
+                        - listitem [ref=e177]:
+                          - link "Outstanding Patient Experience" [ref=e178] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/quality/outstanding-patient-experience-award
+                        - listitem [ref=e179]:
+                          - link "Patient Safety Excellence" [ref=e180] [cursor=pointer]:
+                            - /url: https://www.healthgrades.com/quality/patient-safety-excellence-award
+                - listitem [ref=e181]:
+                  - generic [ref=e182]:
+                    - button "Health A to Z" [ref=e183] [cursor=pointer]:
+                      - generic [ref=e184]: Health A to Z
+                      - img [ref=e185]
+                    - generic [ref=e188]:
+                      - generic [ref=e189]:
+                        - button "Back to previous menu" [ref=e190] [cursor=pointer]:
+                          - img [ref=e191]
+                        - text: Health A to Z
+                      - list [ref=e193]:
+                        - listitem [ref=e194]:
+                          - link "Health A to Z Home" [ref=e195] [cursor=pointer]:
+                            - /url: https://resources.healthgrades.com/
+                        - listitem [ref=e196]:
+                          - generic [ref=e197]:
+                            - button "Learn About Conditions" [ref=e198] [cursor=pointer]:
+                              - generic [ref=e199]: Learn About Conditions
+                              - img [ref=e200]
+                            - generic [ref=e203]:
+                              - generic [ref=e204]:
+                                - button "Back to previous menu" [ref=e205] [cursor=pointer]:
+                                  - img [ref=e206]
+                                - text: Learn About Conditions
+                              - list [ref=e208]:
+                                - listitem [ref=e209]:
+                                  - link "Back Pain" [ref=e210] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/back-pain
+                                - listitem [ref=e211]:
+                                  - link "Cancer" [ref=e212] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/cancer
+                                - listitem [ref=e213]:
+                                  - link "Diabetes" [ref=e214] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/diabetes
+                                - listitem [ref=e215]:
+                                  - link "High Blood Pressure" [ref=e216] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/high-blood-pressure
+                                - listitem [ref=e217]:
+                                  - link "Skin Conditions" [ref=e218] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/skin-hair-and-nails
+                                - listitem [ref=e219]:
+                                  - link "See All Conditions" [ref=e220] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/symptoms-and-conditions
+                        - listitem [ref=e221]:
+                          - generic [ref=e222]:
+                            - button "Learn About Procedures" [ref=e223] [cursor=pointer]:
+                              - generic [ref=e224]: Learn About Procedures
+                              - img [ref=e225]
+                            - generic [ref=e228]:
+                              - generic [ref=e229]:
+                                - button "Back to previous menu" [ref=e230] [cursor=pointer]:
+                                  - img [ref=e231]
+                                - text: Learn About Procedures
+                              - list [ref=e233]:
+                                - listitem [ref=e234]:
+                                  - link "Angioplasty" [ref=e235] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/angioplasty
+                                - listitem [ref=e236]:
+                                  - link "Cataract Surgery" [ref=e237] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/cataract-surgery/cataract-surgery
+                                - listitem [ref=e238]:
+                                  - link "Knee Replacement" [ref=e239] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/knee-replacement
+                                - listitem [ref=e240]:
+                                  - link "Mohs Surgery" [ref=e241] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/mohs-surgery/mohs-surgery
+                                - listitem [ref=e242]:
+                                  - link "Shoulder Surgery" [ref=e243] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/shoulder-surgery/shoulder-surgery
+                                - listitem [ref=e244]:
+                                  - link "See All Procedures" [ref=e245] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/procedures-index
+                        - listitem [ref=e246]:
+                          - generic [ref=e247]:
+                            - button "Appointment Guides" [ref=e248] [cursor=pointer]:
+                              - generic [ref=e249]: Appointment Guides
+                              - img [ref=e250]
+                            - generic [ref=e253]:
+                              - generic [ref=e254]:
+                                - button "Back to previous menu" [ref=e255] [cursor=pointer]:
+                                  - img [ref=e256]
+                                - text: Appointment Guides
+                              - list [ref=e258]:
+                                - listitem [ref=e259]:
+                                  - link "Asthma" [ref=e260] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/asthma/asthma-appointment-guide
+                                - listitem [ref=e261]:
+                                  - link "COPD" [ref=e262] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/copd/copd-appointment-guide
+                                - listitem [ref=e263]:
+                                  - link "Depression" [ref=e264] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/depression/depression-appointment-guide
+                                - listitem [ref=e265]:
+                                  - link "Psoriasis" [ref=e266] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/psoriasis/psoriasis-appointment-guide
+                                - listitem [ref=e267]:
+                                  - link "Rheumatoid Arthritis" [ref=e268] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/rheumatoid-arthritis/rheumatoid-arthritis-appointment-guide
+                                - listitem [ref=e269]:
+                                  - link "See All Appointment Guides" [ref=e270] [cursor=pointer]:
+                                    - /url: https://resources.healthgrades.com/right-care/appointment-guides
+                        - listitem [ref=e271]:
+                          - link "Explore Medicare" [ref=e272] [cursor=pointer]:
+                            - /url: https://resources.healthgrades.com/right-care/medicare
+                        - listitem [ref=e273]:
+                          - link "Drugs A-Z" [ref=e274] [cursor=pointer]:
+                            - /url: https://resources.healthgrades.com/drugs
+                        - listitem [ref=e275]:
+                          - link "Trending Videos" [ref=e276] [cursor=pointer]:
+                            - /url: https://resources.healthgrades.com/video
+                - listitem [ref=e277]:
+                  - link "Log in to your Healthgrades account" [ref=e278] [cursor=pointer]:
+                    - /url: /account/login
+                    - text: Healthgrades Account Sign In
+                - listitem [ref=e279]:
+                  - link "View Healthgrades for Professionals" [ref=e280] [cursor=pointer]:
+                    - /url: //update.healthgrades.com/?pCID=hg-dotc-header
+                    - text: Healthgrades for Professionals
+        - link "Healthgrades Home" [ref=e282] [cursor=pointer]:
+          - /url: /
+          - img [ref=e283]
+        - search [ref=e289]:
+          - generic [ref=e291]:
+            - generic [ref=e292]:
+              - generic [ref=e294]:
+                - generic [ref=e296]: Search
+                - combobox "Search" [ref=e297]
+              - generic [ref=e299]:
+                - generic [ref=e301]: Location
+                - combobox "Location" [ref=e302]: San Jose, CA
+                - button "Clear Location Input Value" [ref=e303] [cursor=pointer]:
+                  - img [ref=e304]
+            - button "Search" [ref=e306] [cursor=pointer]:
+              - img [ref=e307]
+        - link "Learn more about Healthgrades for Professionals" [ref=e309] [cursor=pointer]:
+          - /url: /pro?pwid=3g34m&pCID=hg-profile-header
+          - img [ref=e311]
+          - generic [ref=e315]: Healthgrades for Professionals
+        - link "Account sign in/sign up" [ref=e316] [cursor=pointer]:
+          - /url: /account/login
+          - img [ref=e317]
+          - generic [ref=e321]: Account Sign In
+  - img "background desktop" [ref=e323]
+  - generic [ref=e325]:
+    - generic [ref=e326]: Are you a healthcare professional?
+    - generic [ref=e327]:
+      - button "Yes, Claim your profile" [ref=e328] [cursor=pointer]
+      - button "No" [ref=e329] [cursor=pointer]
+    - img [ref=e331]
+    - button "close" [ref=e357] [cursor=pointer]:
+      - img [ref=e358]
+  - generic [ref=e360]:
+    - generic [ref=e361]:
+      - generic [ref=e362]:
+        - navigation "breadcrumb" [ref=e363]:
+          - list "breadcrumb" [ref=e366]:
+            - listitem [ref=e367]:
+              - link "Pulmonologists" [ref=e368] [cursor=pointer]:
+                - /url: /pulmonology-directory
+              - img [ref=e369]
+            - listitem [ref=e371]:
+              - link "CA" [ref=e372] [cursor=pointer]:
+                - /url: /pulmonology-directory/ca-california
+              - img [ref=e373]
+            - listitem [ref=e375]:
+              - link "Milpitas, CA" [ref=e376] [cursor=pointer]:
+                - /url: /pulmonology-directory/ca-california/milpitas
+              - img [ref=e377]
+            - listitem [ref=e379]:
+              - generic [ref=e380]: Dr. Sanjay Agarwal, MD
+        - generic [ref=e381]:
+          - img "provider image" [ref=e384]
+          - generic [ref=e385]:
+            - generic [ref=e387]:
+              - heading "Dr. Sanjay Agarwal, MD" [level=1] [ref=e388]
+              - heading "Pulmonary Disease" [level=2] [ref=e389]
+            - generic [ref=e391]:
+              - generic [ref=e392]:
+                - generic [ref=e393]:
+                  - generic [ref=e394]: 4.1 Star Rating
+                  - img "Rated 4 out of 5" [ref=e396] [cursor=pointer]:
+                    - generic [ref=e397]:
+                      - img [ref=e398]
+                      - img [ref=e400]
+                      - img [ref=e402]
+                      - img [ref=e404]
+                      - img [ref=e406]
+                    - generic [ref=e408]:
+                      - img [ref=e409]
+                      - img [ref=e411]
+                      - img [ref=e413]
+                      - img [ref=e415]
+                - generic [ref=e417]:
+                  - generic [ref=e418]: Based on 37 reviews
+                  - button "Show Ratings Breakdown" [ref=e420] [cursor=pointer]:
+                    - img [ref=e421]
+              - generic [ref=e423]:
+                - button "Review" [ref=e424] [cursor=pointer]:
+                  - img [ref=e426]
+                  - generic [ref=e428]: Review
+                - button "Save provider to your account" [ref=e430] [cursor=pointer]:
+                  - img [ref=e432]
+                  - text: Save
+        - generic [ref=e434]:
+          - paragraph [ref=e436]: Dr. Sanjay Agarwal, MD is a pulmonologist in Milpitas, CA. Dr. Agarwal has extensive experience in Interstitial Lung Disease and Obstructive Lung Disease. He is affiliated with Good Samaritan Hospital. He is accepting new patients and telehealth appointments.
+          - generic [ref=e437]:
+            - generic [ref=e438]:
+              - heading "Comprehensive Sleep Center" [level=3] [ref=e439]
+              - generic [ref=e440]: 995 Montague Expy Ste 218 · Milpitas, CA 95035
+            - button "Show Phone Number" [ref=e443] [cursor=pointer]
+            - generic [ref=e444]:
+              - complementary [ref=e446]:
+                - text: ADVERTISEMENT
+                - iframe [ref=e448]:
+                  - iframe [ref=f14e6]:
+                    - insertion [ref=f29e2]:
+                      - iframe [ref=f29e4]:
+                        - generic [active]:
+                          - link "___" [ref=f35e1] [cursor=pointer]:
+                            - /url: "#"
+                          - generic [ref=f35e5]:
+                            - iframe [ref=f35e8]:
+                              - generic [active] [ref=f45e1]:
+                                - generic [ref=f45e3] [cursor=pointer]:
+                                  - img [ref=f45e10]
+                                  - generic [ref=f45e12]:
+                                    - img [ref=f45e14]
+                                    - img [ref=f45e17]
+                                    - img [ref=f45e20]
+                                - img [ref=f45e26] [cursor=pointer]
+                            - generic [ref=f35e9]:
+                              - generic:
+                                - img [ref=f35e13] [cursor=pointer]
+                                - button [ref=f35e16] [cursor=pointer]:
+                                  - img [ref=f35e17]
+                          - iframe
+              - button "Close Ad" [ref=e449] [cursor=pointer]:
+                - img [ref=e450]
+      - navigation "Provider profile sections navigation":
+        - generic [ref=e457]:
+          - button "Overview" [ref=e458] [cursor=pointer]:
+            - generic [ref=e459]: Overview
+          - button "Experience" [ref=e460] [cursor=pointer]:
+            - generic [ref=e461]: Experience
+          - button "Ratings" [active] [ref=e462] [cursor=pointer]:
+            - generic [ref=e463]: Ratings
+          - button "About Me" [ref=e464] [cursor=pointer]:
+            - generic [ref=e465]: About Me
+          - button "Insurance" [ref=e466] [cursor=pointer]:
+            - generic [ref=e467]: Insurance
+          - button "Locations" [ref=e468] [cursor=pointer]:
+            - generic [ref=e469]: Locations
+          - button "Hospitals" [ref=e470] [cursor=pointer]:
+            - generic [ref=e471]: Hospitals
+      - generic [ref=e472]:
+        - generic [ref=e474]:
+          - text: ADVERTISEMENT
+          - generic [ref=e475]:
+            - generic [ref=e2161]:
+              - generic [ref=e2162]:
+                - generic [ref=e2163]:
+                  - paragraph [ref=e2164]: Compare Dr. Agarwal with Pulmonologists from
+                  - heading "Good Samaritan Hospital" [level=2] [ref=e2165]
+                - img "Good Samaritan Hospital" [ref=e2168]
+              - generic [ref=e2169]:
+                - paragraph [ref=e2170]: Make an appointment at Good Samaritan Hospital today at
+                - link "(408) 692-3091" [ref=e2171] [cursor=pointer]:
+                  - /url: tel:(408) 692-3091
+            - generic [ref=e487]:
+              - generic [ref=e488]:
+                - button "Dr. Pranjal Patel, MD profile photo Dr. Pranjal Patel, MD Practices at Top Hospital Rated 0 out of 5 0 Ratings View profile" [ref=e489] [cursor=pointer]:
+                  - generic [ref=e490]:
+                    - img "Dr. Pranjal Patel, MD profile photo" [ref=e491]
+                    - generic [ref=e492]:
+                      - heading "Dr. Pranjal Patel, MD" [level=3] [ref=e493]
+                      - generic [ref=e495]:
+                        - img [ref=e498]
+                        - generic [ref=e503]: Practices at Top Hospital
+                      - generic [ref=e504]:
+                        - generic [ref=e506]:
+                          - img "Rated 0 out of 5" [ref=e507]:
+                            - generic [ref=e508]:
+                              - img [ref=e509]
+                              - img [ref=e511]
+                              - img [ref=e513]
+                              - img [ref=e515]
+                              - img [ref=e517]
+                          - generic [ref=e519]: 0 Ratings
+                        - button "View profile" [ref=e521]
+                - button "Dr. Jeffrey Marcus, MD profile photo Dr. Jeffrey Marcus, MD Explains Conditions Well Rated 4 out of 5 3 Ratings View profile" [ref=e522] [cursor=pointer]:
+                  - generic [ref=e523]:
+                    - img "Dr. Jeffrey Marcus, MD profile photo" [ref=e524]
+                    - generic [ref=e525]:
+                      - heading "Dr. Jeffrey Marcus, MD" [level=3] [ref=e526]
+                      - generic [ref=e528]:
+                        - img [ref=e531]
+                        - generic [ref=e533]: Explains Conditions Well
+                      - generic [ref=e534]:
+                        - generic [ref=e536]:
+                          - img "Rated 4 out of 5" [ref=e537]:
+                            - generic [ref=e538]:
+                              - img [ref=e539]
+                              - img [ref=e541]
+                              - img [ref=e543]
+                              - img [ref=e545]
+                              - img [ref=e547]
+                            - generic [ref=e549]:
+                              - img [ref=e550]
+                              - img [ref=e552]
+                              - img [ref=e554]
+                              - img [ref=e556]
+                          - generic [ref=e558]: 3 Ratings
+                        - button "View profile" [ref=e560]
+                - button "Dr. Paul Huang, MD profile photo Dr. Paul Huang, MD Explains Conditions Well Rated 4 out of 5 27 Ratings View profile" [ref=e561] [cursor=pointer]:
+                  - generic [ref=e562]:
+                    - img "Dr. Paul Huang, MD profile photo" [ref=e563]
+                    - generic [ref=e564]:
+                      - heading "Dr. Paul Huang, MD" [level=3] [ref=e565]
+                      - generic [ref=e567]:
+                        - img [ref=e570]
+                        - generic [ref=e572]: Explains Conditions Well
+                      - generic [ref=e573]:
+                        - generic [ref=e575]:
+                          - img "Rated 4 out of 5" [ref=e576]:
+                            - generic [ref=e577]:
+                              - img [ref=e578]
+                              - img [ref=e580]
+                              - img [ref=e582]
+                              - img [ref=e584]
+                              - img [ref=e586]
+                            - generic [ref=e588]:
+                              - img [ref=e589]
+                              - img [ref=e591]
+                              - img [ref=e593]
+                              - img [ref=e595]
+                          - generic [ref=e597]: 27 Ratings
+                        - button "View profile" [ref=e599]
+                - button "Dr. Msalam Sara, MD profile photo Dr. Msalam Sara, MD Explains Conditions Well Rated 5 out of 5 4 Ratings View profile" [ref=e600] [cursor=pointer]:
+                  - generic [ref=e601]:
+                    - img "Dr. Msalam Sara, MD profile photo" [ref=e602]
+                    - generic [ref=e603]:
+                      - heading "Dr. Msalam Sara, MD" [level=3] [ref=e604]
+                      - generic [ref=e606]:
+                        - img [ref=e609]
+                        - generic [ref=e611]: Explains Conditions Well
+                      - generic [ref=e612]:
+                        - generic [ref=e614]:
+                          - img "Rated 5 out of 5" [ref=e615]:
+                            - generic [ref=e616]:
+                              - img [ref=e617]
+                              - img [ref=e619]
+                              - img [ref=e621]
+                              - img [ref=e623]
+                              - img [ref=e625]
+                            - generic [ref=e627]:
+                              - img [ref=e628]
+                              - img [ref=e630]
+                              - img [ref=e632]
+                              - img [ref=e634]
+                              - img [ref=e636]
+                          - generic [ref=e638]: 4 Ratings
+                        - button "View profile" [ref=e640]
+                - button "Dr. Harmeet Bedi, MD profile photo Dr. Harmeet Bedi, MD Practices at Top Hospital Rated 0 out of 5 0 Ratings View profile" [ref=e641] [cursor=pointer]:
+                  - generic [ref=e642]:
+                    - img "Dr. Harmeet Bedi, MD profile photo" [ref=e643]
+                    - generic [ref=e644]:
+                      - heading "Dr. Harmeet Bedi, MD" [level=3] [ref=e645]
+                      - generic [ref=e647]:
+                        - img [ref=e650]
+                        - generic [ref=e655]: Practices at Top Hospital
+                      - generic [ref=e656]:
+                        - generic [ref=e658]:
+                          - img "Rated 0 out of 5" [ref=e659]:
+                            - generic [ref=e660]:
+                              - img [ref=e661]
+                              - img [ref=e663]
+                              - img [ref=e665]
+                              - img [ref=e667]
+                              - img [ref=e669]
+                          - generic [ref=e671]: 0 Ratings
+                        - button "View profile" [ref=e673]
+                - button "Dr. Minhtruong Lai, MD profile photo Dr. Minhtruong Lai, MD Explains Conditions Well Rated 4.5 out of 5 7 Ratings View profile" [ref=e674] [cursor=pointer]:
+                  - generic [ref=e675]:
+                    - img "Dr. Minhtruong Lai, MD profile photo" [ref=e676]
+                    - generic [ref=e677]:
+                      - heading "Dr. Minhtruong Lai, MD" [level=3] [ref=e678]
+                      - generic [ref=e680]:
+                        - img [ref=e683]
+                        - generic [ref=e685]: Explains Conditions Well
+                      - generic [ref=e686]:
+                        - generic [ref=e688]:
+                          - img "Rated 4.5 out of 5" [ref=e689]:
+                            - generic [ref=e690]:
+                              - img [ref=e691]
+                              - img [ref=e693]
+                              - img [ref=e695]
+                              - img [ref=e697]
+                              - img [ref=e699]
+                            - generic [ref=e701]:
+                              - img [ref=e702]
+                              - img [ref=e704]
+                              - img [ref=e706]
+                              - img [ref=e708]
+                              - img [ref=e710]
+                          - generic [ref=e712]: 7 Ratings
+                        - button "View profile" [ref=e714]
+              - button "Show more providers" [ref=e715] [cursor=pointer]:
+                - text: Show more providers
+                - img [ref=e716]
+        - generic [ref=e718]:
+          - heading "Highlights" [level=2] [ref=e719]
+          - generic [ref=e720]:
+            - generic [ref=e721]:
+              - img [ref=e724]
+              - generic [ref=e727]: Dr. Agarwal specializes in the areas of Critical Care Medicine, Pulmonary Disease & Sleep Medicine
+            - generic [ref=e728]:
+              - generic [ref=e729]:
+                - img [ref=e732]
+                - text: Explains Conditions Well
+              - generic [ref=e734]:
+                - img [ref=e737]
+                - text: Friendly Staff
+              - generic [ref=e739]:
+                - img [ref=e742]
+                - text: Easy Scheduling
+              - generic [ref=e746]:
+                - img [ref=e749]
+                - text: Telehealth Available
+              - generic [ref=e754]:
+                - img [ref=e757]
+                - text: Practices at Top Hospital
+        - generic [ref=e762]:
+          - heading "Experience" [level=2] [ref=e763]:
+            - text: Experience
+            - img [ref=e764]
+          - heading "Search for Dr. Agarwal's experience in a specific area" [level=3] [ref=e766]
+          - generic [ref=e768]:
+            - img [ref=e769]
+            - generic [ref=e771]: Condition or Procedure
+            - textbox "Experience Check" [ref=e772]:
+              - /placeholder: Enter your condition or procedure
+          - heading "What Dr. Agarwal treats most often" [level=3] [ref=e774]
+          - generic [ref=e775]:
+            - generic [ref=e776]:
+              - generic [ref=e777]: Based on treatment records, we have identified the following as areas of care that Dr. Agarwal treats most frequently.
+              - generic [ref=e778]: Treatment Frequency
+            - generic [ref=e779]:
+              - generic [ref=e780]:
+                - button "toggle content display" [ref=e781] [cursor=pointer]:
+                  - img [ref=e783]
+                  - heading "Shortness of Breath" [level=3] [ref=e785]
+                  - generic [ref=e786]:
+                    - generic [ref=e787]: very high
+                    - img [ref=e788]
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - paragraph: Dr. Agarwal treats Shortness of Breath much more often than similar providers.
+                              - generic:
+                                - img
+                      - generic:
+                        - generic:
+                          - link "Log-in to compare providers with MyHealthMatch":
+                            - /url: https://www.healthgrades.com/account/login
+                            - generic: Log-in to compare providers with MyHealthMatch
+                            - generic:
+                              - img
+                          - link "Learn more about Shortness of Breath":
+                            - /url: /symptoms/shortness-of-breath
+                            - generic: Learn more about Shortness of Breath
+                            - generic:
+                              - img
+              - generic [ref=e791]:
+                - button "toggle content display" [ref=e792] [cursor=pointer]:
+                  - img [ref=e794]
+                  - heading "Sleep Apnea" [level=3] [ref=e796]
+                  - generic [ref=e797]:
+                    - generic [ref=e798]: high
+                    - img [ref=e799]
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - paragraph: Dr. Agarwal treats Sleep Apnea more often than similar providers.
+                              - generic:
+                                - img
+                      - generic:
+                        - generic:
+                          - link "Log-in to compare providers with MyHealthMatch":
+                            - /url: https://www.healthgrades.com/account/login
+                            - generic: Log-in to compare providers with MyHealthMatch
+                            - generic:
+                              - img
+                          - link "Learn more about Sleep Apnea":
+                            - /url: /conditions/sleep-apnea
+                            - generic: Learn more about Sleep Apnea
+                            - generic:
+                              - img
+              - generic [ref=e802]:
+                - button "toggle content display" [ref=e803] [cursor=pointer]:
+                  - img [ref=e805]
+                  - heading "Tuberculosis" [level=3] [ref=e807]
+                  - generic [ref=e808]:
+                    - generic [ref=e809]: high
+                    - img [ref=e810]
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - paragraph: Dr. Agarwal treats Tuberculosis more often than similar providers.
+                              - generic:
+                                - img
+                      - generic:
+                        - generic:
+                          - link "Log-in to compare providers with MyHealthMatch":
+                            - /url: https://www.healthgrades.com/account/login
+                            - generic: Log-in to compare providers with MyHealthMatch
+                            - generic:
+                              - img
+                          - link "Learn more about Tuberculosis":
+                            - /url: /conditions/tuberculosis
+                            - generic: Learn more about Tuberculosis
+                            - generic:
+                              - img
+            - button "See more" [ref=e814] [cursor=pointer]:
+              - text: See more
+              - img [ref=e815]
+          - link "Learn more about experience and why treatment frequency matters" [ref=e818] [cursor=pointer]:
+            - /url: https://helpcenter.healthgrades.com/about-my-profile/experience-check
+            - text: Learn more about experience and why treatment frequency matters
+            - img [ref=e819]
+          - generic [ref=e821]:
+            - paragraph [ref=e822]: "Dr. Agarwal's conditions and procedures:"
+            - list [ref=e823]:
+              - listitem: Shortness of Breath
+              - listitem: Sleep Apnea
+              - listitem: Tuberculosis
+              - listitem: Bronchiolitis
+              - listitem: Acute Bronchitis
+              - listitem: Acute Lower Respiratory Infection
+              - listitem: Acute Bronchiolitis
+              - listitem: Bronchitis
+              - listitem: Sleep Study
+              - listitem: Bronchoscopy
+              - listitem: COPD (Chronic Obstructive Pulmonary Disease)
+              - listitem: Interstitial Lung Disease
+              - listitem: Respiratory Failure
+              - listitem: Asthma
+              - listitem: Pleural Effusion
+              - listitem: Pulmonary Rehabilitation Services
+              - listitem: Bronchiectasis
+              - listitem: Emphysema
+              - listitem: Influenza (Flu)
+              - listitem: Mild Asthma
+              - listitem: Pneumonitis
+              - listitem: Pneumonia
+              - listitem: Pulmonary Hypertension
+              - listitem: Chronic Pulmonary Heart Diseases (incl. Pulmonary Hypertension)
+              - listitem: Asphyxia and Hypoxemia
+              - listitem: Hypoxemia
+              - listitem: Chest Pain
+              - listitem: Severe Asthma
+              - listitem: Acidosis
+              - listitem: Acute Deep Vein Thrombosis (DVT)
+              - listitem: Acute Pharyngitis
+              - listitem: Acute Upper Respiratory Infection
+              - listitem: Acute Venous Embolism Thrombosis
+              - listitem: Asbestosis
+              - listitem: Aspergillosis
+              - listitem: Benign Lung Neoplasms
+              - listitem: Bronchopulmonary Aspergillosis
+              - listitem: Bronchospasm
+              - listitem: Chronic Bronchiolitis
+              - listitem: Chronic Bronchitis
+              - listitem: Chronic Deep Vein Thrombosis (DVT)
+              - listitem: Chronic Pulmonary Embolism
+              - listitem: Chronic Sinusitis
+              - listitem: Chronic Venous Embolism Thrombosis
+              - listitem: Collapsed Lung (Pneumothorax)
+              - listitem: Exercise Induced Asthma
+              - listitem: Hypersensitivity Pneumonitis
+              - listitem: Long COVID Disorder
+              - listitem: Lymphangioma
+              - listitem: Metastatic Respiratory System Cancer
+              - listitem: Moderate Asthma
+              - listitem: Mycobacterial Lung Infection
+              - listitem: Pneumoconiosis and Pneumonopathy
+              - listitem: Primary Pulmonary Hypertension
+              - listitem: Pulmonary Edema
+              - listitem: Pulmonary Embolism
+              - listitem: Pulmonary Insufficiency
+              - listitem: Rheumatoid Lung Disease
+              - listitem: Sarcoidosis
+              - listitem: Scleroderma
+              - listitem: Spontaneous Pneumothorax
+              - listitem: Wheezing
+              - listitem: Smoking Cessation Counseling
+              - listitem: Thoracentesis
+              - listitem: Abdominal Pain
+              - listitem: Acute Laryngitis
+              - listitem: Acute Lung Injuries
+              - listitem: Acute Respiratory Infection
+              - listitem: ADHD and-or ADD
+              - listitem: Advanced Sleep Phase Disorder
+              - listitem: Alkalosis
+              - listitem: All Headaches (incl. Migraine)
+              - listitem: Anemia
+              - listitem: Anxiety
+              - listitem: Appendicitis
+              - listitem: Arthritis
+              - listitem: Arthritis of the Elbow
+              - listitem: Atherosclerosis
+              - listitem: Back Pain
+              - listitem: Bedsores
+              - listitem: Benign Chronic Pain Syndrome
+              - listitem: Blood in Urine (Hematuria)
+              - listitem: Breast Cancer
+              - listitem: Breast Lump
+              - listitem: Cachexia
+              - listitem: Calcium Metabolism Disorders
+              - listitem: Cancer
+              - listitem: Candidiasis of Skin and Nails
+              - listitem: Cellulitis
+              - listitem: Cholecystitis and Gallstones
+              - listitem: Chronic Fatigue Syndrome
+              - listitem: Chronic Pain
+              - listitem: Confusion
+              - listitem: Constipation
+              - listitem: Cough
+              - listitem: Crohn's Disease
+              - listitem: Deep Vein Thrombosis (DVT)
+              - listitem: Dehydration
+              - listitem: Diabetes Type 1
+              - listitem: Diabetes Type 2
+              - listitem: Diabetes With Renal Manifestations
+              - listitem: Diabetic Polyneuropathy
+              - listitem: Diaphragmatic and Hiatal Hernia
+              - listitem: Diarrhea
+              - listitem: Difficulty With Walking
+              - listitem: Dry Skin
+              - listitem: Dyslipidemia
+              - listitem: Dysphagia
+              - listitem: Ear Ache
+              - listitem: Earwax Buildup
+              - listitem: Eczema and Contact Dermatitis
+              - listitem: Empyema
+              - listitem: Enlarged Prostate (BPH)
+              - listitem: Esophageal Diverticulum
+              - listitem: Esophagitis
+              - listitem: Farmer's Lung
+              - listitem: Fever
+              - listitem: Fungal Infections
+              - listitem: Gait Abnormality
+              - listitem: Gallstones
+              - listitem: Gastric Ulcer
+              - listitem: Gastritis
+              - listitem: Gastroesophageal Reflux Disease (GERD)
+              - listitem: Gout
+              - listitem: Headache
+              - listitem: Heart Disease
+              - listitem: Heart Palpitations
+              - listitem: Hemorrhoids
+              - listitem: Hiatal Hernia
+              - listitem: Histoplasmosis
+              - listitem: Human Immunodeficiency Virus (HIV)
+              - listitem: Hypercalcemia
+              - listitem: Hyperkalemia
+              - listitem: Hyperlipidemia
+              - listitem: Hypertension
+              - listitem: Hypokalemia
+              - listitem: Hypotension
+              - listitem: Hypotension (Excluding Maternal)
+              - listitem: Hypothyroidism
+              - listitem: Insomnia
+              - listitem: Intestinal Diverticulitis
+              - listitem: Intestinal Diverticulosis
+              - listitem: Joint Pain
+              - listitem: Laryngitis
+              - listitem: Leg and Foot Ulcers
+              - listitem: Limb Pain
+              - listitem: Limb Swelling Caused by Fluid Overload
+              - listitem: Lipid Disorders
+              - listitem: Lung Cancer
+              - listitem: Lung Nodule
+              - listitem: Magnesium Metabolism Disorders
+              - listitem: Malaise and Fatigue
+              - listitem: Malnutrition
+              - listitem: Mineral Metabolism Disorders
+              - listitem: Muscle Cramping
+              - listitem: Muscle Spasm
+              - listitem: Nasopharyngitis
+              - listitem: Nausea
+              - listitem: Nightmare Disorder
+              - listitem: Nighttime Urination (Nocturia)
+              - listitem: Non-Traumatic Brain Injury
+              - listitem: Noninfectious Gastroenteritis and Colitis
+              - listitem: Nosebleed
+              - listitem: Obesity
+              - listitem: Obstructive Sleep Apnea Syndrome
+              - listitem: Osteoarthritis
+              - listitem: Osteoarthritis of Foot
+              - listitem: Osteoarthritis of Knee
+              - listitem: Osteoarthritis of Shoulder
+              - listitem: Osteoarthritis of Spine
+              - listitem: Osteopenia
+              - listitem: Osteoporosis
+              - listitem: Overweight
+              - listitem: Partial Lung Collapse
+              - listitem: Peripheral Vascular Disease (PAD, PVD)
+              - listitem: Pneumonitis (Due to Solids or Liquids)
+              - listitem: Polyneuropathy
+              - listitem: Polyuria
+              - listitem: Primary Central Sleep Apnea
+              - listitem: Pulmonary Disease
+              - listitem: Pulmonary Eosinophilia
+              - listitem: Pulmonary Fibrosis
+              - listitem: Raynaud's Disease
+              - listitem: Reflux Esophagitis
+              - listitem: Restless Leg Syndrome
+              - listitem: Ruptured Aortic Aneurysm
+              - listitem: Sciatica
+              - listitem: Secondary Diabetes Mellitus
+              - listitem: Secondary Malignancies
+              - listitem: Sexually Transmitted Diseases (STDs)
+              - listitem: Sinus Bradycardia
+              - listitem: Sinus Tachycardia
+              - listitem: Sinusitis
+              - listitem: Sleep Disorders
+              - listitem: Sleep-Related Leg Cramp
+              - listitem: Tension Headache
+              - listitem: Testicular Cancer
+              - listitem: Thoracic Cancer
+              - listitem: Thrombosis
+              - listitem: Tinnitus
+              - listitem: Tobacco Use Disorder
+              - listitem: Traumatic Brain Injury (TBI)
+              - listitem: Urinary Tract Infection (UTI)
+              - listitem: Valley Fever
+              - listitem: Venous Embolism and Thrombosis
+              - listitem: Vitamin B Deficiency
+              - listitem: Wegener's Granulomatosis
+              - listitem: Acute Stroke Intervention
+              - listitem: Acute Stroke Therapy With Tissue Plasminogen Activator
+              - listitem: Airway Stenting
+              - listitem: Antibiotic Infusion
+              - listitem: Argon Laser Treatment
+              - listitem: Arterial Blood Gas Test (ABG)
+              - listitem: Arthrocentesis
+              - listitem: Bronchoprovocation Test
+              - listitem: Bronchoscopy with Robotic Assist
+              - listitem: Cardioverter-Defibrillator or Pacemaker Insertion, Removal or Repair
+              - listitem: Conscious Sedation
+              - listitem: Continuous Positive Airway Pressure (CPAP)
+              - listitem: Dialysis Catheter Placement
+              - listitem: Electrocardiogram (EKG)
+              - listitem: Endoscopic Biopsy Bronchus Robotic Assist
+              - listitem: Endotracheal Intubation
+              - listitem: Home Sleep Study
+              - listitem: Lumbar Puncture
+              - listitem: Lung Diffusion Capacity Test
+              - listitem: Mechanical Circulatory Support System
+              - listitem: Mechanical Ventilation
+              - listitem: Nebulizer Treatment
+              - listitem: Oximetry
+              - listitem: Pacemaker Implantation, Temporary
+              - listitem: PET-CT Scan
+              - listitem: Pulmonary Function Test
+              - listitem: Pulmonary Procedures
+              - listitem: Respirator Fit Evaluations
+              - listitem: Respiratory Management
+              - listitem: Right Heart Catheterization (Swan-Ganz)
+              - listitem: Tracheostomy
+              - listitem: Transbronchial Lung Biopsy
+              - listitem: Tuberculosis Screening
+              - listitem: Ultrasound, Endobronchial
+        - generic [ref=e824]:
+          - heading "Dr. Agarwal's Reviews" [level=2] [ref=e825]:
+            - text: Dr. Agarwal's Reviews
+            - img [ref=e826]
+          - generic [ref=e828]:
+            - generic [ref=e829]:
+              - generic [ref=e830]:
+                - heading "Likelihood to recommend Dr. Agarwal" [level=3] [ref=e831]
+                - generic [ref=e832]:
+                  - generic [ref=e834]:
+                    - strong [ref=e836]: "4.1"
+                    - generic [ref=e840]:
+                      - img "Rated 4 out of 5" [ref=e841]:
+                        - generic [ref=e842]:
+                          - img [ref=e843]
+                          - img [ref=e845]
+                          - img [ref=e847]
+                          - img [ref=e849]
+                          - img [ref=e851]
+                        - generic [ref=e853]:
+                          - img [ref=e854]
+                          - img [ref=e856]
+                          - img [ref=e858]
+                          - img [ref=e860]
+                      - generic [ref=e863]: 37 ratings, 23 with a written review
+                  - table [ref=e864]:
+                    - rowgroup [ref=e865]:
+                      - row "5 star 73% 73%" [ref=e866]:
+                        - cell "5 star" [ref=e867]
+                        - cell "73%" [ref=e868]:
+                          - generic [ref=e871]: 73%
+                        - cell "73%" [ref=e872]
+                      - row "4 star 5% 5%" [ref=e873]:
+                        - cell "4 star" [ref=e874]
+                        - cell "5%" [ref=e875]:
+                          - generic [ref=e878]: 5%
+                        - cell "5%" [ref=e879]
+                      - row "3 star 0% 0%" [ref=e880]:
+                        - cell "3 star" [ref=e881]
+                        - cell "0%" [ref=e882]:
+                          - generic [ref=e884]: 0%
+                        - cell "0%" [ref=e885]
+                      - row "2 star 0% 0%" [ref=e886]:
+                        - cell "2 star" [ref=e887]
+                        - cell "0%" [ref=e888]:
+                          - generic [ref=e890]: 0%
+                        - cell "0%" [ref=e891]
+                      - row "1 star 22% 22%" [ref=e892]:
+                        - cell "1 star" [ref=e893]
+                        - cell "22%" [ref=e894]:
+                          - generic [ref=e897]: 22%
+                        - cell "22%" [ref=e898]
+              - generic [ref=e899]:
+                - img "provider" [ref=e901]
+                - generic [ref=e902]:
+                  - heading "Leave a review" [level=3] [ref=e903]
+                  - generic [ref=e904]: How likely are you to recommend Dr. Agarwal?
+                  - generic [ref=e905]:
+                    - generic [ref=e906]:
+                      - generic [ref=e907] [cursor=pointer]:
+                        - generic [ref=e908]: Definitely Not
+                        - radio "Definitely Not" [ref=e909]
+                        - img [ref=e910]
+                      - generic [ref=e912] [cursor=pointer]:
+                        - generic [ref=e913]: "No"
+                        - radio "No" [ref=e914]
+                        - img [ref=e915]
+                      - generic [ref=e917] [cursor=pointer]:
+                        - generic [ref=e918]: Maybe
+                        - radio "Maybe" [ref=e919]
+                        - img [ref=e920]
+                      - generic [ref=e922] [cursor=pointer]:
+                        - generic [ref=e923]: "Yes"
+                        - radio "Yes" [ref=e924]
+                        - img [ref=e925]
+                      - generic [ref=e927] [cursor=pointer]:
+                        - generic [ref=e928]: Definitely
+                        - radio "Definitely" [ref=e929]
+                        - img [ref=e930]
+                    - generic [ref=e932]: Select Rating
+            - generic [ref=e935]:
+              - generic [ref=e936]:
+                - button "Toggle display of frequently asked questions" [ref=e937] [cursor=pointer]:
+                  - heading "Provider Feedback" [level=3] [ref=e938]
+                  - generic [ref=e939]: 85% positive
+                  - img [ref=e941]
+                - generic [ref=e943]:
+                  - generic [ref=e944]:
+                    - generic [ref=e945]: Explained conditions well
+                    - generic [ref=e946]:
+                      - generic [ref=e948]: 84.84848484848484%
+                      - generic [ref=e950]: 15.151515151515152%
+                    - generic [ref=e951]:
+                      - generic [ref=e952]: 28 agree
+                      - generic [ref=e953]: 5 disagree
+                  - generic [ref=e954]:
+                    - generic [ref=e955]: Listened & answered questions
+                    - generic [ref=e956]:
+                      - generic [ref=e958]: 81.81818181818183%
+                      - generic [ref=e960]: 18.181818181818183%
+                    - generic [ref=e961]:
+                      - generic [ref=e962]: 27 agree
+                      - generic [ref=e963]: 6 disagree
+                  - generic [ref=e964]:
+                    - generic [ref=e965]: Trusted the provider's decisions
+                    - generic [ref=e966]:
+                      - generic [ref=e968]: 83.33333333333334%
+                      - generic [ref=e970]: 16.666666666666664%
+                    - generic [ref=e971]:
+                      - generic [ref=e972]: 25 agree
+                      - generic [ref=e973]: 5 disagree
+                  - generic [ref=e974]:
+                    - generic [ref=e975]: Appointment wasn't rushed
+                    - generic [ref=e976]:
+                      - generic [ref=e978]: 92.5925925925926%
+                      - generic [ref=e980]: 7.4074074074074066%
+                    - generic [ref=e981]:
+                      - generic [ref=e982]: 25 agree
+                      - generic [ref=e983]: 2 disagree
+                  - generic [ref=e984]:
+                    - generic [ref=e985]: I felt respected
+                    - generic [ref=e986]:
+                      - generic [ref=e988]: 71.42857142857143%
+                      - generic [ref=e990]: 28.57142857142857%
+                    - generic [ref=e991]:
+                      - generic [ref=e992]: 5 agree
+                      - generic [ref=e993]: 2 disagree
+              - generic [ref=e994]:
+                - button "Toggle display of frequently asked questions" [ref=e995] [cursor=pointer]:
+                  - heading "Office + Staff Feedback" [level=3] [ref=e996]
+                  - generic [ref=e997]: 87% positive
+                  - img [ref=e999]
+                - generic [ref=e1001]:
+                  - generic [ref=e1002]:
+                    - generic [ref=e1003]: Staff friendliness
+                    - generic [ref=e1004]:
+                      - generic [ref=e1006]: 90.625%
+                      - generic [ref=e1008]: 9.375%
+                    - generic [ref=e1009]:
+                      - generic [ref=e1010]: 29 agree
+                      - generic [ref=e1011]: 3 disagree
+                  - generic [ref=e1012]:
+                    - generic [ref=e1013]: Appointment scheduling
+                    - generic [ref=e1014]:
+                      - generic [ref=e1016]: 90%
+                      - generic [ref=e1018]: 10%
+                    - generic [ref=e1019]:
+                      - generic [ref=e1020]: 27 agree
+                      - generic [ref=e1021]: 3 disagree
+                  - generic [ref=e1022]:
+                    - generic [ref=e1023]: Wait times
+                    - generic [ref=e1024]:
+                      - generic [ref=e1026]: 76%
+                      - generic [ref=e1028]: 24%
+                    - generic [ref=e1029]:
+                      - generic [ref=e1030]: 19 agree
+                      - generic [ref=e1031]: 6 disagree
+                  - generic [ref=e1032]:
+                    - generic [ref=e1033]: Office environment
+                    - generic [ref=e1034]:
+                      - generic [ref=e1036]: 91.66666666666666%
+                      - generic [ref=e1038]: 8.333333333333332%
+                    - generic [ref=e1039]:
+                      - generic [ref=e1040]: 22 agree
+                      - generic [ref=e1041]: 2 disagree
+            - generic [ref=e1044]:
+              - img [ref=e1048]
+              - generic [ref=e1052]:
+                - heading "Your trust is our top concern." [level=3] [ref=e1053]
+                - generic [ref=e1054]: We strive to keep reviews honest, trustworthy, and fair.
+              - button "Toggle to view more information about our comment guidelines" [ref=e1055] [cursor=pointer]:
+                - img [ref=e1056]
+            - generic [ref=e1058]:
+              - list [ref=e1060]:
+                - button "Recent" [ref=e1061] [cursor=pointer]
+                - button "Highest" [ref=e1062] [cursor=pointer]
+                - button "Lowest" [ref=e1063] [cursor=pointer]
+                - button "Most Helpful" [ref=e1064] [cursor=pointer]
+              - generic [ref=e1065]:
+                - generic [ref=e1066]:
+                  - generic [ref=e1067]:
+                    - img "Rated 5 out of 5" [ref=e1069]:
+                      - generic [ref=e1070]:
+                        - img [ref=e1071]
+                        - img [ref=e1073]
+                        - img [ref=e1075]
+                        - img [ref=e1077]
+                        - img [ref=e1079]
+                      - generic [ref=e1081]:
+                        - img [ref=e1082]
+                        - img [ref=e1084]
+                        - img [ref=e1086]
+                        - img [ref=e1088]
+                        - img [ref=e1090]
+                    - generic [ref=e1092]:
+                      - button "Reply to the comment if you are Dr. Agarwal" [ref=e1093] [cursor=pointer]:
+                        - img [ref=e1094]
+                        - text: Reply
+                      - button "Flag this comment for its content" [ref=e1098] [cursor=pointer]:
+                        - img [ref=e1099]
+                        - text: Flag
+                  - generic [ref=e1102]:
+                    - generic [ref=e1104]: Great Dr. and a Great person.
+                    - generic [ref=e1105]: Dr. Agarwal was my pulmonary Dr. It saddens me, that he has retired and closed his practice. The patient Dr. relationship, he was truthful about my condition an my treatment. As well as an amazing Dr. He was an Amazing person. I am happy for him retiring, and I will miss him as my Pulmonary...
+                  - button "View more details about the review" [ref=e1108] [cursor=pointer]: More details
+                  - generic [ref=e1109]:
+                    - button "Helpful" [ref=e1112] [cursor=pointer]:
+                      - img [ref=e1113]
+                      - generic [ref=e1115]: Helpful
+                    - generic [ref=e1116]: Feb 17, 2026
+                - generic [ref=e1118]:
+                  - button "Close modal" [ref=e1119] [cursor=pointer]: ×
+                  - generic [ref=e1120]: Post a Response
+                  - generic [ref=e1121]: Are you Dr. Agarwal?
+                  - generic [ref=e1122]:
+                    - button "Yes" [ref=e1124] [cursor=pointer]
+                    - button "No" [ref=e1126] [cursor=pointer]
+              - generic [ref=e1127]:
+                - generic [ref=e1128]:
+                  - generic [ref=e1129]:
+                    - img "Rated 5 out of 5" [ref=e1131]:
+                      - generic [ref=e1132]:
+                        - img [ref=e1133]
+                        - img [ref=e1135]
+                        - img [ref=e1137]
+                        - img [ref=e1139]
+                        - img [ref=e1141]
+                      - generic [ref=e1143]:
+                        - img [ref=e1144]
+                        - img [ref=e1146]
+                        - img [ref=e1148]
+                        - img [ref=e1150]
+                        - img [ref=e1152]
+                    - generic [ref=e1154]:
+                      - button "Reply to the comment if you are Dr. Agarwal" [ref=e1155] [cursor=pointer]:
+                        - img [ref=e1156]
+                        - text: Reply
+                      - button "Flag this comment for its content" [ref=e1160] [cursor=pointer]:
+                        - img [ref=e1161]
+                        - text: Flag
+                  - generic [ref=e1164]:
+                    - generic [ref=e1166]: My reviw S. Sangari
+                    - generic [ref=e1167]: As a patient of Dr Dgarwal for last 5 month, I would like to recommend him strongly. From first visit he demonstrated his professional attitude, friendly relation with patient, and above all listening attentively to his patient. In addition, he has a team whose members are very dedicated to access...
+                  - button "View more details about the review" [ref=e1170] [cursor=pointer]: More details
+                  - generic [ref=e1171]:
+                    - button "Helpful" [ref=e1174] [cursor=pointer]:
+                      - img [ref=e1175]
+                      - generic [ref=e1177]: Helpful
+                    - generic [ref=e1178]: Dec 19, 2025
+                - generic [ref=e1180]:
+                  - button "Close modal" [ref=e1181] [cursor=pointer]: ×
+                  - generic [ref=e1182]: Post a Response
+                  - generic [ref=e1183]: Are you Dr. Agarwal?
+                  - generic [ref=e1184]:
+                    - button "Yes" [ref=e1186] [cursor=pointer]
+                    - button "No" [ref=e1188] [cursor=pointer]
+              - generic [ref=e1189]:
+                - generic [ref=e1190]:
+                  - generic [ref=e1191]:
+                    - img "Rated 5 out of 5" [ref=e1193]:
+                      - generic [ref=e1194]:
+                        - img [ref=e1195]
+                        - img [ref=e1197]
+                        - img [ref=e1199]
+                        - img [ref=e1201]
+                        - img [ref=e1203]
+                      - generic [ref=e1205]:
+                        - img [ref=e1206]
+                        - img [ref=e1208]
+                        - img [ref=e1210]
+                        - img [ref=e1212]
+                        - img [ref=e1214]
+                    - generic [ref=e1216]:
+                      - button "Reply to the comment if you are Dr. Agarwal" [ref=e1217] [cursor=pointer]:
+                        - img [ref=e1218]
+                        - text: Reply
+                      - button "Flag this comment for its content" [ref=e1222] [cursor=pointer]:
+                        - img [ref=e1223]
+                        - text: Flag
+                  - generic [ref=e1226]:
+                    - generic [ref=e1228]: First Time Visit!!!
+                    - generic [ref=e1229]: My dad had an appointment with him for some sleep issue. Usually it's my older sister who would take him, but this time I was the one who brought him, so obviously I had no idea about this doctor's personality and patients' care like during a visit. Well, my initial impression interacting with him...
+                  - button "View more details about the review" [ref=e1232] [cursor=pointer]: More details
+                  - generic [ref=e1233]:
+                    - button "Helpful" [ref=e1236] [cursor=pointer]:
+                      - img [ref=e1237]
+                      - generic [ref=e1239]: Helpful
+                    - generic [ref=e1240]: Dec 10, 2025
+                - generic [ref=e1242]:
+                  - button "Close modal" [ref=e1243] [cursor=pointer]: ×
+                  - generic [ref=e1244]: Post a Response
+                  - generic [ref=e1245]: Are you Dr. Agarwal?
+                  - generic [ref=e1246]:
+                    - button "Yes" [ref=e1248] [cursor=pointer]
+                    - button "No" [ref=e1250] [cursor=pointer]
+              - generic [ref=e1251]:
+                - generic [ref=e1252]:
+                  - generic [ref=e1253]:
+                    - img "Rated 4 out of 5" [ref=e1255]:
+                      - generic [ref=e1256]:
+                        - img [ref=e1257]
+                        - img [ref=e1259]
+                        - img [ref=e1261]
+                        - img [ref=e1263]
+                        - img [ref=e1265]
+                      - generic [ref=e1267]:
+                        - img [ref=e1268]
+                        - img [ref=e1270]
+                        - img [ref=e1272]
+                        - img [ref=e1274]
+                    - generic [ref=e1276]:
+                      - button "Reply to the comment if you are Dr. Agarwal" [ref=e1277] [cursor=pointer]:
+                        - img [ref=e1278]
+                        - text: Reply
+                      - button "Flag this comment for its content" [ref=e1282] [cursor=pointer]:
+                        - img [ref=e1283]
+                        - text: Flag
+                  - generic [ref=e1286]: My dad has been with doctor Agarwal for many years Last week just another visit. Dr. Agarwal is always caring, friendly and welcoming. He is willing to help whatever my dad needs. My dad is comfortable seeing him every single time. Thank you very much Dr. Agarwal !!!
+                  - button "View more details about the review" [ref=e1289] [cursor=pointer]: More details
+                  - generic [ref=e1290]:
+                    - button "Helpful" [ref=e1293] [cursor=pointer]:
+                      - img [ref=e1294]
+                      - generic [ref=e1296]: Helpful
+                    - generic [ref=e1297]: Dec 06, 2025
+                - generic [ref=e1299]:
+                  - button "Close modal" [ref=e1300] [cursor=pointer]: ×
+                  - generic [ref=e1301]: Post a Response
+                  - generic [ref=e1302]: Are you Dr. Agarwal?
+                  - generic [ref=e1303]:
+                    - button "Yes" [ref=e1305] [cursor=pointer]
+                    - button "No" [ref=e1307] [cursor=pointer]
+              - generic [ref=e1308]:
+                - generic [ref=e1309]:
+                  - generic [ref=e1310]:
+                    - img "Rated 5 out of 5" [ref=e1312]:
+                      - generic [ref=e1313]:
+                        - img [ref=e1314]
+                        - img [ref=e1316]
+                        - img [ref=e1318]
+                        - img [ref=e1320]
+                        - img [ref=e1322]
+                      - generic [ref=e1324]:
+                        - img [ref=e1325]
+                        - img [ref=e1327]
+                        - img [ref=e1329]
+                        - img [ref=e1331]
+                        - img [ref=e1333]
+                    - generic [ref=e1335]:
+                      - button "Reply to the comment if you are Dr. Agarwal" [ref=e1336] [cursor=pointer]:
+                        - img [ref=e1337]
+                        - text: Reply
+                      - button "Flag this comment for its content" [ref=e1341] [cursor=pointer]:
+                        - img [ref=e1342]
+                        - text: Flag
+                  - generic [ref=e1345]:
+                    - generic [ref=e1347]: Trust in his competence
+                    - text: Been seeing him after I had covid in 2021. He is very nice and very focused on how to improve my lung and sleep problems.
+                  - button "View more details about the review" [ref=e1350] [cursor=pointer]: More details
+                  - generic [ref=e1351]:
+                    - button "Helpful" [ref=e1354] [cursor=pointer]:
+                      - img [ref=e1355]
+                      - generic [ref=e1357]: Helpful
+                    - generic [ref=e1358]: Jun 23, 2025
+                - generic [ref=e1360]:
+                  - button "Close modal" [ref=e1361] [cursor=pointer]: ×
+                  - generic [ref=e1362]: Post a Response
+                  - generic [ref=e1363]: Are you Dr. Agarwal?
+                  - generic [ref=e1364]:
+                    - button "Yes" [ref=e1366] [cursor=pointer]
+                    - button "No" [ref=e1368] [cursor=pointer]
+              - link "Show more reviews" [ref=e1370] [cursor=pointer]:
+                - /url: /physician/dr-sanjay-agarwal-3g34m/comments
+            - generic [ref=e1371]:
+              - heading "Leave a review" [level=3] [ref=e1372]
+              - text: How was your experience with Dr. Agarwal?
+              - generic [ref=e1373]:
+                - generic [ref=e1374]:
+                  - generic [ref=e1375]: Comment
+                  - textbox "Comment" [ref=e1376]
+                - button "Continue" [ref=e1377] [cursor=pointer]
+          - generic [ref=e1379]:
+            - heading "Is this your profile?" [level=3] [ref=e1380]
+            - paragraph [ref=e1381]: Respond to reviews, add information, and reach more patients. Claiming is free and only takes a minute.
+            - link "Claim your profile" [ref=e1383] [cursor=pointer]:
+              - /url: https://update.healthgrades.com/landing/claim?pwid=3G34M&pCID=hg_ProvProfile
+        - generic [ref=e1385]:
+          - heading "Know Before You Go" [level=3] [ref=e1386]
+          - generic [ref=e1387]: Expand your knowledge with related news and articles.
+          - generic [ref=e1388]:
+            - 'link "RSV and Lung Inflammation: What Older Adults Should Know" [ref=e1389] [cursor=pointer]':
+              - /url: https://resources.healthgrades.com/right-care/infections-and-contagious-diseases/rsv-and-lung-inflammation-what-older-adults-should-know?hid=t12_review
+              - generic [ref=e1390]: "RSV and Lung Inflammation: What Older Adults Should Know"
+              - img [ref=e1391]
+            - link "4 Signs Your Asthma Is Severe" [ref=e1393] [cursor=pointer]:
+              - /url: https://resources.healthgrades.com/right-care/asthma/4-signs-your-asthma-is-severe?hid=t12_review
+              - generic [ref=e1394]: 4 Signs Your Asthma Is Severe
+              - img [ref=e1395]
+            - 'link "Asthma and Nasal Polyps: What to Know" [ref=e1397] [cursor=pointer]':
+              - /url: https://resources.healthgrades.com/right-care/ear-nose-and-throat/asthma-and-nasal-polyps?hid=t12_review
+              - generic [ref=e1398]: "Asthma and Nasal Polyps: What to Know"
+              - img [ref=e1399]
+        - generic [ref=e1401]:
+          - heading "About Me" [level=2] [ref=e1402]:
+            - text: About Me
+            - img [ref=e1403]
+          - generic [ref=e1407]:
+            - generic [ref=e1408]:
+              - heading "care philosophy" [level=3] [ref=e1409]
+              - generic [ref=e1410]: Patient care with compassion is number one. Personal commitment to meaningful management, ethical and social responsibility, scientific progress and teaching get equal weightage. Lectures and talks on topics of interests (pulmonary, critical care...
+              - button "Read More" [ref=e1411] [cursor=pointer]
+            - generic [ref=e1412]:
+              - heading "biography" [level=3] [ref=e1413]
+              - generic [ref=e1414]: Comprehensive, compassionate and personalized Care in Sleep Medicine, Pulmonary Medicine, ENT, Dietary medicine, internal medicine and Critical Care, both in an inpatient and outpatient setting. The practice especially focuses on excellence in...
+              - button "Read More" [ref=e1415] [cursor=pointer]
+          - generic [ref=e1417]:
+            - button "toggle content display" [ref=e1418] [cursor=pointer]:
+              - img [ref=e1420]
+              - heading "Specialties*" [level=3] [ref=e1422]
+            - generic:
+              - generic:
+                - list:
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Pulmonary Disease
+                - paragraph: "*Healthgrades does not verify qualifications for medical specialties. Please verify your provider's specialty and qualifications directly with your provider and applicable medical board."
+          - generic [ref=e1424]:
+            - button "toggle content display" [ref=e1425] [cursor=pointer]:
+              - img [ref=e1427]
+              - heading "Education" [level=3] [ref=e1429]
+            - generic:
+              - generic:
+                - list:
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: University Of Buffalo
+                    - text: Fellowship Hospital
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: University Of Illinois
+                    - text: Residency Hospital
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: University Of Illinois
+                    - text: Internship Hospital
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Bangarore Medical College
+                    - text: Medical School
+          - generic [ref=e1431]:
+            - button "toggle content display" [ref=e1432] [cursor=pointer]:
+              - img [ref=e1434]
+              - heading "Board Certifications" [level=3] [ref=e1436]
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - img
+                      - generic: American Board of Medical Specialties®
+                      - generic:
+                        - generic:
+                          - button "Learn more about board certification agency":
+                            - img
+                    - generic:
+                      - generic: American Board of Internal Medicine®
+                      - generic:
+                        - generic:
+                          - generic: "-"
+                          - generic: Critical Care Medicine
+                        - generic:
+                          - generic: "-"
+                          - generic: Pulmonary Disease
+                        - generic:
+                          - generic: "-"
+                          - generic: Sleep Medicine
+                  - generic:
+                    - button "Learn more about board certification"
+          - generic [ref=e1438]:
+            - button "toggle content display" [ref=e1439] [cursor=pointer]:
+              - img [ref=e1441]
+              - heading "Board Action Check" [level=3] [ref=e1443]
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - text: For detailed information about any of the below board actions, please search for the provider's records on the linked state licensing board or the
+                        - link "Federation of State Medical Boards":
+                          - /url: https://www.docinfo.org/
+                        - text: . To learn more about the difference between these sources, please refer to our
+                        - link "FAQs":
+                          - /url: https://www.healthgrades.com/about/healthgrades-methodologies#faqs
+                        - text: .
+                    - generic:
+                      - generic:
+                        - img
+                        - generic: Healthgrades has not received any data indicating a board action exists for this provider.
+                  - generic:
+                    - paragraph: Healthgrades receives board action history for physicians and physician assistants. The information displayed here is sourced from independent information providers, such as state board websites, and may not be the most up-to-date information. Healthgrades makes no representations with respect to the accuracy of any information provided here and assumes no responsibility or liability for such information.
+                    - button "Learn more about medical license public record check"
+          - generic [ref=e1445]:
+            - button "toggle content display" [ref=e1446] [cursor=pointer]:
+              - img [ref=e1448]
+              - heading "Languages" [level=3] [ref=e1450]
+            - generic:
+              - generic:
+                - list:
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: English
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Hindi
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Kannada
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Oriya
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Punjabi
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Spanish
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Urdu
+                  - listitem:
+                    - paragraph:
+                      - generic:
+                        - img
+                      - text: Vietnamese
+          - generic [ref=e1452]:
+            - button "toggle content display" [ref=e1453] [cursor=pointer]:
+              - img [ref=e1455]
+              - heading "Common Questions and Answers" [level=3] [ref=e1457]
+            - generic:
+              - generic:
+                - generic:
+                  - generic: Questions
+                  - generic: Responses
+                - list
+                - generic:
+                  - generic:
+                    - generic: Please call the office to learn more.
+                    - generic:
+                      - link "(408) 692-3091":
+                        - /url: tel:4086923091
+        - generic [ref=e1459]:
+          - heading "Focus on COPD" [level=3] [ref=e1460]
+          - generic [ref=e1461]: Guidance for getting the right healthcare
+          - generic [ref=e1462]:
+            - link "8 Tips for Choosing a Pulmonologist" [ref=e1463] [cursor=pointer]:
+              - /url: https://resources.healthgrades.com/right-care/lungs-breathing-and-respiration/8-tips-for-choosing-a-pulmonologist?hid=t12_learn_fomo&tpc=lungs-breathing-and-respiration
+              - generic [ref=e1464]: 8 Tips for Choosing a Pulmonologist
+              - img [ref=e1465]
+            - link "5 Pulmonologist Tips for People With COPD" [ref=e1467] [cursor=pointer]:
+              - /url: https://resources.healthgrades.com/right-care/copd/5-pulmonologist-tips-for-people-with-copd?hid=t12_learn_fomo&tpc=copd
+              - generic [ref=e1468]: 5 Pulmonologist Tips for People With COPD
+              - img [ref=e1469]
+            - link "7 Reasons to See a Pulmonologist" [ref=e1471] [cursor=pointer]:
+              - /url: https://resources.healthgrades.com/right-care/lungs-breathing-and-respiration/7-reasons-to-see-a-pulmonologist?hid=t12_learn_fomo&tpc=lungs-breathing-and-respiration
+              - generic [ref=e1472]: 7 Reasons to See a Pulmonologist
+              - img [ref=e1473]
+        - generic [ref=e1475]:
+          - heading "Insurance Check" [level=2] [ref=e1476]:
+            - text: Insurance Check
+            - img [ref=e1477]
+          - generic [ref=e1479]:
+            - heading "Search for your insurance carrier and choose your plan type" [level=3] [ref=e1480]
+            - generic [ref=e1481]:
+              - generic [ref=e1482]:
+                - img [ref=e1483]
+                - generic [ref=e1485]: Insurance Carrier
+                - textbox "Insurance" [ref=e1486]:
+                  - /placeholder: Enter Insurance Carrier
+              - generic [ref=e1487]:
+                - button "Choose Plan Type" [disabled] [ref=e1489]:
+                  - generic [ref=e1490]: Choose Plan Type
+                  - img [ref=e1492]
+                - button "Apply" [disabled] [ref=e1495]
+            - paragraph [ref=e1497]:
+              - text: "Try:"
+              - generic [ref=e1498]:
+                - button "Affinity Insurance Services" [ref=e1499] [cursor=pointer]
+                - text: ","
+              - generic [ref=e1500]:
+                - button "Care 1st Health Plan" [ref=e1501] [cursor=pointer]
+                - text: ","
+              - generic [ref=e1502]:
+                - button "HealthSmart - Interplan Health Group" [ref=e1503] [cursor=pointer]
+                - text: ","
+              - generic [ref=e1504]:
+                - button "CorVel" [ref=e1505] [cursor=pointer]
+                - text: ","
+              - generic [ref=e1506]:
+                - text: or
+                - button "Alameda Alliance" [ref=e1507] [cursor=pointer]
+            - paragraph [ref=e1508]:
+              - text: Please verify your coverage with the provider.
+              - link "(408) 942-0300" [ref=e1509] [cursor=pointer]:
+                - /url: tel:4089420300
+        - generic [ref=e1510]:
+          - heading "Locations" [level=2] [ref=e1511]:
+            - text: Locations
+            - img [ref=e1512]
+          - generic [ref=e1517]:
+            - generic [ref=e1518]:
+              - heading "Comprehensive Sleep Center" [level=3] [ref=e1519]
+              - generic [ref=e1520]:
+                - link "View office profile" [ref=e1521] [cursor=pointer]:
+                  - /url: /group-directory/ca-california/milpitas/comprehensive-sleep-center-x8h8vl
+                - img [ref=e1523]
+              - generic [ref=e1525]:
+                - generic [ref=e1527]:
+                  - img [ref=e1528]:
+                    - generic [ref=e1530]: "1"
+                  - generic [ref=e1531]:
+                    - generic [ref=e1532]: Comprehensive Sleep Center
+                    - generic [ref=e1533]: 995 Montague Expy Ste 218
+                    - generic [ref=e1534]: Milpitas, CA 95035
+                - generic [ref=e1535]:
+                  - link "(408) 942-0300" [ref=e1537] [cursor=pointer]:
+                    - /url: tel:(408)942-0300
+                    - img [ref=e1539]
+                    - text: (408) 942-0300
+                  - generic [ref=e1541]:
+                    - button "Fax" [ref=e1543] [cursor=pointer]:
+                      - img [ref=e1545]
+                      - text: Fax
+                    - link "Driving Directions" [ref=e1551] [cursor=pointer]:
+                      - /url: https://www.google.com/maps/dir/?api=1&destination=995+Montague+Expy+Ste+218,+Milpitas,+CA+95035
+                      - generic [ref=e1552]: Driving
+                      - generic [ref=e1553]: Directions
+            - generic [ref=e1555]:
+              - heading "Office Hours" [level=3] [ref=e1556]
+              - generic [ref=e1558]:
+                - generic [ref=e1559]:
+                  - generic [ref=e1560]: Monday
+                  - generic [ref=e1561]:
+                    - generic [ref=e1562]: 9:00 am
+                    - generic [ref=e1563]: to
+                    - generic [ref=e1564]: 5:00 pm
+                - generic [ref=e1565]:
+                  - generic [ref=e1566]: Tuesday
+                  - generic [ref=e1567]:
+                    - generic [ref=e1568]: 9:00 am
+                    - generic [ref=e1569]: to
+                    - generic [ref=e1570]: 5:00 pm
+                - generic [ref=e1571]:
+                  - generic [ref=e1572]: Wednesday
+                  - generic [ref=e1573]:
+                    - generic [ref=e1574]: 9:00 am
+                    - generic [ref=e1575]: to
+                    - generic [ref=e1576]: 5:00 pm
+                - generic [ref=e1577]:
+                  - generic [ref=e1578]: Thursday
+                  - generic [ref=e1579]:
+                    - generic [ref=e1580]: 9:00 am
+                    - generic [ref=e1581]: to
+                    - generic [ref=e1582]: 5:00 pm
+                - generic [ref=e1583]:
+                  - generic [ref=e1584]: Friday
+                  - generic [ref=e1585]:
+                    - generic [ref=e1586]: 9:00 am
+                    - generic [ref=e1587]: to
+                    - generic [ref=e1588]: 5:00 pm
+                - generic [ref=e1589]:
+                  - generic [ref=e1590]: Saturday
+                  - generic [ref=e1591]:
+                    - generic [ref=e1592]: 9:00 am
+                    - generic [ref=e1593]: to
+                    - generic [ref=e1594]: 5:00 pm
+                - generic [ref=e1595]:
+                  - generic [ref=e1596]: Sunday
+                  - generic [ref=e1597]:
+                    - generic [ref=e1598]: 9:00 am
+                    - generic [ref=e1599]: to
+                    - generic [ref=e1600]: 5:00 pm
+        - generic [ref=e1604]:
+          - generic [ref=e1605]:
+            - generic [ref=e1606]:
+              - heading "Before Your Visit" [level=2] [ref=e1607]
+              - img [ref=e1609]
+            - paragraph [ref=e1615]: An appointment guide can help you get the most out of your visit.
+          - generic [ref=e1617]:
+            - generic [ref=e1618]:
+              - generic [ref=e1619]:
+                - img "Guide preview" [ref=e1620]
+                - button "View This Guide" [ref=e1621] [cursor=pointer]
+              - 'heading "COPD: Top Questions" [level=3] [ref=e1623]'
+            - generic [ref=e1624]:
+              - generic [ref=e1625]:
+                - img "Guide preview" [ref=e1626]
+                - button "View This Guide" [ref=e1627] [cursor=pointer]
+              - 'heading "RSV: Top Questions" [level=3] [ref=e1629]'
+            - generic [ref=e1630]:
+              - generic [ref=e1631]:
+                - img "Guide preview" [ref=e1632]
+                - button "View This Guide" [ref=e1633] [cursor=pointer]
+              - 'heading "Asthma: Top Questions" [level=3] [ref=e1635]'
+        - generic [ref=e1636]:
+          - heading "Affiliated Hospitals" [level=2] [ref=e1637]:
+            - text: Affiliated Hospitals
+            - img [ref=e1638]
+          - generic [ref=e1643]:
+            - generic [ref=e1644]:
+              - generic [ref=e1645]:
+                - heading "Good Samaritan Hospital" [level=3] [ref=e1646]:
+                  - link "Good Samaritan Hospital" [ref=e1647] [cursor=pointer]:
+                    - /url: /hospital/good-samaritan-hospital-dafe02
+                - generic [ref=e1648]:
+                  - text: 2425 Samaritan Dr
+                  - text: San Jose, CA 95124
+              - generic [ref=e1650]:
+                - generic [ref=e1651]: Recipient of 44
+                - text: hospital awards
+            - generic [ref=e1652]:
+              - generic [ref=e1653]:
+                - img [ref=e1655]
+                - generic [ref=e1658]:
+                  - paragraph [ref=e1659]: America's 250 Best Hospitals Award™ 2026, 2025, 2024
+                  - paragraph [ref=e1660]: Superior clinical outcomes in treating chronic obstructive pulmonary disease (COPD) and pneumonia
+              - generic [ref=e1661]:
+                - img [ref=e1663]
+                - generic [ref=e1666]:
+                  - paragraph [ref=e1667]: Patient Safety Excellence Award™ 2026, 2025, 2024
+                  - paragraph [ref=e1668]: Superior clinical outcomes in treating chronic obstructive pulmonary disease (COPD) and pneumonia
+              - link "View all awards" [ref=e1669] [cursor=pointer]:
+                - /url: /hospital/good-samaritan-hospital-dafe02#awards
+                - text: View all awards
+                - img [ref=e1670]
+            - generic [ref=e1673]:
+              - generic [ref=e1674]:
+                - paragraph [ref=e1675]: How patients felt about the care they received at this hospital.
+                - generic [ref=e1676]:
+                  - generic [ref=e1677]: 81%
+                  - generic [ref=e1678]:
+                    - generic [ref=e1679]: Patients said they were given information about recovering at home
+                    - paragraph [ref=e1681]: 4% lower than the national average
+                - generic [ref=e1682]:
+                  - generic [ref=e1683]: 70%
+                  - generic [ref=e1684]:
+                    - generic [ref=e1685]: Patients said that nurses always listened to them and explained things well
+                    - paragraph [ref=e1687]: 6% lower than the national average
+              - link "View all patient feedback" [ref=e1688] [cursor=pointer]:
+                - /url: /hospital/good-samaritan-hospital-dafe02#patient-experience
+                - text: View all patient feedback
+                - img [ref=e1689]
+          - generic [ref=e1691]:
+            - text: Learn more about how Healthgrades measures
+            - link "Hospital Quality" [ref=e1692] [cursor=pointer]:
+              - /url: https://www.healthgrades.com/quality/ratings-awards/methodology
+        - generic [ref=e1694]:
+          - text: ADVERTISEMENT
+          - generic [ref=e1695]:
+            - generic [ref=e1696]:
+              - generic [ref=e1697]:
+                - generic [ref=e1698]:
+                  - paragraph [ref=e1699]: Compare Dr. Agarwal with Pulmonologists from
+                  - heading "Good Samaritan Hospital" [level=2] [ref=e1700]
+                - img "Good Samaritan Hospital" [ref=e1703]
+              - generic [ref=e1704]:
+                - paragraph [ref=e1705]: Make an appointment at Good Samaritan Hospital today at
+                - link "(408) 692-3091" [ref=e1706] [cursor=pointer]:
+                  - /url: tel:(408) 692-3091
+            - generic [ref=e1707]:
+              - generic [ref=e1708]:
+                - button "Dr. Pranjal Patel, MD profile photo Dr. Pranjal Patel, MD Practices at Top Hospital Rated 0 out of 5 0 Ratings View profile" [ref=e1709] [cursor=pointer]:
+                  - generic [ref=e1710]:
+                    - img "Dr. Pranjal Patel, MD profile photo" [ref=e1711]
+                    - generic [ref=e1712]:
+                      - heading "Dr. Pranjal Patel, MD" [level=3] [ref=e1713]
+                      - generic [ref=e1715]:
+                        - img [ref=e1718]
+                        - generic [ref=e1723]: Practices at Top Hospital
+                      - generic [ref=e1724]:
+                        - generic [ref=e1726]:
+                          - img "Rated 0 out of 5" [ref=e1727]:
+                            - generic [ref=e1728]:
+                              - img [ref=e1729]
+                              - img [ref=e1731]
+                              - img [ref=e1733]
+                              - img [ref=e1735]
+                              - img [ref=e1737]
+                          - generic [ref=e1739]: 0 Ratings
+                        - button "View profile" [ref=e1741]
+                - button "Dr. Jeffrey Marcus, MD profile photo Dr. Jeffrey Marcus, MD Explains Conditions Well Rated 4 out of 5 3 Ratings View profile" [ref=e1742] [cursor=pointer]:
+                  - generic [ref=e1743]:
+                    - img "Dr. Jeffrey Marcus, MD profile photo" [ref=e1744]
+                    - generic [ref=e1745]:
+                      - heading "Dr. Jeffrey Marcus, MD" [level=3] [ref=e1746]
+                      - generic [ref=e1748]:
+                        - img [ref=e1751]
+                        - generic [ref=e1753]: Explains Conditions Well
+                      - generic [ref=e1754]:
+                        - generic [ref=e1756]:
+                          - img "Rated 4 out of 5" [ref=e1757]:
+                            - generic [ref=e1758]:
+                              - img [ref=e1759]
+                              - img [ref=e1761]
+                              - img [ref=e1763]
+                              - img [ref=e1765]
+                              - img [ref=e1767]
+                            - generic [ref=e1769]:
+                              - img [ref=e1770]
+                              - img [ref=e1772]
+                              - img [ref=e1774]
+                              - img [ref=e1776]
+                          - generic [ref=e1778]: 3 Ratings
+                        - button "View profile" [ref=e1780]
+                - button "Dr. Paul Huang, MD profile photo Dr. Paul Huang, MD Explains Conditions Well Rated 4 out of 5 27 Ratings View profile" [ref=e1781] [cursor=pointer]:
+                  - generic [ref=e1782]:
+                    - img "Dr. Paul Huang, MD profile photo" [ref=e1783]
+                    - generic [ref=e1784]:
+                      - heading "Dr. Paul Huang, MD" [level=3] [ref=e1785]
+                      - generic [ref=e1787]:
+                        - img [ref=e1790]
+                        - generic [ref=e1792]: Explains Conditions Well
+                      - generic [ref=e1793]:
+                        - generic [ref=e1795]:
+                          - img "Rated 4 out of 5" [ref=e1796]:
+                            - generic [ref=e1797]:
+                              - img [ref=e1798]
+                              - img [ref=e1800]
+                              - img [ref=e1802]
+                              - img [ref=e1804]
+                              - img [ref=e1806]
+                            - generic [ref=e1808]:
+                              - img [ref=e1809]
+                              - img [ref=e1811]
+                              - img [ref=e1813]
+                              - img [ref=e1815]
+                          - generic [ref=e1817]: 27 Ratings
+                        - button "View profile" [ref=e1819]
+                - button "Dr. Msalam Sara, MD profile photo Dr. Msalam Sara, MD Explains Conditions Well Rated 5 out of 5 4 Ratings View profile" [ref=e1820] [cursor=pointer]:
+                  - generic [ref=e1821]:
+                    - img "Dr. Msalam Sara, MD profile photo" [ref=e1822]
+                    - generic [ref=e1823]:
+                      - heading "Dr. Msalam Sara, MD" [level=3] [ref=e1824]
+                      - generic [ref=e1826]:
+                        - img [ref=e1829]
+                        - generic [ref=e1831]: Explains Conditions Well
+                      - generic [ref=e1832]:
+                        - generic [ref=e1834]:
+                          - img "Rated 5 out of 5" [ref=e1835]:
+                            - generic [ref=e1836]:
+                              - img [ref=e1837]
+                              - img [ref=e1839]
+                              - img [ref=e1841]
+                              - img [ref=e1843]
+                              - img [ref=e1845]
+                            - generic [ref=e1847]:
+                              - img [ref=e1848]
+                              - img [ref=e1850]
+                              - img [ref=e1852]
+                              - img [ref=e1854]
+                              - img [ref=e1856]
+                          - generic [ref=e1858]: 4 Ratings
+                        - button "View profile" [ref=e1860]
+                - button "Dr. Harmeet Bedi, MD profile photo Dr. Harmeet Bedi, MD Practices at Top Hospital Rated 0 out of 5 0 Ratings View profile" [ref=e1861] [cursor=pointer]:
+                  - generic [ref=e1862]:
+                    - img "Dr. Harmeet Bedi, MD profile photo" [ref=e1863]
+                    - generic [ref=e1864]:
+                      - heading "Dr. Harmeet Bedi, MD" [level=3] [ref=e1865]
+                      - generic [ref=e1867]:
+                        - img [ref=e1870]
+                        - generic [ref=e1875]: Practices at Top Hospital
+                      - generic [ref=e1876]:
+                        - generic [ref=e1878]:
+                          - img "Rated 0 out of 5" [ref=e1879]:
+                            - generic [ref=e1880]:
+                              - img [ref=e1881]
+                              - img [ref=e1883]
+                              - img [ref=e1885]
+                              - img [ref=e1887]
+                              - img [ref=e1889]
+                          - generic [ref=e1891]: 0 Ratings
+                        - button "View profile" [ref=e1893]
+                - button "Dr. Minhtruong Lai, MD profile photo Dr. Minhtruong Lai, MD Explains Conditions Well Rated 4.5 out of 5 7 Ratings View profile" [ref=e1894] [cursor=pointer]:
+                  - generic [ref=e1895]:
+                    - img "Dr. Minhtruong Lai, MD profile photo" [ref=e1896]
+                    - generic [ref=e1897]:
+                      - heading "Dr. Minhtruong Lai, MD" [level=3] [ref=e1898]
+                      - generic [ref=e1900]:
+                        - img [ref=e1903]
+                        - generic [ref=e1905]: Explains Conditions Well
+                      - generic [ref=e1906]:
+                        - generic [ref=e1908]:
+                          - img "Rated 4.5 out of 5" [ref=e1909]:
+                            - generic [ref=e1910]:
+                              - img [ref=e1911]
+                              - img [ref=e1913]
+                              - img [ref=e1915]
+                              - img [ref=e1917]
+                              - img [ref=e1919]
+                            - generic [ref=e1921]:
+                              - img [ref=e1922]
+                              - img [ref=e1924]
+                              - img [ref=e1926]
+                              - img [ref=e1928]
+                              - img [ref=e1930]
+                          - generic [ref=e1932]: 7 Ratings
+                        - button "View profile" [ref=e1934]
+              - button "Show more providers" [ref=e1935] [cursor=pointer]:
+                - text: Show more providers
+                - img [ref=e1936]
+        - generic [ref=e1938]:
+          - generic [ref=e1940]:
+            - heading "You May Also Like" [level=3] [ref=e1941]
+            - generic [ref=e1942]:
+              - link "7 Foods to Avoid with COPD" [ref=e1943] [cursor=pointer]:
+                - /url: https://resources.healthgrades.com/right-care/copd/7-foods-to-avoid-with-copd?hid=t12_compare_contentalgo&tpc=treating-copd-effectively
+                - generic [ref=e1945]: 7 Foods to Avoid with COPD
+              - link "7 Key Signs of Uncontrolled Asthma" [ref=e1946] [cursor=pointer]:
+                - /url: https://resources.healthgrades.com/right-care/asthma/6-signs-of-uncontrolled-asthma?hid=t12_compare_contentalgo&tpc=asthma
+                - generic [ref=e1948]: 7 Key Signs of Uncontrolled Asthma
+              - link "5 Pulmonologist Tips for People With COPD" [ref=e1949] [cursor=pointer]:
+                - /url: https://resources.healthgrades.com/right-care/copd/5-pulmonologist-tips-for-people-with-copd?hid=t12_compare_contentalgo&tpc=treating-copd-effectively
+                - generic [ref=e1951]: 5 Pulmonologist Tips for People With COPD
+          - generic [ref=e1952]:
+            - heading "Recommended Reading From Healthgrades" [level=3] [ref=e1953]
+            - generic [ref=e1954]:
+              - link "4 Signs Your Asthma Is Severe" [ref=e1955] [cursor=pointer]:
+                - /url: https://resources.healthgrades.com/right-care/asthma/4-signs-your-asthma-is-severe?hid=t12_compare&tpc=controlling-severe-asthma
+                - generic [ref=e1957]: 4 Signs Your Asthma Is Severe
+              - 'link "RSV Transmission: How Contagious Is Respiratory Syncytial Virus?" [ref=e1958] [cursor=pointer]':
+                - /url: https://resources.healthgrades.com/right-care/infections-and-contagious-diseases/is-rsv-contagious?hid=t12_compare
+                - generic [ref=e1960]: "RSV Transmission: How Contagious Is Respiratory Syncytial Virus?"
+              - link "5 Signs Your Depression Treatment Isn't Working" [ref=e1961] [cursor=pointer]:
+                - /url: https://resources.healthgrades.com/right-care/depression/5-signs-your-depression-treatment-isnt-working?hid=t12_compare
+                - generic [ref=e1963]: 5 Signs Your Depression Treatment Isn't Working
+        - generic [ref=e1965]:
+          - generic [ref=e1967]:
+            - generic [ref=e1968]:
+              - heading "Explore More Providers" [level=2] [ref=e1969]
+              - link "View all specialties" [ref=e1970] [cursor=pointer]:
+                - /url: /specialty-directory
+                - text: View all specialties
+                - img [ref=e1971]
+            - generic [ref=e1973]:
+              - button "Filter providers by Specialists" [pressed] [ref=e1974] [cursor=pointer]: Specialists
+              - button "Filter providers by Nearby Pulmonologist" [ref=e1975] [cursor=pointer]: Nearby Pulmonologist
+          - generic [ref=e1977]:
+            - link "Family Medicine" [ref=e1978] [cursor=pointer]:
+              - /url: /family-practice-directory
+            - link "Internal Medicine" [ref=e1979] [cursor=pointer]:
+              - /url: /internal-medicine-directory
+            - link "Obstetrics & Gynecology" [ref=e1980] [cursor=pointer]:
+              - /url: /obstetrics-gynecology-directory
+            - link "Cardiology" [ref=e1981] [cursor=pointer]:
+              - /url: /cardiology-directory
+            - link "Orthopedic Surgery" [ref=e1982] [cursor=pointer]:
+              - /url: /orthopedic-surgery-directory
+            - link "General Surgery" [ref=e1983] [cursor=pointer]:
+              - /url: /surgery-general-directory
+            - link "Neurology" [ref=e1984] [cursor=pointer]:
+              - /url: /neurology-directory
+            - link "Gastroenterology" [ref=e1985] [cursor=pointer]:
+              - /url: /gastroenterology-directory
+            - link "Urology" [ref=e1986] [cursor=pointer]:
+              - /url: /urology-directory
+            - link "Oncology" [ref=e1987] [cursor=pointer]:
+              - /url: /oncology-directory
+            - link "Neurosurgery" [ref=e1988] [cursor=pointer]:
+              - /url: /neurosurgery-directory
+            - link "Endocrinology, Diabetes & Metabolism" [ref=e1989] [cursor=pointer]:
+              - /url: /diabetes-metabolism-endocrinology-directory
+    - generic [ref=e1990]:
+      - generic:
+        - generic:
+          - generic:
+            - complementary "advertisement div-gpt-ad-aboveright1": ADVERTISEMENT
+        - generic:
+          - generic:
+            - complementary "advertisement div-gpt-ad-pitchfork1": ADVERTISEMENT
+        - generic:
+          - generic:
+            - complementary "advertisement div-gpt-ad-pitchfork2": ADVERTISEMENT
+        - generic:
+          - generic:
+            - complementary "advertisement div-gpt-ad-pitchfork3": ADVERTISEMENT
+        - generic:
+          - generic:
+            - complementary "advertisement div-gpt-ad-pitchfork4": ADVERTISEMENT
+        - complementary "advertisement div-gpt-ad-pitchfork5" [ref=e2172]:
+          - text: ADVERTISEMENT
+          - iframe [ref=e2174]:
+            - iframe [ref=f76e6]:
+              - insertion [ref=f83e2]:
+                - iframe [ref=f83e4]:
+                  
+  - contentinfo "Site footer" [ref=e1994]:
+    - contentinfo [ref=e1997]:
+      - generic [ref=e1998]:
+        - generic [ref=e1999]:
+          - generic [ref=e2000]:
+            - generic [ref=e2001]: For Patients
+            - list [ref=e2002]:
+              - listitem [ref=e2003]:
+                - link "Account Sign Up / Log In" [ref=e2004] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/account/features
+              - listitem [ref=e2005]:
+                - link "Hospital Awards & Ratings" [ref=e2006] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/quality/hospital-ratings-awards
+              - listitem [ref=e2007]:
+                - link "Drugs A-Z" [ref=e2008] [cursor=pointer]:
+                  - /url: https://resources.healthgrades.com/drugs
+              - listitem [ref=e2009]:
+                - link "Healthgrades Health Library" [ref=e2010] [cursor=pointer]:
+                  - /url: https://resources.healthgrades.com/
+              - listitem [ref=e2011]:
+                - link "Video Center" [ref=e2012] [cursor=pointer]:
+                  - /url: https://resources.healthgrades.com/video
+          - generic [ref=e2013]:
+            - generic [ref=e2014]: For Providers
+            - list [ref=e2015]:
+              - listitem [ref=e2016]:
+                - link "Provider Log In" [ref=e2017] [cursor=pointer]:
+                  - /url: https://update.healthgrades.com/account/sign-in/?pCID=hg-home-footer-provider-login
+              - listitem [ref=e2018]:
+                - link "Promote Your Practice" [ref=e2019] [cursor=pointer]:
+                  - /url: https://b2b.healthgrades.com/solutions/large-group-practices/
+              - listitem [ref=e2020]:
+                - link "Claim Your Free Profile" [ref=e2021] [cursor=pointer]:
+                  - /url: https://update.healthgrades.com/landing/claim/?pCID=hg-home-footer-claim-profile
+              - listitem [ref=e2022]:
+                - link "News and Features" [ref=e2023] [cursor=pointer]:
+                  - /url: https://resources.healthgrades.com/pro
+              - listitem [ref=e2024]:
+                - link "Help Center" [ref=e2025] [cursor=pointer]:
+                  - /url: https://helpcenter.healthgrades.com/
+          - generic [ref=e2026]:
+            - generic [ref=e2027]: For Partners
+            - list [ref=e2028]:
+              - listitem [ref=e2029]:
+                - link "Healthgrades for Health Systems" [ref=e2030] [cursor=pointer]:
+                  - /url: https://b2b.healthgrades.com/solutions/health-systems/
+              - listitem [ref=e2031]:
+                - link "Promote Quality Achievements" [ref=e2032] [cursor=pointer]:
+                  - /url: https://b2b.healthgrades.com/solutions/health-systems/quality-solutions/
+              - listitem [ref=e2033]:
+                - link "Life Sciences Advertisers" [ref=e2034] [cursor=pointer]:
+                  - /url: https://b2b.healthgrades.com/solutions/life-sciences/
+              - listitem [ref=e2035]:
+                - link "Virtual Point of Care Solutions" [ref=e2036] [cursor=pointer]:
+                  - /url: https://writemd.com/
+              - listitem [ref=e2037]:
+                - link "Advertising & Use Guidelines" [ref=e2038] [cursor=pointer]:
+                  - /url: https://b2b.healthgrades.com/wp-content/uploads/2023/03/healthgrades-quality-products-advertising-guidelines.pdf
+          - generic [ref=e2039]:
+            - generic [ref=e2040]: Our Company
+            - list [ref=e2041]:
+              - listitem [ref=e2042]:
+                - link "Contact Us" [ref=e2043] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/help-start
+              - listitem [ref=e2044]:
+                - link "About Us" [ref=e2045] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/about
+              - listitem [ref=e2046]:
+                - link "Corporate" [ref=e2047] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/corporate
+              - listitem [ref=e2048]:
+                - link "Healthgrades Methodologies" [ref=e2049] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/about/healthgrades-methodologies
+              - listitem [ref=e2050]:
+                - link "Blog" [ref=e2051] [cursor=pointer]:
+                  - /url: https://b2b.healthgrades.com/insights/?type=blog
+              - listitem [ref=e2052]:
+                - link "Press Room" [ref=e2053] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/about/press-room
+              - listitem [ref=e2054]:
+                - link "Careers" [ref=e2055] [cursor=pointer]:
+                  - /url: https://rvohealth.com/careers
+              - listitem [ref=e2056]:
+                - link "Privacy Notice" [ref=e2057] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/content/privacy-notice
+              - listitem [ref=e2058]:
+                - link "Advertising Policy" [ref=e2059] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/content/advertising-policy
+              - listitem [ref=e2060]:
+                - link "Your Privacy Choices" [ref=e2061] [cursor=pointer]:
+                  - /url: https://privacyportal.onetrust.com/webform/b45407c6-ee79-4a08-912e-02ce898f9a14/5cd0657e-814b-41b9-92e0-980ad05751cc?gam_uid=000013c3a6a924e0
+                  - text: Your Privacy Choices
+                  - img [ref=e2063]
+              - listitem [ref=e2068]:
+                - button "Privacy Settings" [ref=e2069] [cursor=pointer]
+              - listitem [ref=e2070]:
+                - link "Consumer Health Data Privacy Notice" [ref=e2071] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/content/consumer-health-data-privacy-notice
+              - listitem [ref=e2072]:
+                - link "Learn More About the LGBTQ+ Affirming Badge" [ref=e2073] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/content/lgbtq-affirming-badge-info
+              - listitem [ref=e2074]:
+                - link "Sitemap" [ref=e2075] [cursor=pointer]:
+                  - /url: https://resources.healthgrades.com/sitemap
+        - group [ref=e2077]:
+          - generic "Find Care by searching our wide variety of specialty directories:" [ref=e2078] [cursor=pointer]:
+            - text: Find Care
+            - generic [ref=e2079]: "by searching our wide variety of specialty directories:"
+            - img [ref=e2080]
+          - text: · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·
+        - generic [ref=e2085]:
+          - generic [ref=e2089]:
+            - generic [ref=e2090]: Healthy Living Newsletter
+            - generic [ref=e2091]:
+              - generic [ref=e2092]:
+                - group [ref=e2093]:
+                  - generic [ref=e2094]: Sign up for the Healthgrades Newsletter
+                  - textbox "Sign up for the Healthgrades Newsletter" [ref=e2095]:
+                    - /placeholder: Enter your email address
+                - button "Sign me up!" [ref=e2096] [cursor=pointer]
+              - generic [ref=e2097]:
+                - text: Your privacy is important to us. Submission of this form is subject to Healthgrades
+                - link "User Agreement" [ref=e2098] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/content/user-agreement
+                - text: and
+                - link "Privacy Policy" [ref=e2099] [cursor=pointer]:
+                  - /url: https://www.healthgrades.com/content/privacy-policy
+          - paragraph
+        - generic [ref=e2100]:
+          - link "Healthgrades Home" [ref=e2101] [cursor=pointer]:
+            - /url: https://www.healthgrades.com/
+            - img [ref=e2102]
+          - generic [ref=e2106]:
+            - link "Follow Healthgrades on Twitter" [ref=e2107] [cursor=pointer]:
+              - /url: https://x.com/Healthgrades
+              - img [ref=e2108]
+            - link "Follow Healthgrades on Instagram" [ref=e2110] [cursor=pointer]:
+              - /url: https://www.instagram.com/healthgrades/
+              - img [ref=e2111]
+            - link "Follow Healthgrades on Youtube" [ref=e2113] [cursor=pointer]:
+              - /url: https://www.youtube.com/user/HealthgradesInc
+              - img [ref=e2114]
+            - link "Follow Healthgrades on Pinterest" [ref=e2116] [cursor=pointer]:
+              - /url: https://www.pinterest.com/healthgrades
+              - img [ref=e2117]
+            - link "Follow Healthgrades on Facebook" [ref=e2119] [cursor=pointer]:
+              - /url: https://www.facebook.com/HealthGradesInc
+              - img [ref=e2120]
+            - link "Follow Healthgrades on Linkedin" [ref=e2122] [cursor=pointer]:
+              - /url: https://www.linkedin.com/company/healthgrades
+              - img [ref=e2123]
+        - generic [ref=e2125]:
+          - generic [ref=e2126]:
+            - paragraph [ref=e2127]: © Copyright 2025 Healthgrades Marketplace, LLC, Patent US Nos. 7,752,060 and 8,719,052. All Rights Reserved. Healthgrades is an RVO Health company. Third Party materials included herein protected under copyright law.
+            - paragraph [ref=e2128]:
+              - text: Use of this website and any information contained herein is governed by the
+              - link "Healthgrades User Agreement" [ref=e2129] [cursor=pointer]:
+                - /url: https://www.healthgrades.com/content/user-agreement
+              - text: . The content on Healthgrades does not provide medical advice. Always consult a medical provider for diagnosis and treatment.
+          - paragraph:
+            - link "This website is certified by AACI. Click to verify.":
+              - /url: https://aacihealthcare.com/certificates/c143-5-2021-trust-usa/
+              - img "This website is certified by AACI. Click to verify." [ref=e2130] [cursor=pointer]
+  - alert [ref=e2131]
+  - generic [ref=e2132] [cursor=pointer]:
+    - button "Open Preferences" [ref=e2134]
+    - text: Your Privacy Rights

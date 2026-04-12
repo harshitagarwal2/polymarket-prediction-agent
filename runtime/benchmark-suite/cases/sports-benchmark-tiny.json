@@ -1,0 +1,383 @@
+{
+  "case_name": "sports-benchmark-tiny",
+  "description": "Synthetic offline benchmark fixture for sports fair values and replay.",
+  "fair_value": {
+    "baselines": [
+      {
+        "description": "Bookmaker de-vig baseline with multiplicative method and independent grouping.",
+        "forecast_score": {
+          "accuracy": 1.0,
+          "brier_score": 0.180625,
+          "calibration_bins": [
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.0,
+              "upper_bound": 0.2
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.2,
+              "upper_bound": 0.4
+            },
+            {
+              "average_outcome": 0.5,
+              "average_prediction": 0.5,
+              "count": 2,
+              "gap": 0.0,
+              "lower_bound": 0.4,
+              "upper_bound": 0.6
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.6,
+              "upper_bound": 0.8
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.8,
+              "upper_bound": 1.0
+            }
+          ],
+          "count": 2,
+          "expected_calibration_error": 0.0,
+          "log_loss": 0.5533852381847867,
+          "mean_prediction": 0.5,
+          "positive_rate": 0.5
+        },
+        "name": "bookmaker_multiplicative_independent"
+      },
+      {
+        "description": "Bookmaker de-vig baseline with power method and independent grouping.",
+        "forecast_score": {
+          "accuracy": 1.0,
+          "brier_score": 0.1784639940510001,
+          "calibration_bins": [
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.0,
+              "upper_bound": 0.2
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.2,
+              "upper_bound": 0.4
+            },
+            {
+              "average_outcome": 0.5,
+              "average_prediction": 0.5,
+              "count": 2,
+              "gap": 0.0,
+              "lower_bound": 0.4,
+              "upper_bound": 0.6
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.6,
+              "upper_bound": 0.8
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.8,
+              "upper_bound": 1.0
+            }
+          ],
+          "count": 2,
+          "expected_calibration_error": 0.0,
+          "log_loss": 0.5489602429329298,
+          "mean_prediction": 0.5,
+          "positive_rate": 0.5
+        },
+        "name": "bookmaker_power_independent"
+      },
+      {
+        "description": "Bookmaker de-vig baseline with multiplicative method and best-line aggregation.",
+        "forecast_score": {
+          "accuracy": 1.0,
+          "brier_score": 0.180625,
+          "calibration_bins": [
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.0,
+              "upper_bound": 0.2
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.2,
+              "upper_bound": 0.4
+            },
+            {
+              "average_outcome": 0.5,
+              "average_prediction": 0.5,
+              "count": 2,
+              "gap": 0.0,
+              "lower_bound": 0.4,
+              "upper_bound": 0.6
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.6,
+              "upper_bound": 0.8
+            },
+            {
+              "average_outcome": 0.0,
+              "average_prediction": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower_bound": 0.8,
+              "upper_bound": 1.0
+            }
+          ],
+          "count": 2,
+          "expected_calibration_error": 0.0,
+          "log_loss": 0.5533852381847867,
+          "mean_prediction": 0.5,
+          "positive_rate": 0.5
+        },
+        "name": "bookmaker_multiplicative_best_line"
+      },
+      {
+        "description": "Market midpoint baseline derived from provided market snapshots.",
+        "name": "market_midpoint",
+        "skipped_reason": "market snapshots do not provide complete midpoint coverage"
+      }
+    ],
+    "evaluation_rows": [
+      {
+        "absolute_error": 0.425,
+        "bookmaker": "book-a",
+        "brier_error": 0.180625,
+        "condition_id": "condition-1",
+        "correct": true,
+        "event_key": "event-1",
+        "fair_value": 0.425,
+        "fair_value_minus_outcome": 0.425,
+        "generated_at": "2026-04-07T12:00:00Z",
+        "log_loss": 0.553385238185,
+        "market_key": "token-home:no",
+        "match_strategy": "market_snapshot",
+        "outcome": "no",
+        "outcome_label": 0,
+        "source": "fixture-sports-benchmark",
+        "source_bookmaker": "book-a",
+        "source_captured_at": "2026-04-07T12:00:00Z",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      },
+      {
+        "absolute_error": 0.425,
+        "bookmaker": "book-a",
+        "brier_error": 0.180625,
+        "condition_id": "condition-1",
+        "correct": true,
+        "event_key": "event-1",
+        "fair_value": 0.575,
+        "fair_value_minus_outcome": -0.425,
+        "generated_at": "2026-04-07T12:00:00Z",
+        "log_loss": 0.553385238185,
+        "market_key": "token-home:yes",
+        "match_strategy": "market_snapshot",
+        "outcome": "yes",
+        "outcome_label": 1,
+        "source": "fixture-sports-benchmark",
+        "source_bookmaker": "book-a",
+        "source_captured_at": "2026-04-07T12:00:00Z",
+        "sport": "nba",
+        "sports_market_type": "moneyline"
+      }
+    ],
+    "forecast_score": {
+      "accuracy": 1.0,
+      "brier_score": 0.180625,
+      "calibration_bins": [
+        {
+          "average_outcome": 0.0,
+          "average_prediction": 0.0,
+          "count": 0,
+          "gap": 0.0,
+          "lower_bound": 0.0,
+          "upper_bound": 0.2
+        },
+        {
+          "average_outcome": 0.0,
+          "average_prediction": 0.0,
+          "count": 0,
+          "gap": 0.0,
+          "lower_bound": 0.2,
+          "upper_bound": 0.4
+        },
+        {
+          "average_outcome": 0.5,
+          "average_prediction": 0.5,
+          "count": 2,
+          "gap": 0.0,
+          "lower_bound": 0.4,
+          "upper_bound": 0.6
+        },
+        {
+          "average_outcome": 0.0,
+          "average_prediction": 0.0,
+          "count": 0,
+          "gap": 0.0,
+          "lower_bound": 0.6,
+          "upper_bound": 0.8
+        },
+        {
+          "average_outcome": 0.0,
+          "average_prediction": 0.0,
+          "count": 0,
+          "gap": 0.0,
+          "lower_bound": 0.8,
+          "upper_bound": 1.0
+        }
+      ],
+      "count": 2,
+      "expected_calibration_error": 0.0,
+      "log_loss": 0.5533852381847867,
+      "mean_prediction": 0.5,
+      "positive_rate": 0.5
+    },
+    "input_row_count": 2,
+    "manifest": {
+      "generated_at": "2026-04-07T12:00:00Z",
+      "max_age_seconds": 900.0,
+      "metadata": {
+        "coverage": {
+          "input_row_count": 2,
+          "skipped_group_count": 0,
+          "value_count": 2
+        },
+        "freshness": {
+          "captured_at_max": "2026-04-07T12:00:00Z",
+          "captured_at_min": "2026-04-07T12:00:00Z",
+          "max_age_seconds": 900.0
+        },
+        "match_quality": {
+          "match_strategy_counts": {
+            "market_snapshot": 2
+          },
+          "resolved_row_count": 2
+        },
+        "provenance": {
+          "book_aggregation": "independent",
+          "bookmaker_count": 1,
+          "bookmakers": [
+            "book-a"
+          ],
+          "devig_method": "multiplicative"
+        }
+      },
+      "source": "fixture-sports-benchmark",
+      "values": {
+        "token-home:no": {
+          "bookmaker": "book-a",
+          "condition_id": "condition-1",
+          "event_key": "event-1",
+          "fair_value": 0.425,
+          "generated_at": "2026-04-07T12:00:00Z",
+          "match_strategy": "market_snapshot",
+          "outcome": "no",
+          "source": "fixture-sports-benchmark",
+          "source_bookmaker": "book-a",
+          "source_captured_at": "2026-04-07T12:00:00Z",
+          "sport": "nba",
+          "sports_market_type": "moneyline"
+        },
+        "token-home:yes": {
+          "bookmaker": "book-a",
+          "condition_id": "condition-1",
+          "event_key": "event-1",
+          "fair_value": 0.575,
+          "generated_at": "2026-04-07T12:00:00Z",
+          "match_strategy": "market_snapshot",
+          "outcome": "yes",
+          "source": "fixture-sports-benchmark",
+          "source_bookmaker": "book-a",
+          "source_captured_at": "2026-04-07T12:00:00Z",
+          "sport": "nba",
+          "sports_market_type": "moneyline"
+        }
+      }
+    },
+    "missing_market_keys": [],
+    "resolved_market_keys": [
+      "token-home:no",
+      "token-home:yes"
+    ],
+    "resolved_row_count": 2,
+    "skipped_group_count": 0
+  },
+  "replay": {
+    "baselines": [
+      {
+        "description": "No-trade replay baseline for strategy comparison.",
+        "name": "noop_strategy",
+        "score": {
+          "buy_trade_count": 0,
+          "ending_cash": 100.0,
+          "ending_portfolio_value": 100.0,
+          "event_count": 2,
+          "filled_trade_count": 0,
+          "net_pnl": 0.0,
+          "rejection_count": 0,
+          "return_pct": 0.0,
+          "sell_trade_count": 0,
+          "trade_count": 0
+        }
+      }
+    ],
+    "ending_cash": 97.5,
+    "ending_portfolio_value": 100.5,
+    "ending_positions": {
+      "token-home:yes": 5.0
+    },
+    "mark_prices": {
+      "token-home:yes": 0.6
+    },
+    "net_pnl": 0.5,
+    "score": {
+      "buy_trade_count": 1,
+      "ending_cash": 97.5,
+      "ending_portfolio_value": 100.5,
+      "event_count": 2,
+      "filled_trade_count": 1,
+      "net_pnl": 0.5,
+      "rejection_count": 0,
+      "return_pct": 0.5,
+      "sell_trade_count": 0,
+      "trade_count": 1
+    }
+  }
+}

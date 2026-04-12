@@ -1,0 +1,475 @@
+- generic "Google Maps" [ref=e2]:
+  - generic [ref=e3]:
+    - application "Map · Use arrow keys to pan the map. · Get details about a place by pressing its corresponding number key." [ref=e8]
+    - search [ref=e14]:
+      - button "Back" [ref=e646] [cursor=pointer]:
+        - generic [ref=e647]: 
+      - generic [ref=e15]:
+        - combobox [ref=e17]: SK Agarwal, MD
+        - button "Search" [ref=e19] [cursor=pointer]:
+          - generic [ref=e20]: 
+        - button "Close" [ref=e22] [cursor=pointer]:
+          - generic [ref=e23]: 
+    - region "Available search options for this area" [ref=e528]:
+      - generic [ref=e531]:
+        - button "Restaurants" [ref=e533] [cursor=pointer]:
+          - generic [ref=e534]:
+            - generic [ref=e536]: 
+            - generic [ref=e537]: Restaurants
+        - button "Hotels" [ref=e539] [cursor=pointer]:
+          - generic [ref=e540]:
+            - generic [ref=e542]: 
+            - generic [ref=e543]: Hotels
+        - button "Things to do" [ref=e545] [cursor=pointer]:
+          - generic [ref=e546]:
+            - generic [ref=e548]: 
+            - generic [ref=e549]: Things to do
+        - button "Transit" [ref=e551] [cursor=pointer]:
+          - generic [ref=e552]:
+            - generic [ref=e554]: 
+            - generic [ref=e555]: Transit
+        - button "Parking" [ref=e557] [cursor=pointer]:
+          - generic [ref=e558]:
+            - generic [ref=e560]: 
+            - generic [ref=e561]: Parking
+        - button "Pharmacies" [ref=e563] [cursor=pointer]:
+          - generic [ref=e564]:
+            - generic [ref=e566]: 
+            - generic [ref=e567]: Pharmacies
+        - button "ATMs" [ref=e569] [cursor=pointer]:
+          - generic [ref=e570]:
+            - generic [ref=e572]: 
+            - generic [ref=e573]: ATMs
+      - button "Next page" [ref=e574] [cursor=pointer]:
+        - generic [ref=e575]: 
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - list [ref=e27]:
+          - listitem [ref=e28]:
+            - button "Menu" [ref=e29] [cursor=pointer]:
+              - generic [ref=e31]: 
+          - listitem [ref=e32]:
+            - button "Saved" [ref=e33] [cursor=pointer]:
+              - generic [ref=e35]: 
+              - generic [ref=e37]: Saved
+          - listitem [ref=e38]:
+            - button "Recents" [ref=e39] [cursor=pointer]:
+              - generic [ref=e41]: 
+              - generic [ref=e43]: Recents
+          - listitem [ref=e577]:
+            - button "SK Agarwal, MD" [ref=e578] [cursor=pointer]:
+              - generic [ref=e584]: SK Agarwal, MD
+          - listitem [ref=e45]:
+            - button "Get app" [ref=e46] [cursor=pointer]:
+              - generic [ref=e48]: 
+              - generic [ref=e50]: Get app
+        - main "SK Agarwal, MD" [ref=e55]:
+          - tablist [ref=e88]:
+            - tab "Overview of SK Agarwal, MD" [ref=e89]:
+              - generic [ref=e91]: Overview
+            - tab "Reviews for SK Agarwal, MD" [active] [selected] [ref=e93]:
+              - generic [ref=e95]: Reviews
+            - tab "About SK Agarwal, MD" [ref=e97]:
+              - generic [ref=e99]: About
+          - generic [ref=e648]:
+            - button "Information" [ref=e650] [cursor=pointer]:
+              - generic [ref=e651]: 
+            - generic [ref=e653]:
+              - table [ref=e655]:
+                - rowgroup [ref=e656]:
+                  - img "5 stars, 50 reviews" [ref=e657]: "5"
+                  - img "4 stars, 4 reviews" [ref=e660]: "4"
+                  - img "3 stars, 3 reviews" [ref=e663]: "3"
+                  - img "2 stars, 1 review" [ref=e666]: "2"
+                  - img "1 stars, 16 reviews" [ref=e669]: "1"
+              - generic [ref=e672]:
+                - generic [ref=e673]: "4.0"
+                - img "4.0 stars" [ref=e674]
+                - generic [ref=e680]: 74 reviews
+            - generic [ref=e683]:
+              - generic [ref=e685]: 
+              - generic [ref=e686]:
+                - generic [ref=e687]: Posting is currently turned off
+                - button "Details" [ref=e689]:
+                  - generic [ref=e691] [cursor=pointer]: Details
+            - generic [ref=e693]:
+              - button "Search reviews" [ref=e699] [cursor=pointer]:
+                - generic [ref=e701]: 
+              - button "Sort reviews" [ref=e703] [cursor=pointer]:
+                - generic [ref=e704]:
+                  - generic [ref=e705]: 
+                  - generic [ref=e706]: Sort
+            - radiogroup "Refine reviews" [ref=e707]:
+              - radio "All reviews" [checked] [ref=e709] [cursor=pointer]:
+                - generic [ref=e711]: All
+              - radio "questions, mentioned in 9 reviews" [ref=e713] [cursor=pointer]:
+                - generic [ref=e714]:
+                  - generic [ref=e715]: questions
+                  - generic [ref=e716]: "9"
+              - radio "sleep study, mentioned in 8 reviews" [ref=e718] [cursor=pointer]:
+                - generic [ref=e719]:
+                  - generic [ref=e720]: sleep study
+                  - generic [ref=e721]: "8"
+              - radio "sleep apnea, mentioned in 8 reviews" [ref=e723] [cursor=pointer]:
+                - generic [ref=e724]:
+                  - generic [ref=e725]: sleep apnea
+                  - generic [ref=e726]: "8"
+              - radio "dad, mentioned in 6 reviews" [ref=e728] [cursor=pointer]:
+                - generic [ref=e729]:
+                  - generic [ref=e730]: dad
+                  - generic [ref=e731]: "6"
+              - radio "insurance, mentioned in 5 reviews" [ref=e733] [cursor=pointer]:
+                - generic [ref=e734]:
+                  - generic [ref=e735]: insurance
+                  - generic [ref=e736]: "5"
+              - radio "feel, mentioned in 5 reviews" [ref=e738] [cursor=pointer]:
+                - generic [ref=e739]:
+                  - generic [ref=e740]: feel
+                  - generic [ref=e741]: "5"
+              - radio "clinic, mentioned in 5 reviews" [ref=e743] [cursor=pointer]:
+                - generic [ref=e744]:
+                  - generic [ref=e745]: clinic
+                  - generic [ref=e746]: "5"
+              - radio "results, mentioned in 3 reviews" [ref=e748] [cursor=pointer]:
+                - generic [ref=e749]:
+                  - generic [ref=e750]: results
+                  - generic [ref=e751]: "3"
+              - radio "zoom, mentioned in 2 reviews" [ref=e753] [cursor=pointer]:
+                - generic [ref=e754]:
+                  - generic [ref=e755]: zoom
+                  - generic [ref=e756]: "2"
+              - radio "sleep medicine, mentioned in 2 reviews" [ref=e758] [cursor=pointer]:
+                - generic [ref=e759]:
+                  - generic [ref=e760]: sleep medicine
+                  - generic [ref=e761]: "2"
+            - generic [ref=e762]:
+              - generic "B C" [ref=e763]:
+                - generic [ref=e765]:
+                  - button "Photo of B C" [ref=e766]
+                  - generic [ref=e768]:
+                    - button "B C Local Guide · 32 reviews · 329 photos" [ref=e770]:
+                      - generic [ref=e771]: B C
+                      - generic [ref=e772]: Local Guide · 32 reviews · 329 photos
+                    - button "Actions for B C's review" [ref=e773] [cursor=pointer]:
+                      - generic [ref=e775]: 
+                  - generic [ref=e776]:
+                    - generic [ref=e777]:
+                      - img "5 stars" [ref=e778]:
+                        - generic [ref=e779]: 
+                        - generic [ref=e780]: 
+                        - generic [ref=e781]: 
+                        - generic [ref=e782]: 
+                        - generic [ref=e783]: 
+                      - generic [ref=e784]: 4 months ago
+                    - generic [ref=e786]:
+                      - text: I called around to 7 different Sleep Medicine Clinic's and couldn't get through past and answering machine. Called to Dr. Agarwal 's and got through instantly. Staff was very helpful and friendly over the phone even though I mentioned I …
+                      - button "See more" [ref=e788] [cursor=pointer]: More
+                    - generic [ref=e789]:
+                      - button "Like" [ref=e790]:
+                        - generic [ref=e791] [cursor=pointer]:
+                          - generic [ref=e792]: 
+                          - generic [ref=e794]: Like
+                      - button "Share B C's review." [ref=e795]:
+                        - generic [ref=e796] [cursor=pointer]:
+                          - generic [ref=e797]: 
+                          - generic [ref=e798]: Share
+              - generic "Jojo Daquigan" [ref=e802]:
+                - generic [ref=e804]:
+                  - button "Photo of Jojo Daquigan" [ref=e805]
+                  - generic [ref=e807]:
+                    - button "Jojo Daquigan 2 reviews" [ref=e809]:
+                      - generic [ref=e810]: Jojo Daquigan
+                      - generic [ref=e811]: 2 reviews
+                    - button "Actions for Jojo Daquigan's review" [ref=e812] [cursor=pointer]:
+                      - generic [ref=e814]: 
+                  - generic [ref=e815]:
+                    - generic [ref=e816]:
+                      - img "5 stars" [ref=e817]:
+                        - generic [ref=e818]: 
+                        - generic [ref=e819]: 
+                        - generic [ref=e820]: 
+                        - generic [ref=e821]: 
+                        - generic [ref=e822]: 
+                      - generic [ref=e823]: 3 months ago
+                    - generic [ref=e825]:
+                      - text: My dad had an appointment with him for some sleep issue. Usually it's my older sister who would take him, but this time I was the one who brought him, so obviously I had no idea about this doctor's personality and patients' care like during …
+                      - button "See more" [ref=e827] [cursor=pointer]: More
+                    - generic [ref=e828]:
+                      - button "Like" [ref=e829]:
+                        - generic [ref=e830] [cursor=pointer]:
+                          - generic [ref=e831]: 
+                          - generic [ref=e833]: Like
+                      - button "Share Jojo Daquigan's review." [ref=e834]:
+                        - generic [ref=e835] [cursor=pointer]:
+                          - generic [ref=e836]: 
+                          - generic [ref=e837]: Share
+              - generic "kit tran" [ref=e841]:
+                - generic [ref=e843]:
+                  - button "Photo of kit tran" [ref=e844]
+                  - generic [ref=e846]:
+                    - button "kit tran 3 reviews" [ref=e848]:
+                      - generic [ref=e849]: kit tran
+                      - generic [ref=e850]: 3 reviews
+                    - button "Actions for kit tran's review" [ref=e851] [cursor=pointer]:
+                      - generic [ref=e853]: 
+                  - generic [ref=e854]:
+                    - generic [ref=e855]:
+                      - img "5 stars" [ref=e856]:
+                        - generic [ref=e857]: 
+                        - generic [ref=e858]: 
+                        - generic [ref=e859]: 
+                        - generic [ref=e860]: 
+                        - generic [ref=e861]: 
+                      - generic [ref=e862]: 4 months ago
+                    - generic [ref=e864]: Been going to Dr. Agarwal for a few months. Staff is professional and on top of things. Yes at times it gets busy and hectic, but what doctor’s office isn’t. Dr. Agarwal is very professional and to the point. No sugar coating, which is needed sometimes with stubborn patients (myself included).
+                    - generic [ref=e865]:
+                      - button "Like" [ref=e866]:
+                        - generic [ref=e867] [cursor=pointer]:
+                          - generic [ref=e868]: 
+                          - generic [ref=e870]: Like
+                      - button "Share kit tran's review." [ref=e871]:
+                        - generic [ref=e872] [cursor=pointer]:
+                          - generic [ref=e873]: 
+                          - generic [ref=e874]: Share
+              - generic "Shawn Puri" [ref=e878]:
+                - generic [ref=e880]:
+                  - button "Photo of Shawn Puri" [ref=e881]
+                  - generic [ref=e883]:
+                    - button "Shawn Puri 8 reviews · 7 photos" [ref=e885] [cursor=pointer]:
+                      - generic [ref=e886]: Shawn Puri
+                      - generic [ref=e887]: 8 reviews · 7 photos
+                    - button "Actions for Shawn Puri's review" [ref=e888] [cursor=pointer]:
+                      - generic [ref=e890]: 
+                  - generic [ref=e891]:
+                    - generic [ref=e892]:
+                      - img "3 stars" [ref=e893]:
+                        - generic [ref=e894]: 
+                        - generic [ref=e895]: 
+                        - generic [ref=e896]: 
+                        - generic [ref=e897]: 
+                        - generic [ref=e898]: 
+                      - generic [ref=e899]: Edited 7 months ago
+                    - generic [ref=e901]:
+                      - text: I had an appointment with them to go over my test results, and the lab tech didn't complete the results in time for the appointment. After 2 minutes the appointment was over and they asked me to schedule a new appointment. I then had to …
+                      - button "See more" [ref=e903] [cursor=pointer]: More
+                    - generic [ref=e904]:
+                      - button "Like" [ref=e905]:
+                        - generic [ref=e906] [cursor=pointer]:
+                          - generic [ref=e907]: 
+                          - generic [ref=e909]: Like
+                      - button "Share Shawn Puri's review." [ref=e910]:
+                        - generic [ref=e911] [cursor=pointer]:
+                          - generic [ref=e912]: 
+                          - generic [ref=e913]: Share
+              - generic "Angelica Erazo" [ref=e917]:
+                - generic [ref=e919]:
+                  - button "Photo of Angelica Erazo" [ref=e920]
+                  - generic [ref=e922]:
+                    - button "Angelica Erazo 5 reviews" [ref=e924]:
+                      - generic [ref=e925]: Angelica Erazo
+                      - generic [ref=e926]: 5 reviews
+                    - button "Actions for Angelica Erazo's review" [ref=e927] [cursor=pointer]:
+                      - generic [ref=e929]: 
+                  - generic [ref=e930]:
+                    - generic [ref=e931]:
+                      - img "1 star" [ref=e932]:
+                        - generic [ref=e933]: 
+                        - generic [ref=e934]: 
+                        - generic [ref=e935]: 
+                        - generic [ref=e936]: 
+                        - generic [ref=e937]: 
+                      - generic [ref=e938]: 5 months ago
+                    - generic [ref=e940]:
+                      - text: I was referred to this office from my employer's on-site clinic. I checked in for an appointment but was never actually seen by the doctor or given an initial consultation. Despite this, I was billed and repeatedly emailed for payment over …
+                      - button "See more" [ref=e942] [cursor=pointer]: More
+                    - generic [ref=e943]:
+                      - button "1 like" [ref=e944]:
+                        - generic [ref=e945] [cursor=pointer]:
+                          - generic [ref=e946]: 
+                          - generic [ref=e948]: "1"
+                      - button "Share Angelica Erazo's review." [ref=e949]:
+                        - generic [ref=e950] [cursor=pointer]:
+                          - generic [ref=e951]: 
+                          - generic [ref=e952]: Share
+              - generic "Louie Robledo" [ref=e956]:
+                - generic [ref=e958]:
+                  - button "Photo of Louie Robledo" [ref=e959]
+                  - generic [ref=e961]:
+                    - button "Louie Robledo 4 reviews · 4 photos" [ref=e963]:
+                      - generic [ref=e964]: Louie Robledo
+                      - generic [ref=e965]: 4 reviews · 4 photos
+                    - button "Actions for Louie Robledo's review" [ref=e966] [cursor=pointer]:
+                      - generic [ref=e968]: 
+                  - generic [ref=e969]:
+                    - generic [ref=e970]:
+                      - img "3 stars" [ref=e971]:
+                        - generic [ref=e972]: 
+                        - generic [ref=e973]: 
+                        - generic [ref=e974]: 
+                        - generic [ref=e975]: 
+                        - generic [ref=e976]: 
+                      - generic [ref=e977]: a year ago
+                    - generic [ref=e979]:
+                      - text: I initially wanted to give this office the benefit of the doubt, as I noticed the staff was in training. My first visit was delayed, with my appointment starting nearly an hour after my scheduled time. On my return visit, I was once again …
+                      - button "See more" [ref=e981] [cursor=pointer]: More
+                    - generic [ref=e982]:
+                      - button "1 like" [ref=e983]:
+                        - generic [ref=e984] [cursor=pointer]:
+                          - generic [ref=e985]: 
+                          - generic [ref=e987]: "1"
+                      - button "Share Louie Robledo's review." [ref=e988]:
+                        - generic [ref=e989] [cursor=pointer]:
+                          - generic [ref=e990]: 
+                          - generic [ref=e991]: Share
+              - generic "Yoly Rebugio" [ref=e995]:
+                - generic [ref=e997]:
+                  - button "Photo of Yoly Rebugio" [ref=e998]
+                  - generic [ref=e1000]:
+                    - button "Yoly Rebugio 1 review" [ref=e1002]:
+                      - generic [ref=e1003]: Yoly Rebugio
+                      - generic [ref=e1004]: 1 review
+                    - button "Actions for Yoly Rebugio's review" [ref=e1005] [cursor=pointer]:
+                      - generic [ref=e1007]: 
+                  - generic [ref=e1008]:
+                    - generic [ref=e1009]:
+                      - img "5 stars" [ref=e1010]:
+                        - generic [ref=e1011]: 
+                        - generic [ref=e1012]: 
+                        - generic [ref=e1013]: 
+                        - generic [ref=e1014]: 
+                        - generic [ref=e1015]: 
+                      - generic [ref=e1016]: 6 months ago
+                    - generic [ref=e1018]: I’ve been seeing Dr. Agarwal for several years now. He cares for me to insure that I get better. I entrusted my lung health in his hands.
+                    - generic [ref=e1019]:
+                      - button "Like" [ref=e1020]:
+                        - generic [ref=e1021] [cursor=pointer]:
+                          - generic [ref=e1022]: 
+                          - generic [ref=e1024]: Like
+                      - button "Share Yoly Rebugio's review." [ref=e1025]:
+                        - generic [ref=e1026] [cursor=pointer]:
+                          - generic [ref=e1027]: 
+                          - generic [ref=e1028]: Share
+              - generic "Andrew Reyes-Ortiz" [ref=e1032]:
+                - generic [ref=e1034]:
+                  - button "Photo of Andrew Reyes-Ortiz" [ref=e1035]
+                  - generic [ref=e1037]:
+                    - button "Andrew Reyes-Ortiz 1 review · 1 photo" [ref=e1039]:
+                      - generic [ref=e1040]: Andrew Reyes-Ortiz
+                      - generic [ref=e1041]: 1 review · 1 photo
+                    - button "Actions for Andrew Reyes-Ortiz's review" [ref=e1042] [cursor=pointer]:
+                      - generic [ref=e1044]: 
+                  - generic [ref=e1045]:
+                    - generic [ref=e1046]:
+                      - img "1 star" [ref=e1047]:
+                        - generic [ref=e1048]: 
+                        - generic [ref=e1049]: 
+                        - generic [ref=e1050]: 
+                        - generic [ref=e1051]: 
+                        - generic [ref=e1052]: 
+                      - generic [ref=e1053]: a year ago
+                    - generic [ref=e1055]:
+                      - text: My wife was crying after her visit with this rude doctor. She had to wait one hour past her appointment to be seen by Dr. Agarwal for two test results that apparently were positive for COPD and Sleep Apnea. …
+                      - button "See more" [ref=e1057] [cursor=pointer]: More
+                    - generic [ref=e1058]:
+                      - button "2 likes" [ref=e1059]:
+                        - generic [ref=e1060] [cursor=pointer]:
+                          - generic [ref=e1061]: 
+                          - generic [ref=e1063]: "2"
+                      - button "Share Andrew Reyes-Ortiz's review." [ref=e1064]:
+                        - generic [ref=e1065] [cursor=pointer]:
+                          - generic [ref=e1066]: 
+                          - generic [ref=e1067]: Share
+                    - generic [ref=e1068]:
+                      - generic [ref=e1069]: Response from the owner a year ago
+                      - generic [ref=e1070]:
+                        - text: Andrew, you never followed any recommendations made to you on your only visit to office in 2021. You sent your wife to office for evaluation for sleep problems. She was not ready to be here either. She never answered questions, argued about …
+                        - button "See more" [ref=e1072] [cursor=pointer]: More
+              - generic "Sergiy Moshkye" [ref=e1076]:
+                - generic [ref=e1078]:
+                  - button "Photo of Sergiy Moshkye" [ref=e1079]
+                  - generic [ref=e1081]:
+                    - button "Sergiy Moshkye 2 reviews" [ref=e1083]:
+                      - generic [ref=e1084]: Sergiy Moshkye
+                      - generic [ref=e1085]: 2 reviews
+                    - button "Actions for Sergiy Moshkye's review" [ref=e1086] [cursor=pointer]:
+                      - generic [ref=e1088]: 
+                  - generic [ref=e1089]:
+                    - generic [ref=e1090]:
+                      - img "5 stars" [ref=e1091]:
+                        - generic [ref=e1092]: 
+                        - generic [ref=e1093]: 
+                        - generic [ref=e1094]: 
+                        - generic [ref=e1095]: 
+                        - generic [ref=e1096]: 
+                      - generic [ref=e1097]: 9 months ago
+                    - generic [ref=e1099]:
+                      - text: Great experience! Whole lot of knowledge and kindness, never disappointed. Every visit is positive problems solving, thorough explanation of possible outcomes. Attention to small details. …
+                      - button "See more" [ref=e1101] [cursor=pointer]: More
+                    - generic [ref=e1102]:
+                      - button "Like" [ref=e1103]:
+                        - generic [ref=e1104] [cursor=pointer]:
+                          - generic [ref=e1105]: 
+                          - generic [ref=e1107]: Like
+                      - button "Share Sergiy Moshkye's review." [ref=e1108]:
+                        - generic [ref=e1109] [cursor=pointer]:
+                          - generic [ref=e1110]: 
+                          - generic [ref=e1111]: Share
+              - generic "Somik Behera" [ref=e1115]:
+                - generic [ref=e1117]:
+                  - button "Photo of Somik Behera" [ref=e1118]
+                  - generic [ref=e1120]:
+                    - button "Somik Behera 2 reviews" [ref=e1122]:
+                      - generic [ref=e1123]: Somik Behera
+                      - generic [ref=e1124]: 2 reviews
+                    - button "Actions for Somik Behera's review" [ref=e1125] [cursor=pointer]:
+                      - generic [ref=e1127]: 
+                  - generic [ref=e1128]:
+                    - generic [ref=e1129]:
+                      - img "5 stars" [ref=e1130]:
+                        - generic [ref=e1131]: 
+                        - generic [ref=e1132]: 
+                        - generic [ref=e1133]: 
+                        - generic [ref=e1134]: 
+                        - generic [ref=e1135]: 
+                      - generic [ref=e1136]: 4 months ago
+                    - generic [ref=e1138]: Dr Agarwal is very experienced and thorough expert in sleep medicine and pulmonology and I had very good experience with Dr Agarwal
+                    - generic [ref=e1139]:
+                      - button "Like" [ref=e1140]:
+                        - generic [ref=e1141] [cursor=pointer]:
+                          - generic [ref=e1142]: 
+                          - generic [ref=e1144]: Like
+                      - button "Share Somik Behera's review." [ref=e1145]:
+                        - generic [ref=e1146] [cursor=pointer]:
+                          - generic [ref=e1147]: 
+                          - generic [ref=e1148]: Share
+      - button "Collapse side panel" [ref=e518] [cursor=pointer]:
+        - generic [ref=e519]: 
+    - generic [ref=e588]:
+      - button "Google apps" [ref=e592] [cursor=pointer]:
+        - img [ref=e593]
+      - link "Sign in" [ref=e596] [cursor=pointer]:
+        - /url: https://accounts.google.com/ServiceLogin?hl=en&passive=true&continue=https%3A%2F%2Fwww.google.com%2Fmaps%2Fplace%2FSK%2BAgarwal%2C%2BMD%2F%4037.4140033%2C-121.8850728%2C17z%2Fdata%3D!3m1!5s0x808fcebe6865a187%3A0xcc756b704a0a0091!4m8!3m7!1s0x808fceb94a029567%3A0x56a5d3be520d0e86!8m2!3d37.4140033!4d-121.8850728!9m1!1b1!16s%252Fg%252F11rwxfwn3x%3Fved%3D1t%253A314688&service=local&ec=GAZAcQ
+    - generic:
+      - generic:
+        - button "Show Your Location" [ref=e599] [cursor=pointer]:
+          - generic [ref=e601]: 
+        - generic [ref=e603] [cursor=pointer]:
+          - button "Zoom in" [ref=e604]
+          - button "Zoom out" [ref=e607]
+      - generic [ref=e613]:
+        - button "Browse Street View images" [ref=e615]
+        - button "Street View" [ref=e617] [cursor=pointer]
+      - generic [ref=e621]:
+        - generic "Interactive map" [ref=e622]
+        - generic [ref=e626] [cursor=pointer]:
+          - generic [ref=e627]: 
+          - generic [ref=e628]: Layers
+        - button "Layers" [ref=e629] [cursor=pointer]
+    - generic [ref=e631]:
+      - contentinfo [ref=e634]:
+        - text: Imagery ©2026 , Map data ©2026 Google
+        - button "United States" [ref=e635] [cursor=pointer]
+        - button "Terms" [ref=e636] [cursor=pointer]
+        - button "Privacy" [ref=e637] [cursor=pointer]
+        - button "Send Product Feedback" [ref=e638] [cursor=pointer]
+      - button "200 ft" [ref=e640] [cursor=pointer]: 200 ft

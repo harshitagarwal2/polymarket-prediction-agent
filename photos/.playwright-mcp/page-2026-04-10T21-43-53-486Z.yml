@@ -1,0 +1,1067 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - generic [ref=e7]:
+      - link "WebMD Care" [ref=e10] [cursor=pointer]:
+        - /url: /
+        - img [ref=e11]
+      - navigation [ref=e14]:
+        - tablist [ref=e15]:
+          - tab "Find Providers by Specialty" [ref=e17]:
+            - button "Find Providers by Specialty" [ref=e18] [cursor=pointer]:  Find Providers by Specialty
+          - tab "Find a Facility" [ref=e20]:
+            - button "Find a Facility" [ref=e21] [cursor=pointer]:  Find a Facility
+        - list [ref=e22]:
+          - listitem [ref=e23]:
+            - link "List Your Practice" [ref=e24] [cursor=pointer]:
+              - /url: https://doctor.webmd.com/claim/learnmore
+              - generic [ref=e25]:
+                - img [ref=e26]
+                - generic [ref=e27]: List Your Practice
+          - listitem [ref=e28]:
+            - button "Log In" [ref=e29] [cursor=pointer]:
+              - generic [ref=e30]: Log In
+    - generic [ref=e31]:
+      - text: 
+      - generic "serp-block-form" [ref=e32]:
+        - generic [ref=e33]:
+          - combobox "type ahead" [ref=e35]:
+            - generic [ref=e36]:
+              - img [ref=e38]
+              - textbox "Search Doctors, Conditions or Procedures" [ref=e39]
+          - combobox "type ahead" [ref=e41]:
+            - generic [ref=e42]:
+              - img [ref=e44]
+              - textbox "Zipcode Or City, State" [ref=e45]: San Jose, CA 95123
+              - button "Search" [ref=e47] [cursor=pointer]:
+                - generic [ref=e48]: 
+                - generic [ref=e49]: Search
+          - text: 
+  - main [ref=e50]:
+    - list "Breadcrumb" [ref=e52]:
+      - listitem [ref=e53]:
+        - link "WebMD Care" [ref=e55] [cursor=pointer]:
+          - /url: https://doctor.webmd.com
+        - generic [ref=e56]: 
+      - listitem [ref=e57]:
+        - link "Providers" [ref=e59] [cursor=pointer]:
+          - /url: https://doctor.webmd.com/providers
+        - generic [ref=e60]: 
+      - listitem [ref=e61]:
+        - link "Specialties" [ref=e63] [cursor=pointer]:
+          - /url: https://doctor.webmd.com/providers/specialty
+        - generic [ref=e64]: 
+      - listitem [ref=e65]:
+        - link "Pulmonology" [ref=e67] [cursor=pointer]:
+          - /url: https://doctor.webmd.com/providers/specialty/pulmonology
+        - generic [ref=e68]: 
+      - listitem [ref=e69]:
+        - link "CA" [ref=e71] [cursor=pointer]:
+          - /url: https://doctor.webmd.com/providers/specialty/pulmonology/california
+        - generic [ref=e72]: 
+      - listitem [ref=e73]:
+        - link "Milpitas" [ref=e75] [cursor=pointer]:
+          - /url: https://doctor.webmd.com/providers/specialty/pulmonology/california/milpitas
+        - generic [ref=e76]: 
+      - listitem [ref=e77]:
+        - generic [ref=e78] [cursor=pointer]: Dr. Sanjay Kumar Agarwal, MD
+        - text: 
+    - article [ref=e80]:
+      - generic [ref=e81]:
+        - img "Dr. Sanjay Kumar Agarwal - Milpitas, CA - Pulmonology" [ref=e83]
+        - generic [ref=e84]:
+          - heading "Dr. Sanjay Kumar Agarwal, MD" [level=1] [ref=e85]
+          - generic [ref=e86]:
+            - paragraph [ref=e87]: Is this you?
+            - link "Claim your profile" [ref=e88] [cursor=pointer]:
+              - /url: https://doctor.webmd.com/doctor/sanjay-agarwal-9be58c09-a7a4-4791-ab72-2c1feb4506e2/claim
+      - generic [ref=e89]:
+        - generic [ref=e90]:
+          - generic [ref=e91]: Pulmonology
+          - generic [ref=e92]:
+            - button "4.5" [ref=e93] [cursor=pointer]:
+              - generic [ref=e94]:
+                - generic [ref=e95]: "4.5"
+                - slider "16" [ref=e96]: (16 Ratings)
+            - button " Leave a review" [ref=e103] [cursor=pointer]:
+              - generic [ref=e104]:
+                - generic [ref=e105]: 
+                - generic [ref=e106]: Leave a review
+            - button " Save Provider" [ref=e107] [cursor=pointer]:
+              - generic [ref=e108]:
+                - generic [ref=e109]: 
+                - generic [ref=e110]: Save Provider
+          - generic [ref=e111]:
+            - generic [ref=e113]: 
+            - generic [ref=e115]: 31 Years Experience
+          - generic [ref=e116]:
+            - generic [ref=e118]: 
+            - generic [ref=e119]:
+              - generic [ref=e120]: Comprehensive Sleep Center
+              - paragraph [ref=e122]: 995 Montague Expy Ste 218, Milpitas, CA, 95035
+        - link "Book appointment with Dr. Sanjay Agarwal" [ref=e124] [cursor=pointer]:
+          - /url: tel:+14089420300
+          - generic [ref=e125]:
+            - generic [ref=e126]: 
+            - generic [ref=e127]: (408) 942-0300
+    - list [ref=e130]:
+      - listitem [ref=e131]:
+        - button "OVERVIEW" [ref=e132] [cursor=pointer]:
+          - generic [ref=e133]: OVERVIEW
+      - listitem [ref=e134]:
+        - button "LOCATIONS" [ref=e135] [cursor=pointer]:
+          - generic [ref=e136]: LOCATIONS
+      - listitem [ref=e137]:
+        - button "RATINGS & REVIEWS" [ref=e138] [cursor=pointer]:
+          - generic [ref=e139]: RATINGS & REVIEWS
+      - listitem [ref=e140]:
+        - button "INSURANCE" [ref=e141] [cursor=pointer]:
+          - generic [ref=e142]: INSURANCE
+    - generic [ref=e143]:
+      - generic [ref=e144]:
+        - generic [ref=e145]: 
+        - generic [ref=e146]:
+          - heading "Overview" [level=2] [ref=e148]
+          - generic [ref=e151]:
+            - generic [ref=e152]:
+              - text: Dr. Sanjay Agarwal specializes in pulmonology, sleep medicine, and critical care medicine, bringing 31 years of experience to his practice. He focuses on treating patients with respiratory conditions, sleep disorders, and those requiring intensive medical care. Dr. Agarwal provides comprehensive care for individuals experiencing breathing difficulties, sleep-related health issues, and complex medical conditions that need specialized attention.
+              - text: Dr. Agarwal completed his medical education at Bangalore Medical College And Research Institute. He practices at Good Samaritan Hospital and sees patients at the Comprehensive Sleep Center in Milpitas, California. In addition to English, he speaks Spanish and Vietnamese, helping him connect with patients from diverse backgrounds and ensuring clear communication during medical consultations.
+            - generic [ref=e153]: AI-generated from data on this provider profile
+      - complementary [ref=e155]:
+        - generic [ref=e158]:
+          - generic [ref=e159]:
+            - generic [ref=e160]: 
+            - generic [ref=e161]:
+              - generic [ref=e162]:
+                - generic [ref=e163]: These Pulmonologists Are Accepting New Patients
+                - generic [ref=e164]: Compare Sanjay Agarwal, MD with these Pulmonologists near Milpitas, CA
+              - generic [ref=e166]: Featured Results
+          - list [ref=e168]:
+            - listitem [ref=e169]:
+              - generic [ref=e175] [cursor=pointer]:
+                - img "Dr. Kristina Kudelko, MD" [ref=e178]
+                - generic [ref=e179]:
+                  - heading "Dr. Kristina Kudelko, MD" [level=3] [ref=e180]:
+                    - link "Dr. Kristina Kudelko, MD" [ref=e181]:
+                      - /url: https://doctor.webmd.com/doctor/kristina-kudelko-2aa08608-dec5-11e7-9f4c-005056a225bf-overview?fm=true
+                  - generic [ref=e182]: Pulmonology
+                  - generic [ref=e183]:
+                    - generic [ref=e184]: "0"
+                    - slider "ratings" [ref=e185]
+                    - generic [ref=e191]: 0 Ratings
+                  - link "Learn More" [ref=e193]:
+                    - /url: https://doctor.webmd.com/doctor/kristina-kudelko-2aa08608-dec5-11e7-9f4c-005056a225bf-overview
+            - listitem [ref=e194]:
+              - generic [ref=e200] [cursor=pointer]:
+                - img "Dr. Mark Nicolls, MD" [ref=e203]
+                - generic [ref=e204]:
+                  - heading "Dr. Mark Nicolls, MD" [level=3] [ref=e205]:
+                    - link "Dr. Mark Nicolls, MD" [ref=e206]:
+                      - /url: https://doctor.webmd.com/doctor/mark-nicolls-15dcc6d2-c2c4-41a8-84d5-4f4d5693bfdd-overview?fm=true
+                  - generic [ref=e207]: Pulmonology
+                  - generic [ref=e208]:
+                    - generic [ref=e209]: "0"
+                    - slider "ratings" [ref=e210]
+                    - generic [ref=e216]: 0 Ratings
+                  - link "Learn More" [ref=e218]:
+                    - /url: https://doctor.webmd.com/doctor/mark-nicolls-15dcc6d2-c2c4-41a8-84d5-4f4d5693bfdd-overview
+            - listitem [ref=e219]:
+              - generic [ref=e225] [cursor=pointer]:
+                - img "Dr. Jennifer Williams, MD, PhD" [ref=e228]
+                - generic [ref=e229]:
+                  - heading "Dr. Jennifer Williams, MD, PhD" [level=3] [ref=e230]:
+                    - link "Dr. Jennifer Williams, MD, PhD" [ref=e231]:
+                      - /url: https://doctor.webmd.com/doctor/jennifer-williams-29c11c7a-dec5-11e7-9f4c-005056a225bf-overview?fm=true
+                  - generic [ref=e232]: Pulmonology
+                  - generic [ref=e233]:
+                    - generic [ref=e234]: "0"
+                    - slider "ratings" [ref=e235]
+                    - generic [ref=e241]: 0 Ratings
+                  - link "Learn More" [ref=e243]:
+                    - /url: https://doctor.webmd.com/doctor/jennifer-williams-29c11c7a-dec5-11e7-9f4c-005056a225bf-overview
+            - listitem [ref=e244]:
+              - generic [ref=e250] [cursor=pointer]:
+                - img "Dr. Edda Spiekerkoetter" [ref=e253]
+                - generic [ref=e254]:
+                  - heading "Dr. Edda Spiekerkoetter" [level=3] [ref=e255]:
+                    - link "Dr. Edda Spiekerkoetter" [ref=e256]:
+                      - /url: https://doctor.webmd.com/doctor/edda-spiekerkoetter-2a191042-dec5-11e7-9f4c-005056a225bf-overview?fm=true
+                  - generic [ref=e257]: Pulmonology
+                  - generic [ref=e258]:
+                    - generic [ref=e259]: "0"
+                    - slider "ratings" [ref=e260]
+                    - generic [ref=e266]: 0 Ratings
+                  - link "Learn More" [ref=e268]:
+                    - /url: https://doctor.webmd.com/doctor/edda-spiekerkoetter-2a191042-dec5-11e7-9f4c-005056a225bf-overview
+            - listitem [ref=e269]:
+              - generic [ref=e275] [cursor=pointer]:
+                - img "Dr. Lauren Eggert, MD, MPH" [ref=e278]
+                - generic [ref=e279]:
+                  - heading "Dr. Lauren Eggert, MD, MPH" [level=3] [ref=e280]:
+                    - link "Dr. Lauren Eggert, MD, MPH" [ref=e281]:
+                      - /url: https://doctor.webmd.com/doctor/lauren-falkoff-4a23ffab-df8f-45bc-81d3-51b20e243980-overview?fm=true
+                  - generic [ref=e282]: Pulmonology
+                  - generic [ref=e283]:
+                    - generic [ref=e284]: "0"
+                    - slider "ratings" [ref=e285]
+                    - generic [ref=e291]: 0 Ratings
+                  - link "Learn More" [ref=e293]:
+                    - /url: https://doctor.webmd.com/doctor/lauren-falkoff-4a23ffab-df8f-45bc-81d3-51b20e243980-overview
+            - listitem [ref=e294]:
+              - generic [ref=e300] [cursor=pointer]:
+                - img "Dr. Arthur P. Sung, MD, MHA" [ref=e303]
+                - generic [ref=e304]:
+                  - heading "Dr. Arthur P. Sung, MD, MHA" [level=3] [ref=e305]:
+                    - link "Dr. Arthur P. Sung, MD, MHA" [ref=e306]:
+                      - /url: https://doctor.webmd.com/doctor/arthur-sung-61e752be-ad37-4a17-8309-ea50617573c2-overview?fm=true
+                  - generic [ref=e307]: Pulmonology
+                  - generic [ref=e308]:
+                    - generic [ref=e309]: "4.5"
+                    - slider "ratings" [ref=e310]
+                    - generic [ref=e317]: 8 Ratings
+                  - generic [ref=e318]:
+                    - generic [ref=e319]: 
+                    - generic [ref=e320]: Answered my questions
+                  - link "Learn More" [ref=e322]:
+                    - /url: https://doctor.webmd.com/doctor/arthur-sung-61e752be-ad37-4a17-8309-ea50617573c2-overview
+          - link "View More Providers " [ref=e324] [cursor=pointer]:
+            - /url: /results?zc=95035&sids=29316&q=Pulmonologists%20in%20Milpitas%2C%20CA%2095035&state=CA&city=Milpitas&pt=37.432536,-121.896067
+            - text: View More Providers
+            - generic [ref=e325]: 
+      - generic [ref=e326]:
+        - generic [ref=e327]: 
+        - generic [ref=e328]:
+          - heading "Locations" [level=2] [ref=e330]
+          - generic [ref=e334]:
+            - link "Comprehensive Sleep Center" [ref=e337] [cursor=pointer]:
+              - /url: https://doctor.webmd.com/practice/comprehensive-sleep-center-27e554fd-7e47-e511-9be7-001f29e3bb64
+            - generic [ref=e338]: 995 Montague Expy Ste 218
+            - generic [ref=e339]: Milpitas,CA,95035
+            - generic [ref=e340]:
+              - text: "Tel:"
+              - link "(408) 942-0300" [ref=e341] [cursor=pointer]:
+                - /url: tel:+14089420300
+            - link "Get Directions" [ref=e343] [cursor=pointer]:
+              - /url: https://www.google.com/maps/dir/?api=1&destination=995%20Montague%20Expy%20Ste%20218%2C%20Milpitas%2C%20CA%2095035
+            - generic [ref=e345]:
+              - generic [ref=e346]:
+                - generic [ref=e347]: Mon
+                - generic [ref=e348]: 9:00 am - 5:00 pm
+              - generic [ref=e349]:
+                - generic [ref=e350]: Tue
+                - generic [ref=e351]: 9:00 am - 5:00 pm
+              - generic [ref=e352]:
+                - generic [ref=e353]: Wed
+                - generic [ref=e354]: 9:00 am - 5:00 pm
+              - generic [ref=e355]:
+                - generic [ref=e356]: Thu
+                - generic [ref=e357]: 9:00 am - 5:00 pm
+              - generic [ref=e358]:
+                - generic [ref=e359]: Fri
+                - generic [ref=e360]: 9:00 am - 5:00 pm
+              - generic [ref=e361]:
+                - generic [ref=e362]: Sat
+                - generic [ref=e363]: Closed
+              - generic [ref=e364]:
+                - generic [ref=e365]: Sun
+                - generic [ref=e366]: Closed
+      - generic [ref=e370]:
+        - generic [ref=e371]: 
+        - generic [ref=e372]:
+          - heading "Ratings & Reviews for Dr. Agarwal" [level=2] [ref=e375]
+          - generic [ref=e377]:
+            - generic [ref=e378]:
+              - generic [ref=e380]:
+                - text: Dr. Agarwal's Rating
+                - generic [ref=e381]:
+                  - generic [ref=e382]:
+                    - generic [ref=e383]: "4.5"
+                    - slider "overallratings" [ref=e384]
+                  - button "16 Ratings with 3 Reviews" [ref=e391] [cursor=pointer]:
+                    - generic [ref=e392]: 16 Ratings with 3 Reviews
+                - generic [ref=e393]:
+                  - term [ref=e394]: Average Wait Time
+                  - definition [ref=e395]: 45 Minutes
+                - text: 
+              - button "write-review-button" [ref=e397] [cursor=pointer]:
+                - generic [ref=e398]:
+                  - generic [ref=e399]: 
+                  - generic [ref=e400]: Leave A Review
+            - generic [ref=e401]:
+              - region "Patients’ Perspective" [ref=e402]:
+                - heading "Patients’ Perspective" [level=4] [ref=e404]
+                - generic [ref=e405]:
+                  - generic [ref=e406]:
+                    - term [ref=e407]: Explained conditions and treatments
+                    - definition [ref=e408]:
+                      - generic [ref=e409]:
+                        - progressbar "Explained conditions and treatments — Did Well" [ref=e410]
+                        - progressbar "Explained conditions and treatments — Needs Improvement" [ref=e411]
+                      - generic [ref=e412]:
+                        - generic [ref=e413]: Did Well (4)
+                        - generic [ref=e414]: Needs Improvement (1)
+                  - generic [ref=e415]:
+                    - term [ref=e416]: Answered my questions
+                    - definition [ref=e417]:
+                      - generic [ref=e418]:
+                        - progressbar "Answered my questions — Did Well" [ref=e419]
+                        - progressbar "Answered my questions — Needs Improvement" [ref=e420]
+                      - generic [ref=e421]:
+                        - generic [ref=e422]: Did Well (13)
+                        - generic [ref=e423]: Needs Improvement (1)
+                  - generic [ref=e424]:
+                    - term [ref=e425]: Provided follow-up as needed
+                    - definition [ref=e426]:
+                      - generic [ref=e427]:
+                        - progressbar "Provided follow-up as needed — Did Well" [ref=e428]
+                        - progressbar "Provided follow-up as needed — Needs Improvement" [ref=e429]
+                      - generic [ref=e430]:
+                        - generic [ref=e431]: Did Well (12)
+                        - generic [ref=e432]: Needs Improvement (2)
+                  - generic [ref=e433]:
+                    - term [ref=e434]: Gave a thorough Exam
+                    - definition [ref=e435]:
+                      - progressbar "No Ratings" [ref=e437]
+                      - generic [ref=e439]: No Ratings
+                  - generic [ref=e440]:
+                    - term [ref=e441]: Gave clear instructions
+                    - definition [ref=e442]:
+                      - progressbar "No Ratings" [ref=e444]
+                      - generic [ref=e446]: No Ratings
+                  - generic [ref=e447]:
+                    - term [ref=e448]: Staff was courteous
+                    - definition [ref=e449]:
+                      - progressbar "Staff was courteous — Did Well" [ref=e451]
+                      - generic [ref=e452]:
+                        - generic [ref=e453]: Did Well (16)
+                        - generic [ref=e454]: Needs Improvement (0)
+                  - generic [ref=e455]:
+                    - term [ref=e456]: Flexible scheduling
+                    - definition [ref=e457]:
+                      - progressbar "Flexible scheduling — Did Well" [ref=e459]
+                      - generic [ref=e460]:
+                        - generic [ref=e461]: Did Well (16)
+                        - generic [ref=e462]: Needs Improvement (0)
+              - generic [ref=e465]:
+                - generic [ref=e466]:
+                  - generic [ref=e467]: 3 REVIEWS
+                  - generic [ref=e468]:
+                    - generic [ref=e469]:
+                      - generic [ref=e470]:
+                        - textbox "Enter search terms" [ref=e471] [cursor=pointer]:
+                          - /placeholder: "Sort: Most Recent"
+                          - text: Most Recent
+                        - generic [ref=e473] [cursor=pointer]: 
+                      - text: 
+                    - generic [ref=e474]:
+                      - text: 
+                      - button "Filter" [ref=e475] [cursor=pointer]:
+                        - generic [ref=e476]:
+                          - img [ref=e477]
+                          - generic [ref=e478]: Filter
+                    - generic [ref=e479]:
+                      - text: 
+                      - generic [ref=e480]:
+                        - button "Search Reviews" [ref=e482] [cursor=pointer]:
+                          - generic [ref=e483]: 
+                        - textbox "Enter search terms" [ref=e484]:
+                          - /placeholder: Search
+                        - generic [ref=e485]: 
+                - generic [ref=e486]: Showing 1-3 of 3 reviews
+              - generic [ref=e488]:
+                - generic [ref=e489]:
+                  - slider "user review" [ref=e490]
+                  - article [ref=e498]: "\"I’ve been bringing my mom to Dr. Agarwal for the past six months, and I can genuinely say it’s made a huge difference in her health and overall well-being. He takes the time to listen, explains everything clearly, and truly cares about his patients. My mom has improved so much under his care, and we’re grateful to have found such a knowledgeable and compassionate doctor. The staff is also friendly and professional, making every visit smooth and comfortable. Highly recommend!\""
+                  - list [ref=e500]:
+                    - listitem [ref=e501]: March 17, 2025
+                  - generic [ref=e503]:
+                    - button "Helpful" [ref=e505] [cursor=pointer]:
+                      - generic [ref=e506]: Helpful
+                    - button "Flag" [ref=e508] [cursor=pointer]:
+                      - generic [ref=e509]: Flag
+                - generic [ref=e510]:
+                  - slider "user review" [ref=e511]
+                  - article [ref=e519]: "\"1st appointment (1 hr late) => 2nd appointment by Zoom (no show) => 3rd appointment by Phone (no show again). Billed for 1 appointment, 2 tests, totaling 3 charges with 0 follow-up. The doctor left a voicemail \"apologizing\" for his no shows while blaming that his patients often ask a lot of questions and he just can't get them to \"SHUT UP\". There's a reason his schedule seems so available compared to other pulmonologists/sleep doctors. Would it be possible that the doctor jam packs his schedule and treats patients as dollar signs? He left me feeling like a transaction, not a patient.\""
+                  - list [ref=e521]:
+                    - listitem [ref=e522]: December 26, 2021
+                  - generic [ref=e524]:
+                    - button "Helpful" [ref=e526] [cursor=pointer]:
+                      - generic [ref=e527]: Helpful
+                    - button "Flag" [ref=e529] [cursor=pointer]:
+                      - generic [ref=e530]: Flag
+                - generic [ref=e531]:
+                  - slider "user review" [ref=e532]
+                  - article [ref=e540]: "\"very thorough and educated in this field. helped my sleep issues and continues to monitor activity in order to maintain my sleep health. Glad i chose him and his team to help me.\""
+                  - list [ref=e542]:
+                    - listitem [ref=e543]: September 29, 2021
+                  - generic [ref=e545]:
+                    - button "Helpful" [ref=e547] [cursor=pointer]:
+                      - generic [ref=e548]: Helpful
+                    - button "Flag" [ref=e550] [cursor=pointer]:
+                      - generic [ref=e551]: Flag
+      - generic [ref=e552]:
+        - generic [ref=e553]: 
+        - generic [ref=e554]:
+          - heading "Conditions Treated by Dr. Sanjay Agarwal" [level=2] [ref=e556]
+          - generic [ref=e558]:
+            - combobox [ref=e559]:
+              - generic [ref=e560]:
+                - generic [ref=e562] [cursor=pointer]: 
+                - textbox "Enter search terms" [ref=e563]:
+                  - /placeholder: Search for your condition
+            - paragraph [ref=e564]: We verify which condition Dr. Sanjay Kumar Agarwal, MD treats and which conditions they treat most often.
+            - region "Dr. Sanjay Kumar Agarwal, MD's Most-Treated Conditions:" [ref=e565]:
+              - heading "Dr. Sanjay Kumar Agarwal, MD's Most-Treated Conditions:" [level=3] [ref=e566]
+              - paragraph [ref=e567]: Rankings are compared to the national average for similar providers.
+              - list [ref=e568]:
+                - listitem [ref=e569]:
+                  - paragraph [ref=e570]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD treats
+                    - strong [ref=e571]: Body Clock Sleep Problems
+                    - text: more than most providers
+                  - generic [ref=e572]:
+                    - generic [ref=e575]: Similar
+                    - generic [ref=e578]: More Often
+                    - generic [ref=e581]: More Than Most
+                - listitem [ref=e582]:
+                  - paragraph [ref=e583]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD treats
+                    - strong [ref=e584]: Sleep Problems in Children
+                    - text: more than most providers
+                  - generic [ref=e585]:
+                    - generic [ref=e588]: Similar
+                    - generic [ref=e591]: More Often
+                    - generic [ref=e594]: More Than Most
+                - listitem [ref=e595]:
+                  - paragraph [ref=e596]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD treats
+                    - strong [ref=e597]: Dyssomnias
+                    - text: more than most providers
+                  - generic [ref=e598]:
+                    - generic [ref=e601]: Similar
+                    - generic [ref=e604]: More Often
+                    - generic [ref=e607]: More Than Most
+                - listitem [ref=e608]:
+                  - paragraph [ref=e609]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD treats
+                    - strong [ref=e610]: Reactive Airway Disease
+                    - text: more than most providers
+                  - generic [ref=e611]:
+                    - generic [ref=e614]: Similar
+                    - generic [ref=e617]: More Often
+                    - generic [ref=e620]: More Than Most
+                - listitem [ref=e621]:
+                  - paragraph [ref=e622]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD treats
+                    - strong [ref=e623]: GERD
+                    - text: more than most providers
+                  - generic [ref=e624]:
+                    - generic [ref=e627]: Similar
+                    - generic [ref=e630]: More Often
+                    - generic [ref=e633]: More Than Most
+            - button "View Top 20 Conditions treated by Dr. Sanjay Kumar Agarwal, MD" [ref=e635] [cursor=pointer]:
+              - generic [ref=e636]:
+                - text: View Top 20 Conditions treated by Dr. Sanjay Kumar Agarwal, MD
+                - generic [ref=e637]: 
+      - generic [ref=e638]:
+        - generic [ref=e639]: 
+        - generic [ref=e640]:
+          - heading "Procedures Performed by Dr. Sanjay Agarwal" [level=2] [ref=e642]
+          - generic [ref=e644]:
+            - combobox [ref=e645]:
+              - generic [ref=e646]:
+                - generic [ref=e648] [cursor=pointer]: 
+                - textbox "Enter search terms" [ref=e649]:
+                  - /placeholder: Search for your procedures
+            - paragraph [ref=e650]: We verify which procedures Dr. Sanjay Kumar Agarwal, MD performs and which procedures they perform most often.
+            - region "Dr. Sanjay Kumar Agarwal, MD's Most-Treated Conditions:" [ref=e651]:
+              - heading "Dr. Sanjay Kumar Agarwal, MD's Most-Performed Procedures:" [level=3] [ref=e652]
+              - paragraph [ref=e653]: Rankings are compared to the national average for similar providers.
+              - list [ref=e654]:
+                - listitem [ref=e655]:
+                  - paragraph [ref=e656]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD performs
+                    - strong [ref=e657]: Sleep Studies
+                    - text: more than most providers
+                  - generic [ref=e658]:
+                    - generic [ref=e661]: Similar
+                    - generic [ref=e664]: More Often
+                    - generic [ref=e667]: More Than Most
+                - listitem [ref=e668]:
+                  - paragraph [ref=e669]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD performs
+                    - strong [ref=e670]: At-Home Sleep Study
+                    - text: more than most providers
+                  - generic [ref=e671]:
+                    - generic [ref=e674]: Similar
+                    - generic [ref=e677]: More Often
+                    - generic [ref=e680]: More Than Most
+                - listitem [ref=e681]:
+                  - paragraph [ref=e682]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD performs
+                    - strong [ref=e683]: Polysomnogram
+                    - text: more than most providers
+                  - generic [ref=e684]:
+                    - generic [ref=e687]: Similar
+                    - generic [ref=e690]: More Often
+                    - generic [ref=e693]: More Than Most
+                - listitem [ref=e694]:
+                  - paragraph [ref=e695]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD performs
+                    - strong [ref=e696]: End Tidal Carbon Dioxide Monitoring
+                    - text: more than most providers
+                  - generic [ref=e697]:
+                    - generic [ref=e700]: Similar
+                    - generic [ref=e703]: More Often
+                    - generic [ref=e706]: More Than Most
+                - listitem [ref=e707]:
+                  - paragraph [ref=e708]:
+                    - text: Dr. Sanjay Kumar Agarwal, MD performs
+                    - strong [ref=e709]: Bronchodilator Reversibility Testing
+                    - text: more than most providers
+                  - generic [ref=e710]:
+                    - generic [ref=e713]: Similar
+                    - generic [ref=e716]: More Often
+                    - generic [ref=e719]: More Than Most
+            - button "View Top 20 Procedures performed by Dr. Sanjay Kumar Agarwal, MD" [ref=e721] [cursor=pointer]:
+              - generic [ref=e722]:
+                - text: View Top 20 Procedures performed by Dr. Sanjay Kumar Agarwal, MD
+                - generic [ref=e723]: 
+      - generic [ref=e724]:
+        - generic [ref=e725]: 
+        - generic [ref=e726]:
+          - heading "Patients’ Perspective" [level=2] [ref=e729]
+          - generic [ref=e731]:
+            - generic [ref=e732]:
+              - generic [ref=e733]:
+                - generic [ref=e734]: 
+                - generic [ref=e735]: Explained conditions and treatments
+              - generic [ref=e736]:
+                - generic [ref=e737]: 
+                - generic [ref=e738]: Answered my questions
+              - generic [ref=e739]:
+                - generic [ref=e740]: 
+                - generic [ref=e741]: Provided follow-up as needed
+              - generic [ref=e742]:
+                - generic [ref=e743]: 
+                - generic [ref=e744]: Staff was courteous
+            - paragraph [ref=e746]:
+              - text: Based on patient feedback.
+              - button "Read the reviews" [ref=e747] [cursor=pointer]:
+                - generic [ref=e748]: Read the reviews
+      - generic [ref=e749]:
+        - generic [ref=e750]: 
+        - generic [ref=e751]:
+          - heading "Patient Satisfaction Poll" [level=2] [ref=e753]
+          - generic [ref=e756]:
+            - generic [ref=e757]:
+              - paragraph [ref=e758]: Was Dr. Agarwal's check in process easy?
+              - generic [ref=e759]:
+                - generic [ref=e760]:
+                  - button "Yes" [ref=e761]
+                  - button "No" [ref=e762]
+                - generic [ref=e763]:
+                  - generic [ref=e764]: Yes (1)
+                  - generic [ref=e767]: No (0)
+            - generic [ref=e769]:
+              - paragraph [ref=e770]: Do you feel Dr. Agarwal listened to your medical concerns?
+              - generic [ref=e771]:
+                - generic [ref=e772]:
+                  - button "Yes" [ref=e773]
+                  - button "No" [ref=e774]
+                - generic [ref=e775]:
+                  - generic [ref=e776]: Yes (1)
+                  - generic [ref=e779]: No (0)
+            - generic [ref=e781]:
+              - paragraph [ref=e782]: Did Dr. Agarwal follow-up with you after your initial visit?
+              - generic [ref=e783]:
+                - generic [ref=e784]:
+                  - button "Yes" [ref=e785]
+                  - button "No" [ref=e786]
+                - generic [ref=e787]:
+                  - generic [ref=e788]: Yes (1)
+                  - generic [ref=e791]: No (0)
+            - generic [ref=e793]:
+              - paragraph [ref=e794]: Would you recommend Dr. Agarwal to other patients?
+              - generic [ref=e795]:
+                - generic [ref=e796]:
+                  - button "Yes" [ref=e797]
+                  - button "No" [ref=e798]
+                - generic [ref=e799]:
+                  - generic [ref=e800]: Yes (1)
+                  - generic [ref=e803]: No (0)
+            - generic [ref=e805]:
+              - paragraph [ref=e806]: Does Dr. Agarwal offer telehealth / virtual visit options?
+              - generic [ref=e807]:
+                - generic [ref=e808]:
+                  - button "Yes" [ref=e809]
+                  - button "No" [ref=e810]
+                - generic [ref=e811]:
+                  - generic [ref=e812]: Yes (0)
+                  - generic [ref=e814]: No (0)
+      - generic [ref=e815]:
+        - generic [ref=e816]: 
+        - generic [ref=e817]:
+          - heading "Compare with Similar Doctors" [level=2] [ref=e819]
+          - table [ref=e824]:
+            - rowgroup [ref=e825]:
+              - row "Dr. Sanjay Kumar Agarwal - Milpitas, CA - Pulmonology Dr. Yon Sung - Stanford, CA - Pulmonology Dr. Andrew Sweatt - Emeryville, CA - Pulmonology Dr. Stephen Ruoss - Stanford, CA - Pulmonology" [ref=e826]:
+                - cell "Dr. Sanjay Kumar Agarwal - Milpitas, CA - Pulmonology" [ref=e827]:
+                  - img "Dr. Sanjay Kumar Agarwal - Milpitas, CA - Pulmonology" [ref=e829]
+                - cell "Dr. Yon Sung - Stanford, CA - Pulmonology" [ref=e830]:
+                  - img "Dr. Yon Sung - Stanford, CA - Pulmonology" [ref=e832]
+                - cell "Dr. Andrew Sweatt - Emeryville, CA - Pulmonology" [ref=e833]:
+                  - img "Dr. Andrew Sweatt - Emeryville, CA - Pulmonology" [ref=e835]
+                - cell "Dr. Stephen Ruoss - Stanford, CA - Pulmonology" [ref=e836]:
+                  - img "Dr. Stephen Ruoss - Stanford, CA - Pulmonology" [ref=e838]
+              - row "Dr. Sanjay Kumar Agarwal, MD Dr. Yon Sung, MD Dr. Andrew Sweatt Dr. Stephen Ruoss, MD, PhD" [ref=e839]:
+                - cell "Dr. Sanjay Kumar Agarwal, MD" [ref=e840]
+                - cell "Dr. Yon Sung, MD" [ref=e841]:
+                  - link "Dr. Yon Sung, MD" [ref=e842] [cursor=pointer]:
+                    - /url: https://doctor.webmd.com/doctor/yon-sung-922e6875-8877-4788-ab1b-3f9aee0553f0-overview
+                - cell "Dr. Andrew Sweatt" [ref=e843]:
+                  - link "Dr. Andrew Sweatt" [ref=e844] [cursor=pointer]:
+                    - /url: https://doctor.webmd.com/doctor/andrew-sweatt-289d4c88-dec5-11e7-9f4c-005056a225bf-overview
+                - cell "Dr. Stephen Ruoss, MD, PhD" [ref=e845]:
+                  - link "Dr. Stephen Ruoss, MD, PhD" [ref=e846] [cursor=pointer]:
+                    - /url: https://doctor.webmd.com/doctor/stephen-ruoss-540b50b5-19c3-4d48-ab7e-2e4577b7ea14-overview
+              - row "Pulmonology Pulmonology Pulmonology Pulmonology" [ref=e847]:
+                - cell "Pulmonology" [ref=e848]
+                - cell "Pulmonology" [ref=e849]
+                - cell "Pulmonology" [ref=e850]
+                - cell "Pulmonology" [ref=e851]
+              - row "Accepting New Patients Accepting New Patients Accepting New Patients Accepting New Patients" [ref=e852]:
+                - cell "Accepting New Patients" [ref=e853]
+                - cell "Accepting New Patients" [ref=e854]
+                - cell "Accepting New Patients" [ref=e855]
+                - cell "Accepting New Patients" [ref=e856]
+              - row "4.5 (16 Ratings) 1.0 (1 Rating) 0 (0 Ratings) 4.0 (12 Ratings)" [ref=e857]:
+                - cell "4.5 (16 Ratings)" [ref=e858]:
+                  - text: "4.5"
+                  - slider [ref=e859]
+                  - generic [ref=e866]: (16 Ratings)
+                - cell "1.0 (1 Rating)" [ref=e867]:
+                  - text: "1.0"
+                  - slider [ref=e868]
+                  - generic [ref=e874]: (1 Rating)
+                - cell "0 (0 Ratings)" [ref=e875]:
+                  - text: "0"
+                  - slider [ref=e876]
+                  - generic [ref=e882]: (0 Ratings)
+                - cell "4.0 (12 Ratings)" [ref=e883]:
+                  - text: "4.0"
+                  - slider [ref=e884]
+                  - generic [ref=e890]: (12 Ratings)
+              - row "31 Years Experience 23 Years Experience 18 Years Experience 45 Years Experience" [ref=e891]:
+                - cell "31 Years Experience" [ref=e892]
+                - cell "23 Years Experience" [ref=e893]
+                - cell "18 Years Experience" [ref=e894]
+                - cell "45 Years Experience" [ref=e895]
+              - row "No Virtual Visit option No Virtual Visit option No Virtual Visit option No Virtual Visit option" [ref=e896]:
+                - cell "No Virtual Visit option" [ref=e897]
+                - cell "No Virtual Visit option" [ref=e898]
+                - cell "No Virtual Visit option" [ref=e899]
+                - cell "No Virtual Visit option" [ref=e900]
+              - row "Speaks Spanish, Vietnamese Speaks English Speaks English" [ref=e901]:
+                - cell "Speaks Spanish, Vietnamese" [ref=e902]
+                - cell "Speaks English" [ref=e903]
+                - cell [ref=e904]
+                - cell "Speaks English" [ref=e905]
+              - row "Milpitas, CA Stanford, CA Emeryville, CA Stanford, CA" [ref=e906]:
+                - cell "Milpitas, CA" [ref=e907]
+                - cell "Stanford, CA" [ref=e908]
+                - cell "Emeryville, CA" [ref=e909]
+                - cell "Stanford, CA" [ref=e910]
+              - 'row "Med School: Bangalore Medical College And Research Institute Med School: UNIVERSITY OF PITTSBURGH SCHOOL OF MEDICINE Med School: Georgetown University School Of Medicine Med School: UNIVERSITY OF WASHINGTON SCHOOL OF MEDICINE" [ref=e911]':
+                - 'cell "Med School: Bangalore Medical College And Research Institute" [ref=e912]'
+                - 'cell "Med School: UNIVERSITY OF PITTSBURGH SCHOOL OF MEDICINE" [ref=e913]'
+                - 'cell "Med School: Georgetown University School Of Medicine" [ref=e914]'
+                - 'cell "Med School: UNIVERSITY OF WASHINGTON SCHOOL OF MEDICINE" [ref=e915]'
+              - row "Current Profile View Profile View Profile View Profile" [ref=e916]:
+                - cell "Current Profile" [ref=e917]:
+                  - generic [ref=e918]: Current Profile
+                - cell "View Profile" [ref=e919]:
+                  - link "View Profile" [ref=e920] [cursor=pointer]:
+                    - /url: https://doctor.webmd.com/doctor/yon-sung-922e6875-8877-4788-ab1b-3f9aee0553f0-overview
+                    - generic [ref=e921]: View Profile
+                - cell "View Profile" [ref=e922]:
+                  - link "View Profile" [ref=e923] [cursor=pointer]:
+                    - /url: https://doctor.webmd.com/doctor/andrew-sweatt-289d4c88-dec5-11e7-9f4c-005056a225bf-overview
+                    - generic [ref=e924]: View Profile
+                - cell "View Profile" [ref=e925]:
+                  - link "View Profile" [ref=e926] [cursor=pointer]:
+                    - /url: https://doctor.webmd.com/doctor/stephen-ruoss-540b50b5-19c3-4d48-ab7e-2e4577b7ea14-overview
+                    - generic [ref=e927]: View Profile
+      - generic [ref=e928]:
+        - generic [ref=e929]: 
+        - generic [ref=e930]:
+          - heading "Specialties" [level=2] [ref=e932]
+          - list [ref=e936]:
+            - listitem [ref=e937]:
+              - link "Pulmonology" [ref=e938] [cursor=pointer]:
+                - /url: https://doctor.webmd.com/providers/specialty/pulmonology/california/milpitas
+            - listitem [ref=e939]:
+              - link "Critical Care Medicine" [ref=e940] [cursor=pointer]:
+                - /url: https://doctor.webmd.com/providers/specialty/critical-care-medicine/california/milpitas
+            - listitem [ref=e941]:
+              - link "Sleep Medicine" [ref=e942] [cursor=pointer]:
+                - /url: https://doctor.webmd.com/providers/specialty/sleep-medicine/california/milpitas
+      - generic [ref=e943]:
+        - generic [ref=e944]: 
+        - generic [ref=e945]:
+          - heading "Certifications, License, & Education" [level=2] [ref=e947]
+          - generic [ref=e950]:
+            - generic [ref=e951]:
+              - heading "MEDICAL LICENSE" [level=2] [ref=e953]
+              - generic [ref=e955]: Medical Doctor, California, 2025, Expired
+            - generic [ref=e956]:
+              - heading "EDUCATION & TRAINING" [level=2] [ref=e958]
+              - generic [ref=e959]: Medical School
+              - generic [ref=e960]:
+                - generic [ref=e961]: Bangalore Medical College And Research Institute
+                - generic [ref=e962]: Graduated 1995
+      - generic [ref=e963]:
+        - generic [ref=e964]: 
+        - generic [ref=e965]:
+          - heading "Languages Spoken" [level=2] [ref=e967]
+          - list [ref=e970]:
+            - listitem [ref=e971]: Spanish
+            - listitem [ref=e972]: Vietnamese
+      - generic [ref=e973]:
+        - generic [ref=e974]: 
+        - generic [ref=e975]:
+          - heading "Does Dr. Sanjay Agarwal Accept Your Insurance?" [level=2] [ref=e977]
+          - generic [ref=e981]:
+            - generic [ref=e982]:
+              - heading "Search for your insurance and plan" [level=3] [ref=e983]
+              - generic [ref=e985]:
+                - combobox [ref=e986]:
+                  - generic [ref=e987]:
+                    - generic [ref=e989]: 
+                    - textbox "Enter search terms" [ref=e990]:
+                      - /placeholder: Enter Insurance Carrier
+                - generic [ref=e992]:
+                  - textbox "Enter search terms" [disabled] [ref=e993]:
+                    - /placeholder: Choose Plan Type
+                  - generic [ref=e995] [cursor=pointer]: 
+                - button "Apply" [disabled] [ref=e997] [cursor=pointer]:
+                  - generic [ref=e998]: Apply
+            - button "View All Accepted Insurance Plans " [ref=e1001] [cursor=pointer]:
+              - generic [ref=e1002]:
+                - text: View All Accepted Insurance Plans
+                - generic [ref=e1003]: 
+      - generic [ref=e1004]:
+        - generic [ref=e1005]: 
+        - generic [ref=e1006]:
+          - heading "Frequently Asked Questions" [level=2] [ref=e1008]
+          - generic [ref=e1011]:
+            - generic [ref=e1012]:
+              - heading "What conditions does Dr. Sanjay Agarwal treat?" [level=3] [ref=e1013]
+              - paragraph [ref=e1014]: Dr. Sanjay Agarwal most often treats Sleep Apnea, Sleep Apnea in Children, and Dyssomnias.
+            - generic [ref=e1015]:
+              - heading "What treatments does Dr. Sanjay Agarwal specialize in?" [level=3] [ref=e1016]
+              - paragraph [ref=e1017]: "Dr. Sanjay Agarwal performs the following procedures most often: Lung Function Tests, Sleep Studies, and Bronchodilator Reversibility Testing."
+            - generic [ref=e1018]:
+              - heading "Is Dr. Sanjay Agarwal accepting new patients?" [level=3] [ref=e1019]
+              - paragraph [ref=e1020]: Yes, Dr. Sanjay Agarwal is currently accepting new patients. Contact the provider via this profile to book an appointment.
+            - generic [ref=e1021]:
+              - heading "Where did Dr. Sanjay Agarwal go to medical school?" [level=3] [ref=e1022]
+              - paragraph [ref=e1023]: Dr. Sanjay Agarwal earned his medical degree (MD) from Bangalore Medical College And Research Institute in 1995.
+            - generic [ref=e1024]:
+              - heading "What are Dr. Sanjay Agarwal's patient ratings?" [level=3] [ref=e1025]
+              - paragraph [ref=e1026]: Dr. Sanjay Agarwal has received 16 ratings on WebMD Care. Patients gave Dr. Sanjay Agarwal an average rating of 4.5 out of 5.
+      - generic [ref=e1027]:
+        - generic [ref=e1028]: 
+        - generic [ref=e1029]:
+          - heading "Hospital Affiliations for Dr. Sanjay Agarwal" [level=2] [ref=e1031]
+          - list [ref=e1035]:
+            - listitem [ref=e1036]:
+              - link "Good Samaritan Hospital" [ref=e1039] [cursor=pointer]:
+                - /url: https://doctor.webmd.com/hospital/good-samaritan-hospital-3fb65b8e-e035-4f1e-a8c2-d520a0096653
+      - generic [ref=e1040]:
+        - generic [ref=e1041]: 
+        - generic [ref=e1042]:
+          - heading "Similar Providers" [level=2] [ref=e1044]
+          - generic [ref=e1046]:
+            - generic [ref=e1047]:
+              - generic [ref=e1053] [cursor=pointer]:
+                - img "Dr. Margaret Lynn Lau, MD" [ref=e1055]
+                - generic [ref=e1056]:
+                  - link "Dr. Margaret Lynn Lau, MD" [ref=e1058]:
+                    - /url: https://doctor.webmd.com/doctor/margaret-lau-27fafeec-dec5-11e7-9f4c-005056a225bf-overview
+                  - generic [ref=e1059]: Pediatrics
+                  - generic [ref=e1060]: 13 Years Experience | Mountain View, CA
+                  - slider "other provider ratings" [ref=e1063]: (0)
+              - generic [ref=e1074] [cursor=pointer]:
+                - img "Dr. Spoorthi Venkata Davala" [ref=e1076]
+                - generic [ref=e1077]:
+                  - link "Dr. Spoorthi Venkata Davala" [ref=e1079]:
+                    - /url: https://doctor.webmd.com/doctor/spoorthi-davala-62e692d8-b746-42b5-a958-e16b60baaaf7-overview
+                  - generic [ref=e1080]: Pulmonology
+                  - generic [ref=e1081]: 5 Years Experience | Oakland, CA
+                  - slider "other provider ratings" [ref=e1084]: (0)
+              - generic [ref=e1095] [cursor=pointer]:
+                - img "Dr. Andrew B Newman, MD" [ref=e1097]
+                - generic [ref=e1098]:
+                  - link "Dr. Andrew B Newman, MD" [ref=e1100]:
+                    - /url: https://doctor.webmd.com/doctor/andrew-newman-89918325-7210-42fd-b703-725b67fe2ad3-overview
+                  - generic [ref=e1101]: Pulmonology
+                  - generic [ref=e1102]: 51 Years Experience | Atherton, CA
+                  - slider "other provider ratings" [ref=e1105]: (7)
+              - generic [ref=e1117] [cursor=pointer]:
+                - img "Dr. Craig Steven Zone, MD" [ref=e1119]
+                - generic [ref=e1120]:
+                  - link "Dr. Craig Steven Zone, MD" [ref=e1122]:
+                    - /url: https://doctor.webmd.com/doctor/craig-zone-28e67318-dec5-11e7-9f4c-005056a225bf-overview
+                  - generic [ref=e1123]: Critical Care Medicine
+                  - generic [ref=e1124]: 31 Years Experience | Palo Alto, CA
+                  - slider "other provider ratings" [ref=e1127]: (0)
+              - generic [ref=e1138] [cursor=pointer]:
+                - img "Dr. Dipankan Bhattacharya, MD" [ref=e1140]
+                - generic [ref=e1141]:
+                  - link "Dr. Dipankan Bhattacharya, MD" [ref=e1143]:
+                    - /url: https://doctor.webmd.com/doctor/dipankan-bhattacharya-a4d00f52-fd54-4559-bef4-8a4f910d7622-overview
+                  - generic [ref=e1144]: Pediatrics
+                  - generic [ref=e1145]: 8 Years Experience | Palo Alto, CA
+                  - slider "other provider ratings" [ref=e1148]: (0)
+              - generic [ref=e1159] [cursor=pointer]:
+                - img "Monica Marie Mafla" [ref=e1161]
+                - generic [ref=e1162]:
+                  - link "Monica Marie Mafla" [ref=e1164]:
+                    - /url: https://doctor.webmd.com/doctor/monica-mafla-e4189b83-723c-4ff7-b135-f041ecd80ab8-overview
+                  - generic [ref=e1165]: Nurse Practitioner
+                  - generic [ref=e1166]: Palo Alto, CA
+                  - slider "other provider ratings" [ref=e1169]: (0)
+              - generic [ref=e1180] [cursor=pointer]:
+                - img "Dr. Terese Catherine Hammond, MD" [ref=e1182]
+                - generic [ref=e1183]:
+                  - link "Dr. Terese Catherine Hammond, MD" [ref=e1185]:
+                    - /url: https://doctor.webmd.com/doctor/terese-hammond-04e2ba2e-5e64-40bd-8356-420d7d526a9e-overview
+                  - generic [ref=e1186]: Critical Care Medicine
+                  - generic [ref=e1187]: 26 Years Experience | LOS ANGELES, CA
+                  - slider "other provider ratings" [ref=e1190]: (0)
+              - generic [ref=e1201] [cursor=pointer]:
+                - img "CJ (Muzungu) Haamankuli" [ref=e1203]
+                - generic [ref=e1204]:
+                  - link "CJ (Muzungu) Haamankuli" [ref=e1206]:
+                    - /url: https://doctor.webmd.com/doctor/muzungu-haamankuli-f5bf5f3a-5dd4-4d53-bfa4-86887c2bddcd-overview
+                  - generic [ref=e1207]: Family Medicine
+                  - generic [ref=e1208]: San Francisco, CA
+                  - slider "other provider ratings" [ref=e1211]: (0)
+              - generic [ref=e1222] [cursor=pointer]:
+                - img "Dr. Rachel Michal Aviv" [ref=e1224]
+                - generic [ref=e1225]:
+                  - link "Dr. Rachel Michal Aviv" [ref=e1227]:
+                    - /url: https://doctor.webmd.com/doctor/rachel-aviv-e8d54613-c8b6-4215-bd12-531c12a3ca2a-overview
+                  - generic [ref=e1228]: Internal Medicine
+                  - generic [ref=e1229]: 11 Years Experience | Redwood City, CA
+                  - slider "other provider ratings" [ref=e1232]: (0)
+              - generic [ref=e1243] [cursor=pointer]:
+                - img "Dr. Shaun Francis Agnel Noronha, MD" [ref=e1245]
+                - generic [ref=e1246]:
+                  - link "Dr. Shaun Francis Agnel Noronha, MD" [ref=e1248]:
+                    - /url: https://doctor.webmd.com/doctor/shaun-noronha-19726248-d85f-4df0-9265-75e9bc31fef1-overview
+                  - generic [ref=e1249]: Critical Care Medicine
+                  - generic [ref=e1250]: 18 Years Experience | Pittsburgh, PA
+                  - slider "other provider ratings" [ref=e1253]: (0)
+            - link "View More Providers " [ref=e1260] [cursor=pointer]:
+              - /url: /results?zc=95035&sids=29316&q=Pulmonologists%20in%20Milpitas%2C%20CA%2095035&state=CA&city=Milpitas&pt=37.432536,-121.896067
+              - text: View More Providers
+              - generic [ref=e1261]: 
+    - generic [ref=e1269]:
+      - iframe [ref=e1270]:
+        - link "advertisement" [ref=f790e3] [cursor=pointer]:
+          - /url: https://adclick.g.doubleclick.net/pcs/click?xai=AKAOjsvp16G9g0aop6-58hfdjXS0tZMkujl0CjAwGziOFZ91_2GUawvO8HsbjUCpiTkN4RjpTmN3b7nyQTA5O1x1wiUwgBTk6PW3cgYDhr8HDouwcKUEy5Hm-hi0NtAG30Kppyx9KR4qz-_4ZsAad_5_mtDkRTzArL_H0VNnja8YehwPnuPU9KzGZDM8Dh6v2sYPFp9zZdDz1e9QCBav7mDIfcsx_w5DuMIBgOo3QDBovZOxanq2PnxUds31dwsq_dvKajyc_foQUTHFfIjdRtxphiDXnO723YQrsYgMwWwkvGZZNmNQKaF10nwJOUDU_EqkHXeWPRCYg0yIYI38X41H8jWZCAXtAjdaIUeSyoRtpAXE2d2NA9Y259peZUL3AuyBT7CP6HBVD8yg0mDrBXmc&sai=AMfl-YTNHlxYkCwVdORbHG7PfOI8nSKfQSZ5e9TYxWO847RZHGWthojLFpJCRQrfva_yGRBM5TJuQz8dpOvVswiABLfV7nQ_ddTbk-YeXfs2SrNo8hYsZx2cylwPBoJ6YQwUL0mitkKuvuojMgYWoUUi7jbh9vgxJVYeQJgdztFKtaLwkq2LnuCJozp3uVyRpqLHfMU-MwmOpqAZb4GyG_kLPK1pm2kWkGDBECgzRark7u2cPLpjQfkvyAiJ5XruKT-buSphr2au5Jl1lUntigGb_ZSNNZ7727TKIMKmSjLQZyirMYFnQSOjs9nreXaHEcn8hGJ_9tRMeOn1777EEhgKNPS-cGis_cM&sig=Cg0ArKJSzOw21QM9EgzVEAE&fbs_aeid=%5Bgw_fbsaeid%5D&urlfix=1&adurl=https://symptoms.webmd.com/default.htm%23/introView%3Ficd%3Dban_hse_wbmd_300x250_v4
+          - img "advertisement" [ref=f790e4]
+      - text: Advertisement
+    - generic [ref=e1271]:
+      - button "×" [ref=e1272] [cursor=pointer]:
+        - generic [ref=e1273]: ×
+      - generic [ref=e1278]:
+        - iframe [ref=e1279]:
+          - link "advertisement" [ref=f791e3] [cursor=pointer]:
+            - /url: https://adclick.g.doubleclick.net/pcs/click?xai=AKAOjstzsypzaAggpaWd5eVh1rUTqPldMGphp2n2oagtoPJmOjsIHOVtQjIKjX-K5taW10R-gITr-5TmkHEvLm7nfjZ8CuHjGZNgC03mwrrAdF3IMPApUrm_tw-ICNFVuzL4hzUYjI1IxMLlVTvA97j6G_uUjRjVGhW_3J7o6S1_qlAMvyB24SOOsHYuRoPndW9gSl39VbcjPppBjdMT3yK3eUOPq89KhgDdvLz_4i06yPgczewdPONp18f381C221q8wX-CY6euOwSo4LRfWl-4YnXCoyPCBsQJ2D48YygLxP3HHDAqdhbCuvr8KCGha3Z3N0hniW0jtEAvVwcy4Ze8knihydMRpgqZRimwhMX4qmZxphsTnTn32h13t0c9D09B6Q0FQP-CbdVK_oXD1Ui9&sai=AMfl-YR34OD6HhJ5E5jffhRSVy-GAt45YBsK2ogIV2LJ_9U43qtl0A9JZdG9kfYvrI3zQDS4oLSjHWfEU12o2_nT0JPEC3mD_dxxYR-jNF2mlEjmLFoLQEfPsyIg5lg0CvhcwWUrnHxsIqBAVFyW3ccPmAMMpKR76ZLpOF8YKJ2TsujuscoqmISFV9eBJ7RmOSgUy6HxGOHFW74Vilvu0EmvfR-oihersFMIhMCThN_eoPT3rvaxrS000YgMcLavuFmxq_1hRelwXZOLXqI5v2Ymkf1VACwD34awVetCJhspAzyEw61nNH0aswm1rYEi4lclxytfloXsRU6iFZY-Sv3H-YGPRxUjz7E&sig=Cg0ArKJSzIhqTh7nhcfGEAE&fbs_aeid=%5Bgw_fbsaeid%5D&urlfix=1&adurl=https://symptoms.webmd.com/default.htm%23/introView%3Ficd%3Dban_hse_wbmd_728x90_v1
+            - img "advertisement" [ref=f791e4]
+        - text: Advertisement
+    - generic [ref=e1280]:
+      - generic [ref=e1282]:
+        - generic [ref=e1284]: Other Pulmonologists Nearby
+        - list [ref=e1286]:
+          - listitem [ref=e1287]:
+            - link "Fremont, CA" [ref=e1288] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/fremont
+          - listitem [ref=e1289]:
+            - link "Santa Clara, CA" [ref=e1290] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/santa-clara
+          - listitem [ref=e1291]:
+            - link "Sunnyvale, CA" [ref=e1292] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/sunnyvale
+          - listitem [ref=e1293]:
+            - link "San Jose, CA" [ref=e1294] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/san-jose
+          - listitem [ref=e1295]:
+            - link "Mountain View, CA" [ref=e1296] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/mountain-view
+          - listitem [ref=e1297]:
+            - link "Palo Alto, CA" [ref=e1298] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/palo-alto
+          - listitem [ref=e1299]:
+            - link "Stanford, CA" [ref=e1300] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/stanford
+          - listitem [ref=e1301]:
+            - link "Pleasanton, CA" [ref=e1302] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/pleasanton
+          - listitem [ref=e1303]:
+            - link "Redwood City, CA" [ref=e1304] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/redwood-city
+          - listitem [ref=e1305]:
+            - link "Castro Valley, CA" [ref=e1306] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/castro-valley
+          - listitem [ref=e1307]:
+            - link "San Leandro, CA" [ref=e1308] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/san-leandro
+          - listitem [ref=e1309]:
+            - link "San Mateo, CA" [ref=e1310] [cursor=pointer]:
+              - /url: /providers/specialty/pulmonology/california/san-mateo
+      - generic [ref=e1311]:
+        - generic [ref=e1312]: "Data Transparency and Trust: Understanding WebMD Doctor Listings and Reviews"
+        - paragraph [ref=e1313]: We know that finding the right doctor or provider is important to your health. That’s why we want to ensure you have confidence in the provider profiles and listings you see on WebMD Care. Our provider data is sourced from the physicians themselves as well as publicly available databases. Any doctor or provider who claims their profile by verifying themselves can update their information and provide additional data on their specialties, education, accepted insurances, conditions they treat, and procedures they perform.
+        - paragraph [ref=e1314]: All the physician and provider reviews on WebMD Care are provided by users just like you. Knowing these reviews provide insight into how other patients feel about a doctor, we maintain internal policies and protocols to ensure the quality and accuracy of all reviews. Providers are not able to remove or modify reviews on their own. Reviews can only be removed after an internal review by our customer service team.
+        - paragraph [ref=e1315]:
+          - text: We value your input and encourage you to reach out to
+          - link "our support team" [ref=e1316] [cursor=pointer]:
+            - /url: https://customercare.webmd.com/hc/en-us
+          - text: if you encounter any issues.
+  - generic [ref=e1317]:
+    - generic [ref=e1318]:
+      - button " Find Doctors" [ref=e1320] [cursor=pointer]:
+        - generic [ref=e1321]: 
+        - generic [ref=e1322]: Find Doctors
+      - generic [ref=e1323]:
+        - generic "Find Providers by Specialty" [ref=e1324]:
+          - text: Find Providers by Specialty
+          - list [ref=e1325]:
+            - listitem [ref=e1326]:
+              - link "Internal Medicine" [ref=e1327] [cursor=pointer]:
+                - /url: /providers/specialty/internal-medicine
+            - listitem [ref=e1328]:
+              - link "Cardiovascular Disease" [ref=e1329] [cursor=pointer]:
+                - /url: /providers/specialty/cardiovascular-disease
+            - listitem [ref=e1330]:
+              - link "Family Medicine" [ref=e1331] [cursor=pointer]:
+                - /url: /providers/specialty/family-medicine
+            - listitem [ref=e1332]:
+              - link "Neurology" [ref=e1333] [cursor=pointer]:
+                - /url: /providers/specialty/neurology
+            - listitem [ref=e1334]:
+              - link "Gastroenterology" [ref=e1335] [cursor=pointer]:
+                - /url: /providers/specialty/gastroenterology
+            - listitem [ref=e1336]:
+              - link "Newly Added Providers" [ref=e1337] [cursor=pointer]:
+                - /url: /providers/new-providers
+            - listitem [ref=e1338]:
+              - link "View All" [ref=e1339] [cursor=pointer]:
+                - /url: /providers/specialty
+                - generic [ref=e1340]: View All
+        - generic [ref=e1341]:
+          - generic "Find a Facility" [ref=e1342]:
+            - text: Find a Facility
+            - list [ref=e1343]:
+              - listitem [ref=e1344]:
+                - link "Award Winning Hospitals" [ref=e1345] [cursor=pointer]:
+                  - /url: /choice-awards
+              - listitem [ref=e1346]:
+                - link "Find a Hospital" [ref=e1347] [cursor=pointer]:
+                  - /url: /hospitals
+              - listitem [ref=e1348]:
+                - link "Find a Group Practice" [ref=e1349] [cursor=pointer]:
+                  - /url: /grouppractices
+          - generic "List Your Practice" [ref=e1350]:
+            - link "List Your Practice" [ref=e1351] [cursor=pointer]:
+              - /url: https://doctor.webmd.com/claim/learnmore
+          - generic "Site Map" [ref=e1352]:
+            - link "Site Map" [ref=e1353] [cursor=pointer]:
+              - /url: /sitemap
+    - contentinfo [ref=e1354]:
+      - generic [ref=e1355]:
+        - generic [ref=e1356]:
+          - generic [ref=e1359]:
+            - generic [ref=e1360]:
+              - heading "Follow WebMD on Social Media" [level=3] [ref=e1361]
+              - generic [ref=e1362]:
+                - link "facebook" [ref=e1363] [cursor=pointer]:
+                  - /url: https://www.facebook.com/WebMD/
+                  - img [ref=e1364]
+                - link "X" [ref=e1365] [cursor=pointer]:
+                  - /url: https://x.com/webmd
+                  - img [ref=e1366]
+                - link "instagram" [ref=e1367] [cursor=pointer]:
+                  - /url: https://www.instagram.com/WebMD/
+                  - img [ref=e1368]
+                - link "tiktok" [ref=e1369] [cursor=pointer]:
+                  - /url: https://www.tiktok.com/@webmd/
+                  - img [ref=e1370]
+                - link "pinterest" [ref=e1371] [cursor=pointer]:
+                  - /url: https://www.pinterest.com/webmd/
+                  - img [ref=e1372]
+                - link "whatsapp" [ref=e1373] [cursor=pointer]:
+                  - /url: https://www.whatsapp.com/channel/0029VareKvA0wajrKr01nA1n
+                  - img [ref=e1374]
+            - generic [ref=e1376]:
+              - heading "Download WebMD App" [level=3] [ref=e1377]
+              - generic [ref=e1378]:
+                - link "App Store" [ref=e1379] [cursor=pointer]:
+                  - /url: https://taps.io/Bzg3Q
+                  - img "App Store Image" [ref=e1380]
+                - link "Android Store" [ref=e1381] [cursor=pointer]:
+                  - /url: https://taps.io/Bzg2w
+                  - img "Andriod Store Image" [ref=e1382]
+          - generic [ref=e1383]:
+            - paragraph [ref=e1384]:
+              - link "Policies" [ref=e1385] [cursor=pointer]:
+                - /url: javascript:void(0)
+            - paragraph [ref=e1386]:
+              - link "About" [ref=e1387] [cursor=pointer]:
+                - /url: javascript:void(0)
+            - paragraph [ref=e1388]:
+              - link "For Advertisers" [ref=e1389] [cursor=pointer]:
+                - /url: javascript:void(0)
+          - generic [ref=e1390]:
+            - list [ref=e1391]:
+              - listitem [ref=e1392]:
+                - link "Privacy Policy" [ref=e1393] [cursor=pointer]:
+                  - /url: https://www.webmd.com/about-webmd-policies/about-privacy-policy
+              - listitem [ref=e1394]:
+                - link "Cookie Policy" [ref=e1395] [cursor=pointer]:
+                  - /url: https://www.webmd.com/about-webmd-policies/cookie-policy
+              - listitem [ref=e1396]:
+                - link "Editorial Policy" [ref=e1397] [cursor=pointer]:
+                  - /url: https://www.webmd.com/about-webmd-policies/about-editorial-policy
+              - listitem [ref=e1398]:
+                - link "Advertising Policy" [ref=e1399] [cursor=pointer]:
+                  - /url: https://www.webmd.com/about-webmd-policies/about-advertising-policy
+              - listitem [ref=e1400]:
+                - link "Correction Policy" [ref=e1401] [cursor=pointer]:
+                  - /url: https://www.webmd.com/about-webmd-policies/webmd-corrections-policies
+              - listitem [ref=e1402]:
+                - link "Terms of Use" [ref=e1403] [cursor=pointer]:
+                  - /url: https://www.webmd.com/about-webmd-policies/about-terms-and-conditions-of-use
+            - list [ref=e1405]:
+              - listitem [ref=e1406]:
+                - link "TRUSTe" [ref=e1407] [cursor=pointer]:
+                  - /url: https://privacy.truste.com/privacy-seal/validation?rid=07326333-3522-463d-81bf-f00fd7171fff
+                  - img "TRUSTe" [ref=e1408]
+              - listitem [ref=e1409]:
+                - img "TAG Registered Seal" [ref=e1411]
+              - listitem [ref=e1412]:
+                - img "Adchoices" [ref=e1414] [cursor=pointer]
+        - generic [ref=e1415]:
+          - paragraph [ref=e1417]:
+            - text: © 2005 - 2026 WebMD LLC, an
+            - link "Internet Brands" [ref=e1418] [cursor=pointer]:
+              - /url: https://www.internetbrands.com/
+            - text: company. All rights reserved. WebMD does not provide medical advice, diagnosis or treatment.
+            - link "See additional information." [ref=e1419] [cursor=pointer]:
+              - /url: https://www.webmd.com/about-webmd-policies/additional-info
+          - link "Logo for WebMD" [ref=e1421] [cursor=pointer]:
+            - /url: https://www.webmd.com/
+            - img "Logo for WebMD" [ref=e1422]

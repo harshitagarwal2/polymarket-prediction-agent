@@ -1,0 +1,480 @@
+- generic "Google Maps" [ref=e9]:
+  - generic [ref=e3]:
+    - application "Map · Use arrow keys to pan the map. · Get details about a place by pressing its corresponding number key." [ref=e10]
+    - search [ref=e15]:
+      - button "Back" [ref=e699] [cursor=pointer]:
+        - generic [ref=e700]: 
+      - generic [ref=e16]:
+        - combobox [ref=e18]: California Specialty Physicians
+        - button "Search" [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: 
+        - button "Close" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: 
+    - region "Available search options for this area" [ref=e31]:
+      - generic [ref=e34]:
+        - button "Restaurants" [ref=e36] [cursor=pointer]:
+          - generic [ref=e37]:
+            - generic [ref=e39]: 
+            - generic [ref=e40]: Restaurants
+        - button "Hotels" [ref=e42] [cursor=pointer]:
+          - generic [ref=e43]:
+            - generic [ref=e45]: 
+            - generic [ref=e46]: Hotels
+        - button "Things to do" [ref=e48] [cursor=pointer]:
+          - generic [ref=e49]:
+            - generic [ref=e51]: 
+            - generic [ref=e52]: Things to do
+        - button "Transit" [ref=e54] [cursor=pointer]:
+          - generic [ref=e55]:
+            - generic [ref=e57]: 
+            - generic [ref=e58]: Transit
+        - button "Parking" [ref=e60] [cursor=pointer]:
+          - generic [ref=e61]:
+            - generic [ref=e63]: 
+            - generic [ref=e64]: Parking
+        - button "Pharmacies" [ref=e66] [cursor=pointer]:
+          - generic [ref=e67]:
+            - generic [ref=e69]: 
+            - generic [ref=e70]: Pharmacies
+        - button "ATMs" [ref=e72] [cursor=pointer]:
+          - generic [ref=e73]:
+            - generic [ref=e75]: 
+            - generic [ref=e76]: ATMs
+      - button "Next page" [ref=e77] [cursor=pointer]:
+        - generic [ref=e78]: 
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - button "Menu" [ref=e84] [cursor=pointer]:
+              - generic [ref=e86]: 
+          - listitem [ref=e87]:
+            - button "Saved" [ref=e88] [cursor=pointer]:
+              - generic [ref=e90]: 
+              - generic [ref=e92]: Saved
+          - listitem [ref=e93]:
+            - button "Recents" [ref=e94] [cursor=pointer]:
+              - generic [ref=e96]: 
+              - generic [ref=e98]: Recents
+          - listitem [ref=e100]:
+            - button "California Specialty Physicians" [ref=e101] [cursor=pointer]:
+              - generic [ref=e107]: California Specialty Physicians
+          - listitem [ref=e109]:
+            - button "Get app" [ref=e110] [cursor=pointer]:
+              - generic [ref=e112]: 
+              - generic [ref=e114]: Get app
+        - main "California Specialty Physicians" [ref=e119]:
+          - tablist [ref=e156]:
+            - tab "Overview of California Specialty Physicians" [ref=e157]:
+              - generic [ref=e159]: Overview
+            - tab "Reviews for California Specialty Physicians" [active] [selected] [ref=e161]:
+              - generic [ref=e163]: Reviews
+            - tab "About California Specialty Physicians" [ref=e165]:
+              - generic [ref=e167]: About
+          - generic [ref=e701]:
+            - button "Information" [ref=e703] [cursor=pointer]:
+              - generic [ref=e704]: 
+            - generic [ref=e706]:
+              - table [ref=e708]:
+                - rowgroup [ref=e709]:
+                  - img "5 stars, 31 reviews" [ref=e710]: "5"
+                  - img "4 stars, 3 reviews" [ref=e713]: "4"
+                  - img "3 stars, 1 review" [ref=e716]: "3"
+                  - img "2 stars, 1 review" [ref=e719]: "2"
+                  - img "1 stars, 5 reviews" [ref=e722]: "1"
+              - generic [ref=e725]:
+                - generic [ref=e726]: "4.3"
+                - img "4.3 stars" [ref=e727]
+                - generic [ref=e733]: 41 reviews
+            - button "Write a review" [ref=e737] [cursor=pointer]:
+              - generic [ref=e738]:
+                - generic [ref=e739]: 
+                - generic [ref=e740]: Write a review
+            - generic [ref=e743]:
+              - button "Search reviews" [ref=e749] [cursor=pointer]:
+                - generic [ref=e751]: 
+              - button "Sort reviews" [ref=e753] [cursor=pointer]:
+                - generic [ref=e754]:
+                  - generic [ref=e755]: 
+                  - generic [ref=e756]: Sort
+            - radiogroup "Refine reviews" [ref=e757]:
+              - radio "All reviews" [checked] [ref=e759] [cursor=pointer]:
+                - generic [ref=e761]: All
+              - radio "sleep apnea, mentioned in 9 reviews" [ref=e763] [cursor=pointer]:
+                - generic [ref=e764]:
+                  - generic [ref=e765]: sleep apnea
+                  - generic [ref=e766]: "9"
+              - radio "dad, mentioned in 7 reviews" [ref=e768] [cursor=pointer]:
+                - generic [ref=e769]:
+                  - generic [ref=e770]: dad
+                  - generic [ref=e771]: "7"
+              - radio "questions, mentioned in 7 reviews" [ref=e773] [cursor=pointer]:
+                - generic [ref=e774]:
+                  - generic [ref=e775]: questions
+                  - generic [ref=e776]: "7"
+              - radio "info, mentioned in 5 reviews" [ref=e778] [cursor=pointer]:
+                - generic [ref=e779]:
+                  - generic [ref=e780]: info
+                  - generic [ref=e781]: "5"
+              - radio "lung, mentioned in 4 reviews" [ref=e783] [cursor=pointer]:
+                - generic [ref=e784]:
+                  - generic [ref=e785]: lung
+                  - generic [ref=e786]: "4"
+              - radio "suffering, mentioned in 4 reviews" [ref=e788] [cursor=pointer]:
+                - generic [ref=e789]:
+                  - generic [ref=e790]: suffering
+                  - generic [ref=e791]: "4"
+              - radio "schedule, mentioned in 4 reviews" [ref=e793] [cursor=pointer]:
+                - generic [ref=e794]:
+                  - generic [ref=e795]: schedule
+                  - generic [ref=e796]: "4"
+              - radio "insurance, mentioned in 4 reviews" [ref=e798] [cursor=pointer]:
+                - generic [ref=e799]:
+                  - generic [ref=e800]: insurance
+                  - generic [ref=e801]: "4"
+              - radio "health, mentioned in 4 reviews" [ref=e803] [cursor=pointer]:
+                - generic [ref=e804]:
+                  - generic [ref=e805]: health
+                  - generic [ref=e806]: "4"
+              - radio "asthma, mentioned in 2 reviews" [ref=e808] [cursor=pointer]:
+                - generic [ref=e809]:
+                  - generic [ref=e810]: asthma
+                  - generic [ref=e811]: "2"
+            - generic [ref=e812]:
+              - generic "Audrey Ogden" [ref=e813]:
+                - generic [ref=e815]:
+                  - button "Photo of Audrey Ogden" [ref=e816]
+                  - generic [ref=e818]:
+                    - button "Audrey Ogden 4 reviews · 1 photo" [ref=e820]:
+                      - generic [ref=e821]: Audrey Ogden
+                      - generic [ref=e822]: 4 reviews · 1 photo
+                    - button "Actions for Audrey Ogden's review" [ref=e823] [cursor=pointer]:
+                      - generic [ref=e825]: 
+                  - generic [ref=e826]:
+                    - generic [ref=e827]:
+                      - img "5 stars" [ref=e828]:
+                        - generic [ref=e829]: 
+                        - generic [ref=e830]: 
+                        - generic [ref=e831]: 
+                        - generic [ref=e832]: 
+                        - generic [ref=e833]: 
+                      - generic [ref=e834]: 3 months ago
+                    - generic [ref=e836]:
+                      - text: Dr Agarwal is a wonderful specialist. He takes the time he needs with his patients so they fully understand how to help themselves and why. He is very thorough and breaks down your plan of care very clearly. …
+                      - button "See more" [ref=e838] [cursor=pointer]: More
+                    - generic [ref=e839]:
+                      - button "Like" [ref=e840]:
+                        - generic [ref=e841] [cursor=pointer]:
+                          - generic [ref=e842]: 
+                          - generic [ref=e844]: Like
+                      - button "Share Audrey Ogden's review." [ref=e845]:
+                        - generic [ref=e846] [cursor=pointer]:
+                          - generic [ref=e847]: 
+                          - generic [ref=e848]: Share
+              - generic "kathy scharmer" [ref=e852]:
+                - generic [ref=e854]:
+                  - button "Photo of kathy scharmer" [ref=e855]
+                  - generic [ref=e857]:
+                    - button "kathy scharmer 3 reviews · 1 photo" [ref=e859]:
+                      - generic [ref=e860]: kathy scharmer
+                      - generic [ref=e861]: 3 reviews · 1 photo
+                    - button "Actions for kathy scharmer's review" [ref=e862] [cursor=pointer]:
+                      - generic [ref=e864]: 
+                  - generic [ref=e865]:
+                    - generic [ref=e866]:
+                      - img "4 stars" [ref=e867]:
+                        - generic [ref=e868]: 
+                        - generic [ref=e869]: 
+                        - generic [ref=e870]: 
+                        - generic [ref=e871]: 
+                        - generic [ref=e872]: 
+                      - generic [ref=e873]: 3 months ago
+                    - generic [ref=e875]:
+                      - text: I've been seeing Dr Agarwal for a little over a year now and have already experienced better quality of life by implementing some of his recomendations. He was the only person that ever diagnosed my shortness of breath as asthma and …
+                      - button "See more" [ref=e877] [cursor=pointer]: More
+                    - generic [ref=e878]:
+                      - button "Like" [ref=e879]:
+                        - generic [ref=e880] [cursor=pointer]:
+                          - generic [ref=e881]: 
+                          - generic [ref=e883]: Like
+                      - button "Share kathy scharmer's review." [ref=e884]:
+                        - generic [ref=e885] [cursor=pointer]:
+                          - generic [ref=e886]: 
+                          - generic [ref=e887]: Share
+              - generic "Alexander Iluridze" [ref=e891]:
+                - generic [ref=e893]:
+                  - button "Photo of Alexander Iluridze" [ref=e894]
+                  - generic [ref=e896]:
+                    - button "Alexander Iluridze 1 review" [ref=e898]:
+                      - generic [ref=e899]: Alexander Iluridze
+                      - generic [ref=e900]: 1 review
+                    - button "Actions for Alexander Iluridze's review" [ref=e901] [cursor=pointer]:
+                      - generic [ref=e903]: 
+                  - generic [ref=e904]:
+                    - generic [ref=e905]:
+                      - img "5 stars" [ref=e906]:
+                        - generic [ref=e907]: 
+                        - generic [ref=e908]: 
+                        - generic [ref=e909]: 
+                        - generic [ref=e910]: 
+                        - generic [ref=e911]: 
+                      - generic [ref=e912]: a year ago
+                    - generic [ref=e914]:
+                      - text: I had an outstanding experience with Dr. Agarwal. From the moment I walked into the office, I felt welcomed and at ease. Dr. Agarwal is exceptionally understanding, compassionate, and genuinely caring. He took the time to listen to my …
+                      - button "See more" [ref=e916] [cursor=pointer]: More
+                    - generic [ref=e917]:
+                      - button "Like" [ref=e918]:
+                        - generic [ref=e919] [cursor=pointer]:
+                          - generic [ref=e920]: 
+                          - generic [ref=e922]: Like
+                      - button "Share Alexander Iluridze's review." [ref=e923]:
+                        - generic [ref=e924] [cursor=pointer]:
+                          - generic [ref=e925]: 
+                          - generic [ref=e926]: Share
+                    - generic [ref=e927]:
+                      - generic [ref=e928]: Response from the owner a year ago
+                      - generic [ref=e929]: Thank you, Alexander. We are equally happy.
+              - generic "Christopher Van Vleet" [ref=e933]:
+                - generic [ref=e935]:
+                  - button "Photo of Christopher Van Vleet" [ref=e936]
+                  - generic [ref=e938]:
+                    - button "Christopher Van Vleet 13 reviews" [ref=e940]:
+                      - generic [ref=e941]: Christopher Van Vleet
+                      - generic [ref=e942]: 13 reviews
+                    - button "Actions for Christopher Van Vleet's review" [ref=e943] [cursor=pointer]:
+                      - generic [ref=e945]: 
+                  - generic [ref=e946]:
+                    - generic [ref=e947]:
+                      - img "5 stars" [ref=e948]:
+                        - generic [ref=e949]: 
+                        - generic [ref=e950]: 
+                        - generic [ref=e951]: 
+                        - generic [ref=e952]: 
+                        - generic [ref=e953]: 
+                      - generic [ref=e954]: a year ago
+                    - generic [ref=e956]: Dr Agarwal helped me understand what exactly is (and is not) sleep apnea. He clarified some misconceptions I had as well. His evaluation and care plan has been straightforward and this has allowed me to get going on CPAP without delay and onward to better outcomes.
+                    - generic [ref=e957]:
+                      - button "Like" [ref=e958]:
+                        - generic [ref=e959] [cursor=pointer]:
+                          - generic [ref=e960]: 
+                          - generic [ref=e962]: Like
+                      - button "Share Christopher Van Vleet's review." [ref=e963]:
+                        - generic [ref=e964] [cursor=pointer]:
+                          - generic [ref=e965]: 
+                          - generic [ref=e966]: Share
+                    - generic [ref=e967]:
+                      - generic [ref=e968]: Response from the owner a year ago
+                      - generic [ref=e969]: Thank you, Christopher. I am equally happy with your results.
+              - generic "Lily Phan" [ref=e973]:
+                - generic [ref=e975]:
+                  - button "Photo of Lily Phan" [ref=e976]
+                  - generic [ref=e978]:
+                    - button "Lily Phan 6 reviews" [ref=e980]:
+                      - generic [ref=e981]: Lily Phan
+                      - generic [ref=e982]: 6 reviews
+                    - button "Actions for Lily Phan's review" [ref=e983] [cursor=pointer]:
+                      - generic [ref=e985]: 
+                  - generic [ref=e986]:
+                    - generic [ref=e987]:
+                      - img "5 stars" [ref=e988]:
+                        - generic [ref=e989]: 
+                        - generic [ref=e990]: 
+                        - generic [ref=e991]: 
+                        - generic [ref=e992]: 
+                        - generic [ref=e993]: 
+                      - generic [ref=e994]: 3 years ago
+                    - generic [ref=e996]:
+                      - text: Dr. Agarwal is my mom's doctor. He is very caring, accessible, and competent. My mom had undiagnosed sleep apnea with COPD for years. Dr. Agarwal diagnosed her with sleep apnea, and she has significant improved on the CPAP therapy. Her …
+                      - button "See more" [ref=e998] [cursor=pointer]: More
+                    - generic [ref=e999]:
+                      - button "1 like" [ref=e1000]:
+                        - generic [ref=e1001] [cursor=pointer]:
+                          - generic [ref=e1002]: 
+                          - generic [ref=e1004]: "1"
+                      - button "Share Lily Phan's review." [ref=e1005]:
+                        - generic [ref=e1006] [cursor=pointer]:
+                          - generic [ref=e1007]: 
+                          - generic [ref=e1008]: Share
+              - generic "Yvonne Jasso" [ref=e1012]:
+                - generic [ref=e1014]:
+                  - button "Photo of Yvonne Jasso" [ref=e1015]
+                  - generic [ref=e1017]:
+                    - button "Yvonne Jasso 12 reviews" [ref=e1019]:
+                      - generic [ref=e1020]: Yvonne Jasso
+                      - generic [ref=e1021]: 12 reviews
+                    - button "Actions for Yvonne Jasso's review" [ref=e1022] [cursor=pointer]:
+                      - generic [ref=e1024]: 
+                  - generic [ref=e1025]:
+                    - generic [ref=e1026]:
+                      - img "5 stars" [ref=e1027]:
+                        - generic [ref=e1028]: 
+                        - generic [ref=e1029]: 
+                        - generic [ref=e1030]: 
+                        - generic [ref=e1031]: 
+                        - generic [ref=e1032]: 
+                      - generic [ref=e1033]: 4 years ago
+                    - generic [ref=e1035]: Dr. Sanjay Agarwal is an excellent physician who has treated my 85 year old father for his lung disease. Through the many doctor appointments we have had with him he has been professional, thorough, compassionate and gives my father quality time in answering all his questions.
+                    - generic [ref=e1036]:
+                      - button "Like" [ref=e1037]:
+                        - generic [ref=e1038] [cursor=pointer]:
+                          - generic [ref=e1039]: 
+                          - generic [ref=e1041]: Like
+                      - button "Share Yvonne Jasso's review." [ref=e1042]:
+                        - generic [ref=e1043] [cursor=pointer]:
+                          - generic [ref=e1044]: 
+                          - generic [ref=e1045]: Share
+                    - generic [ref=e1046]:
+                      - generic [ref=e1047]: Response from the owner a year ago
+                      - generic [ref=e1048]: Appreciate your engagement and care. Very motivating and inspiring that the family takes so good care of these complex patients. We are happy to extend our assistance
+              - generic "Suhail Syed" [ref=e1052]:
+                - generic [ref=e1054]:
+                  - button "Photo of Suhail Syed" [ref=e1055]
+                  - generic [ref=e1057]:
+                    - button "Suhail Syed Local Guide · 143 reviews · 290 photos" [ref=e1059]:
+                      - generic [ref=e1060]: Suhail Syed
+                      - generic [ref=e1061]: Local Guide · 143 reviews · 290 photos
+                    - button "Actions for Suhail Syed's review" [ref=e1062] [cursor=pointer]:
+                      - generic [ref=e1064]: 
+                  - generic [ref=e1065]:
+                    - generic [ref=e1066]:
+                      - img "5 stars" [ref=e1067]:
+                        - generic [ref=e1068]: 
+                        - generic [ref=e1069]: 
+                        - generic [ref=e1070]: 
+                        - generic [ref=e1071]: 
+                        - generic [ref=e1072]: 
+                      - generic [ref=e1073]: 5 years ago
+                    - generic [ref=e1075]:
+                      - text: Sanjay Agarwal has been an amazing Dr so far. I suffer from acute sleep apnea and he has been very supportive and very informative, sharing with me the cause, symproons and impacts apnea has on health. He is proactive , following up with …
+                      - button "See more" [ref=e1077] [cursor=pointer]: More
+                    - generic [ref=e1078]:
+                      - button "Like" [ref=e1079]:
+                        - generic [ref=e1080] [cursor=pointer]:
+                          - generic [ref=e1081]: 
+                          - generic [ref=e1083]: Like
+                      - button "Share Suhail Syed's review." [ref=e1084]:
+                        - generic [ref=e1085] [cursor=pointer]:
+                          - generic [ref=e1086]: 
+                          - generic [ref=e1087]: Share
+              - generic "veron dcosta" [ref=e1091]:
+                - generic [ref=e1093]:
+                  - button "Photo of veron dcosta" [ref=e1094]
+                  - generic [ref=e1096]:
+                    - button "veron dcosta Local Guide · 29 reviews · 72 photos" [ref=e1098]:
+                      - generic [ref=e1099]: veron dcosta
+                      - generic [ref=e1100]: Local Guide · 29 reviews · 72 photos
+                    - button "Actions for veron dcosta's review" [ref=e1101] [cursor=pointer]:
+                      - generic [ref=e1103]: 
+                  - generic [ref=e1104]:
+                    - generic [ref=e1105]:
+                      - img "5 stars" [ref=e1106]:
+                        - generic [ref=e1107]: 
+                        - generic [ref=e1108]: 
+                        - generic [ref=e1109]: 
+                        - generic [ref=e1110]: 
+                        - generic [ref=e1111]: 
+                      - generic [ref=e1112]: 4 years ago
+                    - generic [ref=e1114]:
+                      - text: Meeting Dr Agarwal was a blessing. i visited him to check on my sleep apnea, pulmonology tests and get guidance on a few other health problems i faced. He goes the extra mile to build rapport, have an engaging conversation, share reference …
+                      - button "See more" [ref=e1116] [cursor=pointer]: More
+                    - generic [ref=e1117]:
+                      - button "Like" [ref=e1118]:
+                        - generic [ref=e1119] [cursor=pointer]:
+                          - generic [ref=e1120]: 
+                          - generic [ref=e1122]: Like
+                      - button "Share veron dcosta's review." [ref=e1123]:
+                        - generic [ref=e1124] [cursor=pointer]:
+                          - generic [ref=e1125]: 
+                          - generic [ref=e1126]: Share
+              - generic "Robert Sarkes" [ref=e1130]:
+                - generic [ref=e1132]:
+                  - button "Photo of Robert Sarkes" [ref=e1133]
+                  - generic [ref=e1135]:
+                    - button "Robert Sarkes 10 reviews · 1 photo" [ref=e1137]:
+                      - generic [ref=e1138]: Robert Sarkes
+                      - generic [ref=e1139]: 10 reviews · 1 photo
+                    - button "Actions for Robert Sarkes's review" [ref=e1140] [cursor=pointer]:
+                      - generic [ref=e1142]: 
+                  - generic [ref=e1143]:
+                    - generic [ref=e1144]:
+                      - img "5 stars" [ref=e1145]:
+                        - generic [ref=e1146]: 
+                        - generic [ref=e1147]: 
+                        - generic [ref=e1148]: 
+                        - generic [ref=e1149]: 
+                        - generic [ref=e1150]: 
+                      - generic [ref=e1151]: 4 years ago
+                    - generic [ref=e1153]:
+                      - text: Dr. Sanjay Agarwal is an amazing doctor. He is my favorite doctor. Why? Because he is truly a warm, friendly, and caring person. Always goes above and beyond to help his patients. I came to Dr. Agarwal suffering from a persistent dry cough. …
+                      - button "See more" [ref=e1155] [cursor=pointer]: More
+                    - button "Photo 1 on Robert Sarkes's review" [ref=e1157] [cursor=pointer]
+                    - generic [ref=e1158]:
+                      - button "Like" [ref=e1159]:
+                        - generic [ref=e1160] [cursor=pointer]:
+                          - generic [ref=e1161]: 
+                          - generic [ref=e1163]: Like
+                      - button "Share Robert Sarkes's review." [ref=e1164]:
+                        - generic [ref=e1165] [cursor=pointer]:
+                          - generic [ref=e1166]: 
+                          - generic [ref=e1167]: Share
+              - generic "Suzannah Iris Rochelle" [ref=e1171]:
+                - generic [ref=e1173]:
+                  - button "Photo of Suzannah Iris Rochelle" [ref=e1174]
+                  - generic [ref=e1176]:
+                    - button "Suzannah Iris Rochelle Local Guide · 84 reviews · 493 photos" [ref=e1178]:
+                      - generic [ref=e1179]: Suzannah Iris Rochelle
+                      - generic [ref=e1180]: Local Guide · 84 reviews · 493 photos
+                    - button "Actions for Suzannah Iris Rochelle's review" [ref=e1181] [cursor=pointer]:
+                      - generic [ref=e1183]: 
+                  - generic [ref=e1184]:
+                    - generic [ref=e1185]:
+                      - img "5 stars" [ref=e1186]:
+                        - generic [ref=e1187]: 
+                        - generic [ref=e1188]: 
+                        - generic [ref=e1189]: 
+                        - generic [ref=e1190]: 
+                        - generic [ref=e1191]: 
+                      - generic [ref=e1192]: 5 years ago
+                    - generic [ref=e1194]:
+                      - text: This group is willing to work with people and is compassionate. They worked out a payment for me when my insurance was canceled to help me out and I really appreciate their care. I was able to find out what has been the issue with my sleep …
+                      - button "See more" [ref=e1196] [cursor=pointer]: More
+                    - generic [ref=e1197]:
+                      - button "1 like" [ref=e1198]:
+                        - generic [ref=e1199] [cursor=pointer]:
+                          - generic [ref=e1200]: 
+                          - generic [ref=e1202]: "1"
+                      - button "Share Suzannah Iris Rochelle's review." [ref=e1203]:
+                        - generic [ref=e1204] [cursor=pointer]:
+                          - generic [ref=e1205]: 
+                          - generic [ref=e1206]: Share
+      - button "Collapse side panel" [ref=e635] [cursor=pointer]:
+        - generic [ref=e636]: 
+    - generic [ref=e640]:
+      - button "Google apps" [ref=e644] [cursor=pointer]:
+        - img [ref=e645]
+      - link "Sign in" [ref=e648] [cursor=pointer]:
+        - /url: https://accounts.google.com/ServiceLogin?hl=en&passive=true&continue=https%3A%2F%2Fwww.google.com%2Fmaps%2Fplace%2FCalifornia%2BSpecialty%2BPhysicians%2F%4037.4140374%2C-121.8875519%2C17z%2Fdata%3D!3m1!5s0x808fcebe6865a187%3A0xcc756b704a0a0091!4m8!3m7!1s0x808fcd0528d6076d%3A0xf3a1c306723d336b!8m2!3d37.414063!4d-121.8848811!9m1!1b1!16s%252Fg%252F1tpps61r%3Fved%3D1t%253A314688&service=local&ec=GAZAcQ
+    - generic:
+      - generic:
+        - button "Show Your Location" [ref=e651] [cursor=pointer]:
+          - generic [ref=e653]: 
+        - generic [ref=e655] [cursor=pointer]:
+          - button "Zoom in" [ref=e656]
+          - button "Zoom out" [ref=e659]
+      - generic [ref=e665]:
+        - button "Browse Street View images" [ref=e667]
+        - button "Street View" [ref=e669] [cursor=pointer]
+      - generic [ref=e673]:
+        - generic "Interactive map" [ref=e674]
+        - generic [ref=e678] [cursor=pointer]:
+          - generic [ref=e679]: 
+          - generic [ref=e680]: Layers
+        - button "Layers" [ref=e681] [cursor=pointer]
+    - generic [ref=e683]:
+      - contentinfo [ref=e686]:
+        - text: Imagery ©2026 , Map data ©2026 Google
+        - button "United States" [ref=e687] [cursor=pointer]
+        - button "Terms" [ref=e688] [cursor=pointer]
+        - button "Privacy" [ref=e689] [cursor=pointer]
+        - button "Send Product Feedback" [ref=e690] [cursor=pointer]
+      - button "200 ft" [ref=e692] [cursor=pointer]: 200 ft

@@ -1,0 +1,247 @@
+[    1604ms] [WARNING] User is not authenticated. Piano init proceeding without token: Error: No valid user found through Cognito.
+    at https://health.usnews.com/static-atlas/js/@usn/atlas-auth.4363412597d701b71e59.js:1:358614
+    at async j (https://health.usnews.com/static-atlas/js/components/customElements/ReactTrigger.538e247ab3d886c9fab1.js:204:148295) @ https://health.usnews.com/static-atlas/js/components/customElements/ReactTrigger.538e247ab3d886c9fab1.js:203
+[    1716ms] [LOG] Loading Prebid modules for US users only @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1716ms] [LOG] bidders optIn:  true @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1720ms] [LOG] liveIntentIdSystem setup @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1720ms] [LOG] window.liModuleEnabled true @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1720ms] [LOG] window.liTreatmentRate 0.9 @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1720ms] [LOG] setTargeting, enriched: undefined @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1741ms] [WARNING] [GSI_LOGGER]: google.accounts.id.initialize() is called multiple times. This could cause unexpected behavior and only the last initialized instance will be used. @ https://accounts.google.com/gsi/client:84
+[    1742ms] [WARNING] [GSI_LOGGER]: google.accounts.id.initialize() is called multiple times. This could cause unexpected behavior and only the last initialized instance will be used. @ https://accounts.google.com/gsi/client:84
+[    1806ms] [LOG] googletag.cmd.push - setTargeting, enriched: undefined @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1857ms] [LOG] auctionInit {auctionId: 9bcc71f5-920a-438d-a7f8-d7c282459559, timestamp: 1775856435263, auctionEnd: undefined, auctionStatus: inProgress, adUnits: Array(5)} @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1857ms] [LOG] setTargeting, enriched: true @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1857ms] [LOG] googletag.cmd.push - setTargeting, enriched: true @ https://health.usnews.com/static-atlas/js/kaching.86c59b26160a389351b8.js:6
+[    1875ms] [ERROR] Attestation check for Protected Audience on https://prebid.media.net failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    1879ms] [ERROR] Attestation check for Protected Audience on https://hbopenbid.pubmatic.com failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    1880ms] [ERROR] Attestation check for Protected Audience on https://grid-bidder.criteo.com failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    2090ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://cdn-ima.33across.com/ima.js:0
+[    2146ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://us-u.openx.net/w/1.0/cm?id=42c6242a-808f-4528-a53e-218ee9c324f3&r=https%3A%2F%2Fml314.com%2Fcsync.ashx%3Feid%3D92690%26person_id%3D3660302510556971080%26fp%3D:0
+[    2325ms] [INFO] HumanSecurity: JS time to collect (ms): 442. @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    3154ms] [LOG] auctionInit {auctionId: 159a05e3-c999-4599-ae71-52cff141ba32, timestamp: 1775856436563, auctionEnd: undefined, auctionStatus: inProgress, adUnits: Array(5)} @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    3155ms] [LOG] setTargeting, enriched: true @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    3155ms] [LOG] googletag.cmd.push - setTargeting, enriched: true @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    3173ms] [ERROR] Attestation check for Protected Audience on https://prebid.media.net failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    3174ms] [ERROR] Attestation check for Protected Audience on https://hbopenbid.pubmatic.com failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    3174ms] [ERROR] Attestation check for Protected Audience on https://grid-bidder.criteo.com failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    3881ms] [LOG] auctionInit {auctionId: e73fa8f9-5c85-427d-aeb4-7224684408b9, timestamp: 1775856437297, auctionEnd: undefined, auctionStatus: inProgress, adUnits: Array(1)} @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    3881ms] [LOG] setTargeting, enriched: true @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    3881ms] [LOG] googletag.cmd.push - setTargeting, enriched: true @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    3889ms] [ERROR] Attestation check for Protected Audience on https://prebid.media.net failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    3889ms] [ERROR] Attestation check for Protected Audience on https://hbopenbid.pubmatic.com failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    3890ms] [ERROR] Attestation check for Protected Audience on https://grid-bidder.criteo.com failed. @ https://health.usnews.com/doctors/sanjay-agarwal-254942#patient-experience:0
+[    4058ms] [WARNING] [GPT] Slot lb_1 rendered inside of the viewport.
+https://goo.gle/gpt-message#169 @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4685ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://gtracenep.admaster.cc/ju/cs/eplist?tn=2ce2e6e33746b4224011d22068a89c02&gdpr_consent=&gdpr=0&dm=https%253A%252F%252Fstatic.admaster.cc&mcb=mmgg_1775856437900_424:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gdpr=0&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gdpr=0:0
+[    4739ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://warp.media.net/rtb/resources/release-20251026-237-adperformance.js:0
+[    4856ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://warp.media.net/rtb/resources/release-20251026-237-adperformance.js:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gdpr=0&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gdpr=0:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gdpr=0&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gdpr=0:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gdpr=0&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gdpr=0:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gdpr=0&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gdpr=0:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5180ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://warp.media.net/rtb/resources/release-20251026-237-adperformance.js:0
+[    5198ms] [LOG] DEBUG - (ATS-ENVELOPE-MODULE) ats-set-additional-data event set up. @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5198ms] [LOG] DEBUG - (ATS-ENVELOPE-MODULE) There is no google_ssp envelope in storage. @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5199ms] [LOG] DEBUG - (ATS-ENVELOPE-MODULE) There is no liveramp envelope in storage. @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5298ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://warp.media.net/rtb/resources/release-20251026-237-adperformance.js:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5326ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5327ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5329ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5329ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5330ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5390ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://warp.media.net/rtb/resources/release-20251026-237-adperformance.js:0
+[    5392ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) (Geo location) consent check not passed @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5393ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) (Geo location) persisted cached location data @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5393ms] [LOG] DEBUG - (ATS-ENVELOPE-MODULE) Consent is given, module will start! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5393ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) (Geo location) persisted cached location data @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5393ms] [LOG] DEBUG - (ATS-ENVELOPE-MODULE) LIVERAMP envelope not found in storage! New envelope will be acquired. @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5393ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) Catching identifier configured. @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5393ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) Envelope-module is configured. @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5482ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://warp.media.net/rtb/resources/release-20251026-237-adperformance.js:0
+[    5546ms] [INFO] INFO - (ATS-DETECTION-MODULE) (Geo location) persisted cached location data @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5546ms] [LOG] DEBUG - (ATS-DETECTION-MODULE) Consent is given, module will start! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5546ms] [INFO] INFO - (ATS-DETECTION-MODULE) (Geo location) persisted cached location data @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5620ms] [LOG] Last Minute Deals | author: YiCOSA yozenci@gmail.com @ https://s0.2mdn.net/sadbundle/14917581048192893540/main.js:4
+[    5647ms] [LOG] Last Minute Deals | author: YiCOSA yozenci@gmail.com @ https://s0.2mdn.net/sadbundle/2949494598403431473/main.js:4
+[    5665ms] [LOG] Last Minute Deals | author: YiCOSA yozenci@gmail.com @ https://s0.2mdn.net/sadbundle/14917581048192893540/main.js:4
+[    5687ms] [LOG] Last Minute Deals | author: YiCOSA yozenci@gmail.com @ https://s0.2mdn.net/sadbundle/14917581048192893540/main.js:4
+[    5704ms] [LOG] Last Minute Deals | author: YiCOSA yozenci@gmail.com @ https://s0.2mdn.net/sadbundle/14917581048192893540/main.js:4
+[    5728ms] [LOG] no video @ https://s0.2mdn.net/sadbundle/5785716881283659315/js/combined.js:8
+[    5728ms] [ERROR] Access denied: Cross-origin restriction. @ https://s0.2mdn.net/sadbundle/5785716881283659315/js/combined.js:8
+[    5729ms] [LOG] headlineLength 65 headlineLongestWord 9 @ https://s0.2mdn.net/sadbundle/5785716881283659315/js/combined.js:8
+[    5734ms] [LOG] no video @ https://s0.2mdn.net/sadbundle/17887381883747846708/js/combined.js:8
+[    5734ms] [ERROR] Access denied: Cross-origin restriction. @ https://s0.2mdn.net/sadbundle/17887381883747846708/js/combined.js:8
+[    5734ms] [LOG] 89 13 @ https://s0.2mdn.net/sadbundle/17887381883747846708/js/combined.js:8
+[    5747ms] [LOG] DEBUG - (ATS-DETECTION-MODULE) Url-based detection started @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5747ms] [LOG] DEBUG - (ATS-DETECTION-MODULE) There is no such url parameter. 
+ Tried to fetch: hashedPid @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    5768ms] [ERROR] Loading the script 'http://e-11428.adzerk.net/ados?t=1775856439187&request=%7B%22Placements%22%3A%5B%7B%22A%22%3A11428%2C%22S%22%3A1265459%2C%22D%22%3A%22pazk9676416%22%2C%22AT%22%3A5%2C%22FlightCreativeId%22%3A1072736565%2C%22RedirectUrl%22%3A%22https%253A%252F%252Frtb-tracking.pontiac.media%252Fevent-tracking%253Fevent%253Dclick%2526bid_id%253D64797_18706_9yvg8nbv35i1sht9d37mv9c3p-73941be4-fa9e-4d12-8ed1-3860ab8c99b1%2526_cb%253D11c1a243-178b-4da9-8ce4-ade87d234324%2526pg%253Dfalse%2526target%253D%22%7D%5D%2C%22Keywords%22%3A%22undefined%22%2C%22Referrer%22%3A%22%22%2C%22IsAsync%22%3Atrue%7D' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked. @ https://static.adzerk.net/ados.js:187
+[    6020ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://us-u.openx.net/w/1.0/sd?id=537134162&val=21c1bcfe-674c-4bb8-8331-415fc8473fdd:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gdpr=0&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?id=&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7&google_error=15:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gpp=DBABLA~BVQqAAAAAgA.QA&gpp_sid=7:0
+[    4723ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://tags.bluekai.com/site/2981?redir=https%3A%2F%2Fcm.g.doubleclick.net%2Fpixel%3Fgoogle_nid%3Dbluekai%26google_hm%3D%24_BK_UUID_B64&gdpr=0:0
+[    6109ms] [LOG] Last Minute Deals | author: YiCOSA yozenci@gmail.com @ https://s0.2mdn.net/sadbundle/2949494598403431473/main.js:4
+[    6126ms] [LOG] 300x250 Animation length:  14.96 Total length:  14.96 @ https://s0.2mdn.net/sadbundle/2949494598403431473/main.js:149
+[    6020ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://us-u.openx.net/w/1.0/sd?id=537134162&val=21c1bcfe-674c-4bb8-8331-415fc8473fdd:0
+[    6289ms] [ERROR] Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID @ https://ap.lijit.com/dsp/google/cookiematch/dv?&gdpr=0:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5326ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5327ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5329ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5329ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5330ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    6335ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4367ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4933ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4997ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    4998ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5002ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5004ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5098ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5121ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5122ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5123ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5326ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5327ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5329ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5329ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    5330ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    6335ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    6362ms] [ERROR] Attestation check for Shared Storage on https://www.googleadservices.com failed. @ https://www.googleadservices.com/pagead/managed/js/activeview/current/reach_worklet.html:0
+[    6397ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) We have dispatched envelopeModuleReady event again! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    6397ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) How many times we have dispatched event envelopeModuleReady:  2 @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    7394ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) We have dispatched envelopeModuleReady event again! @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[    7394ms] [INFO] INFO - (ATS-ENVELOPE-MODULE) How many times we have dispatched event envelopeModuleReady:  3 @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3
+[   19165ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://x.dlx.addthis.com/e/googlegdn_sync?na_exid=&gdpr=0&google_error=15:0
+[   23839ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://sync.colossusssp.com/ebfa23da174faa55634171c5e49d0152.gif?puid=AU1D-0100-001775855830-NV9XOZNA-2BQ5&redir=http%3A%2F%2Fids.ad.gt%2Fapi%2Fv1%2Fcolossus%3Fcls_id%3D%5BUID%5D%26id%3DAU1D-0100-001775855830-NV9XOZNA-2BQ5:0
+[   35697ms] [INFO] Successfully Updated @ https://tags.tiqcdn.com/utag/usnews/main/prod/utag.226.js?utv=ut4.39.202602251515:3

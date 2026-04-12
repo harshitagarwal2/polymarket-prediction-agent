@@ -1,0 +1,1947 @@
+- generic [ref=e3]:
+  - generic:
+    - list
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - button "Back to Search" [ref=e11] [cursor=pointer]:
+        - generic [ref=e12]:
+          - img [ref=e14]:
+            - img [ref=e15]
+          - paragraph [ref=e19]: Back to Search
+      - link "Yelp" [ref=e22] [cursor=pointer]:
+        - /url: /
+      - button [ref=e24] [cursor=pointer]:
+        - img [ref=e26]:
+          - img [ref=e27]
+    - generic [ref=e30]:
+      - alert "Error" [ref=e32]:
+        - img [ref=e36]:
+          - img [ref=e37]
+        - paragraph [ref=e44]:
+          - generic [ref=e45]: Yelpers report this location has closed.
+          - generic [ref=e47]:
+            - text: Find a
+            - link "similar spot" [ref=e48] [cursor=pointer]:
+              - /url: /search?find_desc=Pulmonologist&find_loc=Milpitas%2C+CA
+            - text: .
+      - generic [ref=e49]:
+        - main [ref=e51]:
+          - generic [ref=e54]:
+            - heading "California Specialty Physicians" [level=1] [ref=e56]
+            - generic [ref=e57]:
+              - img "4.1 star rating" [ref=e61]:
+                - img [ref=e63]
+                - img [ref=e68]
+                - img [ref=e73]
+                - img [ref=e78]
+                - img [ref=e83]
+              - generic [ref=e87]:
+                - generic [ref=e88]: "4.1"
+                - link "(53 reviews)" [ref=e90] [cursor=pointer]:
+                  - /url: "#reviews"
+            - generic [ref=e94]:
+              - img [ref=e95]:
+                - img [ref=e96]
+              - text: Claimed •
+            - generic [ref=e98]:
+              - generic [ref=e99]:
+                - link "Pulmonologist" [ref=e100] [cursor=pointer]:
+                  - /url: /search?find_desc=Pulmonologist&find_loc=Milpitas%2C+CA
+                - text: ","
+              - link "Sleep Specialists" [ref=e102] [cursor=pointer]:
+                - /url: /search?find_desc=Sleep+Specialists&find_loc=Milpitas%2C+CA
+          - generic [ref=e103]:
+            - link "Write a review" [ref=e105] [cursor=pointer]:
+              - /url: /writeareview/biz/d9LpxbpC20GmMWbJ19nV2w?return_url=%2Fbiz%2Fd9LpxbpC20GmMWbJ19nV2w&review_origin=biz-details-war-button
+              - generic [ref=e106]:
+                - img [ref=e108]:
+                  - img [ref=e109]
+                - generic [ref=e111]: Write a review
+            - link "Add photos/videos" [ref=e113] [cursor=pointer]:
+              - /url: /biz_user_photos/d9LpxbpC20GmMWbJ19nV2w/upload?source=desktop_biz_details_page
+              - generic [ref=e114]:
+                - img [ref=e116]:
+                  - img [ref=e117]
+                - generic [ref=e119]: Add photos/videos
+            - button "Share" [ref=e121] [cursor=pointer]:
+              - generic [ref=e122]:
+                - img [ref=e124]:
+                  - img [ref=e125]
+                - generic [ref=e128]: Share
+            - button "Save" [ref=e130] [cursor=pointer]:
+              - generic [ref=e131]:
+                - img [ref=e133]:
+                  - img [ref=e134]
+                - generic [ref=e136]: Save
+          - generic [ref=e139]:
+            - paragraph [ref=e141]: Do you recommend this business?
+            - generic [ref=e143]:
+              - button "Yes" [ref=e145] [cursor=pointer]:
+                - generic [ref=e146]: "Yes"
+              - button "No" [ref=e148] [cursor=pointer]:
+                - generic [ref=e149]: "No"
+              - button "Maybe" [ref=e151] [cursor=pointer]:
+                - generic [ref=e152]: Maybe
+          - region "Photos & videos" [ref=e153]:
+            - generic [ref=e154]:
+              - heading "Photos & videos" [level=2] [ref=e156]
+              - paragraph [ref=e158]:
+                - link "See all 4 photos" [ref=e159] [cursor=pointer]:
+                  - /url: /biz_photos/california-specialty-physicians-milpitas
+                  - text: See all 4 photos
+                  - img [ref=e161]:
+                    - img [ref=e162]
+            - generic [ref=e165]:
+              - generic [ref=e168]:
+                - link "California Specialty Physicians - Suite 218 - Milpitas, CA" [ref=e172] [cursor=pointer]:
+                  - /url: /biz_photos/california-specialty-physicians-milpitas?select=W0O7U4XBh1gW8098Rp1dYw
+                  - img "California Specialty Physicians - Suite 218 - Milpitas, CA" [ref=e173]
+                - link "California Specialty Physicians - Check in counter - Milpitas, CA" [ref=e177] [cursor=pointer]:
+                  - /url: /biz_photos/california-specialty-physicians-milpitas?select=m0O4UIluSruO8UiLRnVhpg
+                  - img "California Specialty Physicians - Check in counter - Milpitas, CA" [ref=e178]
+                - link "California Specialty Physicians - Waiting room - Milpitas, CA" [ref=e182] [cursor=pointer]:
+                  - /url: /biz_photos/california-specialty-physicians-milpitas?select=fxeRmCJEv9zsc1ToAJ2sKQ
+                  - img "California Specialty Physicians - Waiting room - Milpitas, CA" [ref=e183]
+                - link "California Specialty Physicians - Business closed - Milpitas, CA" [ref=e187] [cursor=pointer]:
+                  - /url: /biz_photos/california-specialty-physicians-milpitas?select=Ohc6KYTU6NLaKYCSFGjMTg
+                  - img "California Specialty Physicians - Business closed - Milpitas, CA" [ref=e188]
+                - link "Add photo" [ref=e191] [cursor=pointer]:
+                  - /url: /biz_user_photos/d9LpxbpC20GmMWbJ19nV2w/upload?source=desktop_biz_details_page
+                  - generic [ref=e193]:
+                    - img [ref=e194]:
+                      - img [ref=e195]
+                    - paragraph [ref=e197]: Add photo
+              - button "Previous" [disabled] [ref=e198]:
+                - img [ref=e199]:
+                  - img [ref=e200]
+              - button "Next" [ref=e202] [cursor=pointer]:
+                - img [ref=e203]:
+                  - img [ref=e204]
+          - generic [ref=e207]:
+            - generic [ref=e208]:
+              - heading "You Might Also Consider" [level=4] [ref=e210]
+              - generic [ref=e212]:
+                - generic [ref=e213]: Sponsored
+                - dialog "Learn more about Yelp ads" [ref=e214]:
+                  - img [ref=e216]:
+                    - img [ref=e217]
+            - generic [ref=e221]:
+              - link "Empowered with Anne" [ref=e225] [cursor=pointer]:
+                - /url: /adredir?ad_business_id=5g5ocRtT_l2Src7m2ZqI2Q&campaign_id=bDE6ELcvad0vrtnw9pwaKw&click_origin=biz_avatar&placement=above_biz_review&placement_slot=0&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fempowered-with-anne-san-jose%3Fhrid%3DxZgTg1wrOq6NK-kTrSy4kg&request_id=b378ce2714f5f0e1&signature=b1fc95a5389406443694a3ceb8687b6ab37abdd633aad054d21e831bd91655fa&slot=0
+                - img "Empowered with Anne" [ref=e226]
+              - generic [ref=e228]:
+                - generic [ref=e229]:
+                  - paragraph [ref=e231]:
+                    - link "Empowered with Anne" [ref=e232] [cursor=pointer]:
+                      - /url: /adredir?ad_business_id=5g5ocRtT_l2Src7m2ZqI2Q&campaign_id=bDE6ELcvad0vrtnw9pwaKw&click_origin=business_name&placement=above_biz_review&placement_slot=0&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fempowered-with-anne-san-jose&request_id=b378ce2714f5f0e1&signature=918084d93be18f4c5f7a0af0f39cf4aee4196d22385a752cc53390866b409f6a&slot=0
+                  - img [ref=e235]:
+                    - img [ref=e236]
+                - generic [ref=e240]:
+                  - img "5 star rating" [ref=e243]:
+                    - img [ref=e245]
+                    - img [ref=e250]
+                    - img [ref=e255]
+                    - img [ref=e260]
+                    - img [ref=e265]
+                  - generic [ref=e269]: 5.0 (81 reviews)
+                - generic [ref=e271]:
+                  - text: Allie G. said"Anne was simply a godsend! My baby girl went from nursing every hour while Co-Sleeping with me, to sleeping in her own crib all night with no feedings, within a week. We are so grateful for Anne's expertise, 24/7 guidance and now…"
+                  - link "Opens a new window to user review on Empowered with Anne page" [ref=e274] [cursor=pointer]:
+                    - /url: /adredir?ad_business_id=5g5ocRtT_l2Src7m2ZqI2Q&campaign_id=bDE6ELcvad0vrtnw9pwaKw&click_origin=read_more&placement=above_biz_review&placement_slot=0&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fempowered-with-anne-san-jose%3Fhrid%3DxZgTg1wrOq6NK-kTrSy4kg&request_id=b378ce2714f5f0e1&signature=b1fc95a5389406443694a3ceb8687b6ab37abdd633aad054d21e831bd91655fa&slot=0
+                    - text: read more
+                - paragraph [ref=e276]: in Sleep Specialists
+            - generic [ref=e278]:
+              - link "Alexander Ereso, MD FACS" [ref=e282] [cursor=pointer]:
+                - /url: /adredir?ad_business_id=K5cmNo-oO5BS1MZRjzP7eQ&campaign_id=CQhsBa3sN0fJxtMMQiBE6g&click_origin=biz_avatar&placement=above_biz_review&placement_slot=0&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Falexander-ereso-md-facs-mountain-view%3Fhrid%3DNAtHwt0UT0uGLafjChb1Ug&request_id=b378ce2714f5f0e1&signature=4561ba04811ae01d0b412b7251b0bc0aef59ae4e59a895aeede785c1d95d7013&slot=1
+                - img "Alexander Ereso, MD FACS" [ref=e283]
+              - generic [ref=e285]:
+                - generic [ref=e286]:
+                  - paragraph [ref=e288]:
+                    - link "Alexander Ereso, MD FACS" [ref=e289] [cursor=pointer]:
+                      - /url: /adredir?ad_business_id=K5cmNo-oO5BS1MZRjzP7eQ&campaign_id=CQhsBa3sN0fJxtMMQiBE6g&click_origin=business_name&placement=above_biz_review&placement_slot=0&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Falexander-ereso-md-facs-mountain-view&request_id=b378ce2714f5f0e1&signature=6dfdbff2d852d81400f801b010add2f9d48e8a739163e1d30b1c129f5926c151&slot=1
+                  - img [ref=e292]:
+                    - img [ref=e293]
+                - generic [ref=e295]:
+                  - generic [ref=e297]:
+                    - img "4.8 star rating" [ref=e300]:
+                      - img [ref=e302]
+                      - img [ref=e307]
+                      - img [ref=e312]
+                      - img [ref=e317]
+                      - img [ref=e322]
+                    - generic [ref=e326]: 4.8 (61 reviews)
+                  - generic [ref=e328]:
+                    - img [ref=e329]:
+                      - img [ref=e330]
+                    - generic [ref=e334]:
+                      - strong [ref=e335]: 11.4 miles
+                      - text: away from California Specialty Physicians
+                - generic [ref=e337]:
+                  - text: Leeana B. said"I've never gone through surgery so having my first be a breast augmentation was really nerve wrecking for me. Dr Ereso was my first and last consultation, and I don't regret making the decision to go with him right from the get go.…"
+                  - link "Opens a new window to user review on Alexander Ereso, MD FACS page" [ref=e340] [cursor=pointer]:
+                    - /url: /adredir?ad_business_id=K5cmNo-oO5BS1MZRjzP7eQ&campaign_id=CQhsBa3sN0fJxtMMQiBE6g&click_origin=read_more&placement=above_biz_review&placement_slot=0&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Falexander-ereso-md-facs-mountain-view%3Fhrid%3DNAtHwt0UT0uGLafjChb1Ug&request_id=b378ce2714f5f0e1&signature=4561ba04811ae01d0b412b7251b0bc0aef59ae4e59a895aeede785c1d95d7013&slot=1
+                    - text: read more
+                - paragraph [ref=e342]: in Cosmetic Surgeons
+          - region "About the Business" [ref=e343]:
+            - heading "About the Business" [level=2] [ref=e346]
+            - generic [ref=e347]:
+              - region "Business owner information" [ref=e349]:
+                - paragraph [ref=e350]: Business owner information
+                - generic [ref=e351]:
+                  - img "Photo of Sanjay A." [ref=e355]
+                  - generic [ref=e356]:
+                    - paragraph [ref=e357]: Sanjay A.
+                    - paragraph [ref=e359]: Business Owner
+              - paragraph [ref=e361]:
+                - generic [ref=e363]:
+                  - text: The organization has a medical office, state of the art sleep laboratory and full function Pulmonary
+                  - text: Diagnostic center to cater to all aspects of care for pulmonary and sleep medicine, offered by Dr
+                  - generic [ref=e365]: Sanjay Agarwal. He has special interest in interventional pulmonology, Pulmonary Hypertension, P…
+              - button "More information about the business. Opens a modal." [ref=e366] [cursor=pointer]:
+                - generic [ref=e367]: Read more
+          - region "Location & Hours" [ref=e369]:
+            - generic [ref=e370]:
+              - heading "Location & Hours" [level=2] [ref=e372]
+              - paragraph [ref=e374]:
+                - link "Suggest an edit" [ref=e375] [cursor=pointer]:
+                  - /url: /biz_attribute?biz_id=d9LpxbpC20GmMWbJ19nV2w
+                  - text: Suggest an edit
+                  - img [ref=e377]:
+                    - img [ref=e378]
+            - generic [ref=e380]:
+              - generic [ref=e382]:
+                - link "Map" [ref=e383] [cursor=pointer]:
+                  - /url: /map/california-specialty-physicians-milpitas
+                  - img "Map" [ref=e385]
+                - generic [ref=e387]:
+                  - generic [ref=e389]:
+                    - paragraph [ref=e390]:
+                      - link "995 Montague Expy" [ref=e391] [cursor=pointer]:
+                        - /url: /map/california-specialty-physicians-milpitas
+                    - paragraph [ref=e392]: Ste 218
+                    - paragraph [ref=e393]: Milpitas, CA 95035
+                  - link "Get directions" [ref=e395] [cursor=pointer]:
+                    - /url: /map/california-specialty-physicians-milpitas
+                    - generic [ref=e396]: Get directions
+              - generic [ref=e397]:
+                - generic:
+                  - generic:
+                    - table:
+                      - rowgroup
+          - region "Amenities and More" [ref=e398]:
+            - heading "Amenities and More" [level=2] [ref=e401]
+            - generic [ref=e402]:
+              - region [ref=e403]:
+                - generic [ref=e405]:
+                  - generic [ref=e407]:
+                    - img [ref=e409]:
+                      - img [ref=e410]
+                    - generic [ref=e412]: Telehealth
+                  - generic [ref=e414]:
+                    - img [ref=e416]:
+                      - img [ref=e417]
+                    - generic [ref=e419]: Accepts credit cards
+                  - generic [ref=e421]:
+                    - img [ref=e423]:
+                      - img [ref=e424]
+                    - generic [ref=e426]: Free Wi-Fi
+                  - generic [ref=e428]:
+                    - img [ref=e430]:
+                      - img [ref=e431]
+                    - generic [ref=e433]: Accepts insurance
+              - button "3 More Attributes" [ref=e434] [cursor=pointer]:
+                - generic [ref=e435]: 3 More Attributes
+          - generic [ref=e436]:
+            - region "Ask the Community" [ref=e437]:
+              - generic [ref=e438]:
+                - heading "Ask the Community" [level=2] [ref=e440]
+                - paragraph [ref=e442]:
+                  - link "Ask a question" [ref=e443] [cursor=pointer]:
+                    - /url: /questions/d9LpxbpC20GmMWbJ19nV2w
+                    - text: Ask a question
+                    - img [ref=e445]:
+                      - img [ref=e446]
+              - paragraph [ref=e449]: Yelp users haven’t asked any questions yet about California Specialty Physicians.
+            - region "People also searched for" [ref=e450]:
+              - heading "People also searched for" [level=2] [ref=e453]
+              - generic [ref=e454]:
+                - link "Sleep Study" [ref=e455] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Study&find_loc=Milpitas%2C+CA
+                  - generic [ref=e457]:
+                    - img [ref=e460]:
+                      - img [ref=e461]
+                    - paragraph [ref=e466]: Sleep Study
+                - link "Ent Doctor" [ref=e467] [cursor=pointer]:
+                  - /url: /search?find_desc=Ent+Doctor&find_loc=Milpitas%2C+CA
+                  - generic [ref=e469]:
+                    - img [ref=e472]:
+                      - img [ref=e473]
+                    - paragraph [ref=e478]: Ent Doctor
+                - link "Sleep Apnea Doctors" [ref=e479] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Apnea+Doctors&find_loc=Milpitas%2C+CA
+                  - generic [ref=e481]:
+                    - img [ref=e484]:
+                      - img [ref=e485]
+                    - paragraph [ref=e490]: Sleep Apnea Doctors
+                - link "Sleep Clinic" [ref=e491] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Clinic&find_loc=Milpitas%2C+CA
+                  - generic [ref=e493]:
+                    - img [ref=e496]:
+                      - img [ref=e497]
+                    - paragraph [ref=e502]: Sleep Clinic
+                - link "Sleep Center" [ref=e503] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Center&find_loc=Milpitas%2C+CA
+                  - generic [ref=e505]:
+                    - img [ref=e508]:
+                      - img [ref=e509]
+                    - paragraph [ref=e514]: Sleep Center
+                - link "Cpap" [ref=e515] [cursor=pointer]:
+                  - /url: /search?find_desc=Cpap&find_loc=Milpitas%2C+CA
+                  - generic [ref=e517]:
+                    - img [ref=e520]:
+                      - img [ref=e521]
+                    - paragraph [ref=e526]: Cpap
+            - region "Recommended Reviews" [ref=e528]:
+              - heading "Recommended Reviews" [level=2] [ref=e531]
+              - generic [ref=e532]:
+                - alert "Info" [ref=e534]:
+                  - img [ref=e538]:
+                    - img [ref=e539]
+                  - generic [ref=e544]:
+                    - text: Your trust is our priority, so businesses can't pay to alter or remove their reviews.
+                    - link "Learn more about reviews." [ref=e545] [cursor=pointer]:
+                      - /url: https://www.yelp.com/reviews-trust-link-tree?l=en_US
+                  - button "Close" [ref=e547] [cursor=pointer]:
+                    - img [ref=e549]:
+                      - img [ref=e550]
+                - generic [ref=e554]:
+                  - region "Username" [ref=e556]:
+                    - generic [ref=e557]:
+                      - img "Photo of Username" [ref=e560]
+                      - generic [ref=e561]:
+                        - generic [ref=e562]:
+                          - text: Username
+                          - generic [ref=e563]: Location
+                        - generic [ref=e566]:
+                          - generic "Friends" [ref=e567]:
+                            - img [ref=e568]:
+                              - img [ref=e569]
+                            - generic [ref=e571]: "0"
+                          - generic "Reviews" [ref=e572]:
+                            - img [ref=e573]:
+                              - img [ref=e574]
+                            - generic [ref=e577]: "0"
+                          - generic "Photos" [ref=e578]:
+                            - img [ref=e579]:
+                              - img [ref=e580]
+                            - generic [ref=e583]: "0"
+                  - generic [ref=e584]:
+                    - group "Choose a star rating on a scale of 1 to 5" [ref=e586]:
+                      - generic [ref=e587]: Choose a star rating on a scale of 1 to 5
+                      - generic [ref=e588]:
+                        - generic [ref=e589]:
+                          - generic:
+                            - img "(no rating)":
+                              - generic:
+                                - img
+                              - generic:
+                                - img
+                              - generic:
+                                - img
+                              - generic:
+                                - img
+                              - generic:
+                                - img
+                          - list "Rating" [ref=e590]:
+                            - listitem [ref=e591]:
+                              - radio "1 star rating" [ref=e593] [cursor=pointer]
+                            - listitem [ref=e594]:
+                              - radio "2 star rating" [ref=e596] [cursor=pointer]
+                            - listitem [ref=e597]:
+                              - radio "3 star rating" [ref=e599] [cursor=pointer]
+                            - listitem [ref=e600]:
+                              - radio "4 star rating" [ref=e602] [cursor=pointer]
+                            - listitem [ref=e603]:
+                              - radio "5 star rating" [ref=e605] [cursor=pointer]
+                        - paragraph [ref=e607]: Select your rating
+                    - link "Start your review of California Specialty Physicians" [ref=e608] [cursor=pointer]:
+                      - /url: /writeareview/biz/d9LpxbpC20GmMWbJ19nV2w?review_origin=review-feed-war-widget
+                - generic [ref=e610]:
+                  - generic [ref=e611]:
+                    - paragraph [ref=e612]: Overall rating
+                    - generic [ref=e614]:
+                      - img "4 star rating" [ref=e616]:
+                        - img [ref=e618]
+                        - img [ref=e623]
+                        - img [ref=e628]
+                        - img [ref=e633]
+                        - img [ref=e638]
+                      - generic [ref=e643]: 53 reviews
+                  - generic [ref=e644]:
+                    - generic "Filter reviews by 5 stars rating" [ref=e646] [cursor=pointer]:
+                      - paragraph [ref=e648]: 5 stars
+                    - generic "Filter reviews by 4 stars rating" [ref=e653] [cursor=pointer]:
+                      - paragraph [ref=e655]: 4 stars
+                    - generic "Filter reviews by 3 stars rating" [ref=e660] [cursor=pointer]:
+                      - paragraph [ref=e662]: 3 stars
+                    - generic "Filter reviews by 2 stars rating" [ref=e667] [cursor=pointer]:
+                      - paragraph [ref=e669]: 2 stars
+                    - generic "Filter reviews by 1 star rating" [ref=e674] [cursor=pointer]:
+                      - paragraph [ref=e676]: 1 star
+                - generic [ref=e681]:
+                  - generic [ref=e683]:
+                    - generic [ref=e687]:
+                      - button "Yelp Sort" [disabled]:
+                        - generic: Yelp Sort
+                        - img:
+                          - img
+                    - button "Filter by rating" [ref=e692] [cursor=pointer]:
+                      - generic [ref=e693]: Filter by rating
+                      - img [ref=e694]:
+                        - img [ref=e695]
+                  - generic [ref=e699]:
+                    - generic [ref=e700]: Search reviews
+                    - generic:
+                      - generic:
+                        - textbox "Search reviews" [ref=e701]:
+                          - /placeholder: " "
+                        - generic: Search reviews
+                    - button "Search" [ref=e703] [cursor=pointer]:
+                      - img [ref=e706]:
+                        - img [ref=e707]
+                - generic [ref=e709]:
+                  - paragraph [ref=e713]:
+                    - text: Login to sort reviews by
+                    - generic [ref=e714]: "|"
+                  - generic [ref=e716]:
+                    - paragraph [ref=e719]:
+                      - text: By continuing, you agree to Yelp’s
+                      - link "Terms of Service" [ref=e720] [cursor=pointer]:
+                        - /url: https://terms.yelp.com/tos/en_us/
+                      - text: and acknowledge Yelp’s
+                      - link "Privacy Policy" [ref=e721] [cursor=pointer]:
+                        - /url: https://terms.yelp.com/privacy/en_us/
+                      - text: .
+                    - button "Google Continue with Google" [ref=e723] [cursor=pointer]:
+                      - generic [ref=e724]:
+                        - img "Google" [ref=e725]
+                        - generic [ref=e726]: Continue with Google
+                    - button "Continue with Apple" [ref=e728] [cursor=pointer]:
+                      - generic [ref=e729]:
+                        - img [ref=e730]:
+                          - img [ref=e731]
+                        - generic [ref=e733]: Continue with Apple
+                    - button "Continue with Email" [ref=e735] [cursor=pointer]:
+                      - generic [ref=e736]:
+                        - img [ref=e737]:
+                          - img [ref=e738]
+                        - generic [ref=e740]: Continue with Email
+                - list [ref=e741]:
+                  - listitem [ref=e742]:
+                    - generic [ref=e743]:
+                      - generic [ref=e745]:
+                        - region "Barry C." [ref=e747]:
+                          - generic [ref=e748]:
+                            - link "Photo of Barry C." [ref=e751] [cursor=pointer]:
+                              - /url: /user_details?userid=1TucAya8D_cXS1ZGLrVOHw
+                              - img "Photo of Barry C." [ref=e752]
+                            - generic [ref=e753]:
+                              - generic [ref=e754]:
+                                - link "Barry C." [ref=e756] [cursor=pointer]:
+                                  - /url: /user_details?userid=1TucAya8D_cXS1ZGLrVOHw
+                                - link "Elite 26" [ref=e758] [cursor=pointer]:
+                                  - /url: /elite
+                                  - generic [ref=e759]: Elite 26
+                                - generic [ref=e760]: San Jose, CA
+                              - generic [ref=e763]:
+                                - generic "Friends" [ref=e764]:
+                                  - img [ref=e765]:
+                                    - img [ref=e766]
+                                  - generic [ref=e768]: "272"
+                                - generic "Reviews" [ref=e769]:
+                                  - img [ref=e770]:
+                                    - img [ref=e771]
+                                  - generic [ref=e774]: "289"
+                                - generic "Photos" [ref=e775]:
+                                  - img [ref=e776]:
+                                    - img [ref=e777]
+                                  - generic [ref=e780]: "516"
+                        - button "Menu" [ref=e784] [cursor=pointer]:
+                          - img [ref=e786]:
+                            - img [ref=e787]
+                      - generic [ref=e789]:
+                        - generic [ref=e791]:
+                          - img "5 star rating" [ref=e795]:
+                            - img [ref=e797]
+                            - img [ref=e802]
+                            - img [ref=e807]
+                            - img [ref=e812]
+                            - img [ref=e817]
+                          - generic [ref=e821]: Dec 6, 2025
+                        - paragraph [ref=e823]:
+                          - generic [ref=e824]:
+                            - text: I called around to 7 different Sleep Medicine Clinic's and couldn't get through past and answering machine. Called to Dr. Agarwal 's and got through instantly. Staff was very helpful and friendly over the phone even though I mentioned I was calling around. Eventually booked my appointment with Dr. Agarwal's office. Upon returning my sleep study device the next day, the staff informed me there was a patient who did not show so if I wanted to, I could be seen the same day. Great news!!! So, I was able come in the day prior and have my follow up with results the next day. Amazing. Truly thankful for Dr. Agarwal and his team for being so helpful and accommodating.
+                            - text: Now about the care I received. Dr. Agarwal is highly knowledgeable and was willing to ask all of the hundreds of questions I had. What I would recommend for patients is, Dr. Agarwal can speak a bit fast so do pay attention or ask him to repeat or slow down if needed. Lots of information to share so I was able to fully follow and understand.
+                        - generic [ref=e827]:
+                          - button "Helpful (1 reaction)" [ref=e829] [cursor=pointer]:
+                            - generic [ref=e836]: Helpful 1
+                          - button "Thanks (1 reaction)" [ref=e838] [cursor=pointer]:
+                            - generic [ref=e845]: Thanks 1
+                          - button "Love this (1 reaction)" [ref=e847] [cursor=pointer]:
+                            - generic [ref=e854]: Love this 1
+                          - button "Oh no (0 reactions)" [ref=e856] [cursor=pointer]:
+                            - generic [ref=e863]: Oh no 0
+                  - listitem [ref=e864]:
+                    - generic [ref=e865]:
+                      - generic [ref=e867]:
+                        - region "Siamak Nikbakht S." [ref=e869]:
+                          - generic [ref=e870]:
+                            - link "Photo of Siamak Nikbakht S." [ref=e873] [cursor=pointer]:
+                              - /url: /user_details?userid=LZ_OaqmACRpoTp3BaA2eJw
+                              - img "Photo of Siamak Nikbakht S." [ref=e874]
+                            - generic [ref=e875]:
+                              - generic [ref=e876]:
+                                - link "Siamak Nikbakht S." [ref=e878] [cursor=pointer]:
+                                  - /url: /user_details?userid=LZ_OaqmACRpoTp3BaA2eJw
+                                - generic [ref=e879]: Central San Jose, San Jose, CA
+                              - generic [ref=e882]:
+                                - generic "Friends" [ref=e883]:
+                                  - img [ref=e884]:
+                                    - img [ref=e885]
+                                  - generic [ref=e887]: "0"
+                                - generic "Reviews" [ref=e888]:
+                                  - img [ref=e889]:
+                                    - img [ref=e890]
+                                  - generic [ref=e893]: "1"
+                                - generic "Photos" [ref=e894]:
+                                  - img [ref=e895]:
+                                    - img [ref=e896]
+                                  - generic [ref=e899]: "0"
+                        - button "Menu" [ref=e903] [cursor=pointer]:
+                          - img [ref=e905]:
+                            - img [ref=e906]
+                      - generic [ref=e908]:
+                        - generic [ref=e910]:
+                          - img "5 star rating" [ref=e914]:
+                            - img [ref=e916]
+                            - img [ref=e921]
+                            - img [ref=e926]
+                            - img [ref=e931]
+                            - img [ref=e936]
+                          - generic [ref=e940]: Dec 18, 2025
+                        - paragraph [ref=e942]: As a patient of Dr Dgarwal for last 5 month, I would like to recommend him strongly. From first visit he demonstrated his professional attitude, friendly relation with patient, and above all listening attentively to his patient. In addition, he has a team whose members are very dedicated to access and arrange Dr visit and organizing other tasks for the treatments. Thank you and congratulate, Dr Agarwal and your team.
+                        - generic [ref=e945]:
+                          - button "Helpful (0 reactions)" [ref=e947] [cursor=pointer]:
+                            - generic [ref=e954]: Helpful 0
+                          - button "Thanks (0 reactions)" [ref=e956] [cursor=pointer]:
+                            - generic [ref=e963]: Thanks 0
+                          - button "Love this (0 reactions)" [ref=e965] [cursor=pointer]:
+                            - generic [ref=e972]: Love this 0
+                          - button "Oh no (0 reactions)" [ref=e974] [cursor=pointer]:
+                            - generic [ref=e981]: Oh no 0
+                  - listitem [ref=e982]:
+                    - generic [ref=e983]:
+                      - generic [ref=e985]:
+                        - region "Art L." [ref=e987]:
+                          - generic [ref=e988]:
+                            - link "Photo of Art L." [ref=e991] [cursor=pointer]:
+                              - /url: /user_details?userid=_8cU97qN7o1FYWMrZ-He3Q
+                              - img "Photo of Art L." [ref=e992]
+                            - generic [ref=e993]:
+                              - generic [ref=e994]:
+                                - link "Art L." [ref=e996] [cursor=pointer]:
+                                  - /url: /user_details?userid=_8cU97qN7o1FYWMrZ-He3Q
+                                - generic [ref=e997]: Milpitas, CA
+                              - generic [ref=e1000]:
+                                - generic "Friends" [ref=e1001]:
+                                  - img [ref=e1002]:
+                                    - img [ref=e1003]
+                                  - generic [ref=e1005]: "0"
+                                - generic "Reviews" [ref=e1006]:
+                                  - img [ref=e1007]:
+                                    - img [ref=e1008]
+                                  - generic [ref=e1011]: "1"
+                                - generic "Photos" [ref=e1012]:
+                                  - img [ref=e1013]:
+                                    - img [ref=e1014]
+                                  - generic [ref=e1017]: "0"
+                        - button "Menu" [ref=e1021] [cursor=pointer]:
+                          - img [ref=e1023]:
+                            - img [ref=e1024]
+                      - generic [ref=e1026]:
+                        - generic [ref=e1028]:
+                          - img "5 star rating" [ref=e1032]:
+                            - img [ref=e1034]
+                            - img [ref=e1039]
+                            - img [ref=e1044]
+                            - img [ref=e1049]
+                            - img [ref=e1054]
+                          - generic [ref=e1058]: Nov 28, 2025
+                        - paragraph [ref=e1060]: I highly recommend Dr. Agarwal for your sleep disorder treatments. Dr. Agarwal is thorough and concise in his explanations and I appreciate his humor. I also have to commend his responsive and friendly staff.
+                        - generic [ref=e1063]:
+                          - button "Helpful (0 reactions)" [ref=e1065] [cursor=pointer]:
+                            - generic [ref=e1072]: Helpful 0
+                          - button "Thanks (0 reactions)" [ref=e1074] [cursor=pointer]:
+                            - generic [ref=e1081]: Thanks 0
+                          - button "Love this (0 reactions)" [ref=e1083] [cursor=pointer]:
+                            - generic [ref=e1090]: Love this 0
+                          - button "Oh no (0 reactions)" [ref=e1092] [cursor=pointer]:
+                            - generic [ref=e1099]: Oh no 0
+                  - listitem [ref=e1100]:
+                    - generic [ref=e1101]:
+                      - generic [ref=e1103]:
+                        - region "Michelle A." [ref=e1105]:
+                          - generic [ref=e1106]:
+                            - link "Photo of Michelle A." [ref=e1109] [cursor=pointer]:
+                              - /url: /user_details?userid=YTaAFf056jAzcgRi7r5Jfw
+                              - img "Photo of Michelle A." [ref=e1110]
+                            - generic [ref=e1111]:
+                              - generic [ref=e1112]:
+                                - link "Michelle A." [ref=e1114] [cursor=pointer]:
+                                  - /url: /user_details?userid=YTaAFf056jAzcgRi7r5Jfw
+                                - generic [ref=e1115]: Gilroy, CA
+                              - generic [ref=e1118]:
+                                - generic "Friends" [ref=e1119]:
+                                  - img [ref=e1120]:
+                                    - img [ref=e1121]
+                                  - generic [ref=e1123]: "65"
+                                - generic "Reviews" [ref=e1124]:
+                                  - img [ref=e1125]:
+                                    - img [ref=e1126]
+                                  - generic [ref=e1129]: "12"
+                                - generic "Photos" [ref=e1130]:
+                                  - img [ref=e1131]:
+                                    - img [ref=e1132]
+                                  - generic [ref=e1135]: "9"
+                        - button "Menu" [ref=e1139] [cursor=pointer]:
+                          - img [ref=e1141]:
+                            - img [ref=e1142]
+                      - generic [ref=e1144]:
+                        - generic [ref=e1146]:
+                          - img "5 star rating" [ref=e1150]:
+                            - img [ref=e1152]
+                            - img [ref=e1157]
+                            - img [ref=e1162]
+                            - img [ref=e1167]
+                            - img [ref=e1172]
+                          - generic [ref=e1176]: Mar 10, 2025
+                        - paragraph [ref=e1178]: Dr Agarwal, what can I say. He's been an absolute delight to work with. I am grateful for his patience with me (especially regarding the CPAP issue) I found him to personable and appropriately clinical. He is proactive and works to eliminate your fears through these types of action. I am a big fan!
+                        - generic [ref=e1181]:
+                          - button "Helpful (0 reactions)" [ref=e1183] [cursor=pointer]:
+                            - generic [ref=e1190]: Helpful 0
+                          - button "Thanks (0 reactions)" [ref=e1192] [cursor=pointer]:
+                            - generic [ref=e1199]: Thanks 0
+                          - button "Love this (0 reactions)" [ref=e1201] [cursor=pointer]:
+                            - generic [ref=e1208]: Love this 0
+                          - button "Oh no (0 reactions)" [ref=e1210] [cursor=pointer]:
+                            - generic [ref=e1217]: Oh no 0
+                  - listitem [ref=e1218]:
+                    - generic [ref=e1219]:
+                      - generic [ref=e1221]:
+                        - region "Chris V." [ref=e1223]:
+                          - generic [ref=e1224]:
+                            - link "Photo of Chris V." [ref=e1227] [cursor=pointer]:
+                              - /url: /user_details?userid=W21ixmLaWvFlgnQHKYmM0g
+                              - img "Photo of Chris V." [ref=e1228]
+                            - generic [ref=e1229]:
+                              - generic [ref=e1230]:
+                                - link "Chris V." [ref=e1232] [cursor=pointer]:
+                                  - /url: /user_details?userid=W21ixmLaWvFlgnQHKYmM0g
+                                - generic [ref=e1233]: Walnut Creek, CA
+                              - generic [ref=e1236]:
+                                - generic "Friends" [ref=e1237]:
+                                  - img [ref=e1238]:
+                                    - img [ref=e1239]
+                                  - generic [ref=e1241]: "1"
+                                - generic "Reviews" [ref=e1242]:
+                                  - img [ref=e1243]:
+                                    - img [ref=e1244]
+                                  - generic [ref=e1247]: "17"
+                                - generic "Photos" [ref=e1248]:
+                                  - img [ref=e1249]:
+                                    - img [ref=e1250]
+                                  - generic [ref=e1253]: "0"
+                        - button "Menu" [ref=e1257] [cursor=pointer]:
+                          - img [ref=e1259]:
+                            - img [ref=e1260]
+                      - generic [ref=e1262]:
+                        - generic [ref=e1264]:
+                          - img "5 star rating" [ref=e1268]:
+                            - img [ref=e1270]
+                            - img [ref=e1275]
+                            - img [ref=e1280]
+                            - img [ref=e1285]
+                            - img [ref=e1290]
+                          - generic [ref=e1294]: Nov 20, 2024
+                        - paragraph [ref=e1296]: Dr Agarwal helped me understand what exactly is (and is not) sleep apnea. He clarified some misconceptions I had as well. His evaluation and care plan has been straightforward and this has allowed me to get going on CPAP without delay and onward to better outcomes.
+                        - generic [ref=e1299]:
+                          - button "Helpful (0 reactions)" [ref=e1301] [cursor=pointer]:
+                            - generic [ref=e1308]: Helpful 0
+                          - button "Thanks (0 reactions)" [ref=e1310] [cursor=pointer]:
+                            - generic [ref=e1317]: Thanks 0
+                          - button "Love this (0 reactions)" [ref=e1319] [cursor=pointer]:
+                            - generic [ref=e1326]: Love this 0
+                          - button "Oh no (1 reaction)" [ref=e1328] [cursor=pointer]:
+                            - generic [ref=e1335]: Oh no 1
+                  - listitem [ref=e1336]:
+                    - generic [ref=e1337]:
+                      - generic [ref=e1339]:
+                        - region "Justin G." [ref=e1341]:
+                          - generic [ref=e1342]:
+                            - link "Photo of Justin G." [ref=e1345] [cursor=pointer]:
+                              - /url: /user_details?userid=UXQ1BR7WuAVDxJLSt6NrTA
+                              - img "Photo of Justin G." [ref=e1346]
+                            - generic [ref=e1347]:
+                              - generic [ref=e1348]:
+                                - link "Justin G." [ref=e1350] [cursor=pointer]:
+                                  - /url: /user_details?userid=UXQ1BR7WuAVDxJLSt6NrTA
+                                - generic [ref=e1351]: CA, CA
+                              - generic [ref=e1354]:
+                                - generic "Friends" [ref=e1355]:
+                                  - img [ref=e1356]:
+                                    - img [ref=e1357]
+                                  - generic [ref=e1359]: "0"
+                                - generic "Reviews" [ref=e1360]:
+                                  - img [ref=e1361]:
+                                    - img [ref=e1362]
+                                  - generic [ref=e1365]: "7"
+                                - generic "Photos" [ref=e1366]:
+                                  - img [ref=e1367]:
+                                    - img [ref=e1368]
+                                  - generic [ref=e1371]: "7"
+                        - button "Menu" [ref=e1375] [cursor=pointer]:
+                          - img [ref=e1377]:
+                            - img [ref=e1378]
+                      - generic [ref=e1380]:
+                        - generic [ref=e1382]:
+                          - img "1 star rating" [ref=e1386]:
+                            - img [ref=e1388]
+                            - img [ref=e1393]
+                            - img [ref=e1398]
+                            - img [ref=e1403]
+                            - img [ref=e1408]
+                          - generic [ref=e1412]: Apr 30, 2025
+                        - paragraph [ref=e1414]: Been seeing Dr. Agarwal for about 5 months now. While the treatment itself is working fine there are quite a few red flags that come with seeing Dr. Agarwal. The main one being on time to my appointments but Dr. Agarwal being late to almost every appointment I've gone to. Out of my 4 visits the first 2 were great where he was always in top of being attending me at my appt, but the last 2 in the other hand resulted in me waiting over 40 min to get my appointment started. To make things worse since everything is behind schedule my appointment itself is so quick and it seems like I am rushed to get me out for the next patient waiting to see Doctor. It is extremely disappointing and inconsiderate that my plans have to be shifted just to allocate for a quick 15 min appointment. I had schedule for a 9am time and the business hours are from 9am-5pm but why is it that I am here before Dr. Agarwal and his staff is here before him?
+                        - generic [ref=e1417]:
+                          - button "Helpful (3 reactions)" [ref=e1419] [cursor=pointer]:
+                            - generic [ref=e1426]: Helpful 3
+                          - button "Thanks (1 reaction)" [ref=e1428] [cursor=pointer]:
+                            - generic [ref=e1435]: Thanks 1
+                          - button "Love this (0 reactions)" [ref=e1437] [cursor=pointer]:
+                            - generic [ref=e1444]: Love this 0
+                          - button "Oh no (2 reactions)" [ref=e1446] [cursor=pointer]:
+                            - generic [ref=e1453]: Oh no 2
+                  - listitem [ref=e1454]:
+                    - generic [ref=e1455]:
+                      - generic [ref=e1457]:
+                        - region "Hang T." [ref=e1459]:
+                          - generic [ref=e1460]:
+                            - link "Photo of Hang T." [ref=e1463] [cursor=pointer]:
+                              - /url: /user_details?userid=GFBug1XTdC6htdbylFbqbg
+                              - img "Photo of Hang T." [ref=e1464]
+                            - generic [ref=e1465]:
+                              - generic [ref=e1466]:
+                                - link "Hang T." [ref=e1468] [cursor=pointer]:
+                                  - /url: /user_details?userid=GFBug1XTdC6htdbylFbqbg
+                                - generic [ref=e1469]: San Jose, CA
+                              - generic [ref=e1472]:
+                                - generic "Friends" [ref=e1473]:
+                                  - img [ref=e1474]:
+                                    - img [ref=e1475]
+                                  - generic [ref=e1477]: "6"
+                                - generic "Reviews" [ref=e1478]:
+                                  - img [ref=e1479]:
+                                    - img [ref=e1480]
+                                  - generic [ref=e1483]: "10"
+                                - generic "Photos" [ref=e1484]:
+                                  - img [ref=e1485]:
+                                    - img [ref=e1486]
+                                  - generic [ref=e1489]: "8"
+                        - button "Menu" [ref=e1493] [cursor=pointer]:
+                          - img [ref=e1495]:
+                            - img [ref=e1496]
+                      - generic [ref=e1498]:
+                        - generic [ref=e1500]:
+                          - img "1 star rating" [ref=e1504]:
+                            - img [ref=e1506]
+                            - img [ref=e1511]
+                            - img [ref=e1516]
+                            - img [ref=e1521]
+                            - img [ref=e1526]
+                          - generic [ref=e1530]: Aug 19, 2024
+                        - paragraph [ref=e1532]:
+                          - generic [ref=e1533]:
+                            - text: I'd rate this office with negative stars if I could, but my concern lies with the staff, not Dr. Agarwal himself. My mother was referred to Dr. Agarwal, and we were initially impressed to secure an appointment within a week. However, our experience quickly soured when we waited over two hours past our scheduled time to see him. During the visit, Dr. Agarwal ordered several tests and a bronchoscopy, which we promptly completed within a week. Unfortunately, the real problems began with the follow-up and procedure scheduling.
+                            - text: At our initial visit, we were told a follow-up appointment would be scheduled for two weeks later and that we'd receive an email and a call from the office once they coordinated with my insurance. Three weeks passed with no email, no call, and no progress on my mother's prescription, which was never sent to the pharmacy despite multiple attempts to resolve the issue.
+                            - text: I spoke with Christina, who claimed no results or prescriptions were in the system, but she promised to follow up. When she did, she confirmed ongoing issues with the prescription and mentioned that Michelle, who handles procedure scheduling, would contact us. Michelle eventually called, only to inform us that she needed to coordinate with the hospital for a procedure slot. She never followed up after that.
+                            - text: This morning at 7:30 a.m. (08/19/2024), we received a call from the hospital informing us that my mother had missed her bronchoscopy--an appointment we were never informed about. We had to reschedule, and when I contacted the office again, I spoke with someone named Rossica/Jessica who refused to spell her name, then hung up on me. Despite calling back several times, she continued to hang up, adding to the already overwhelming frustration. To make matters worse, Rossica/Jessica insisted that it was our responsibility as the patient to call the hospital and set up the appointment ourselves, repeatedly implying it was our fault. This was particularly infuriating, as we were never given the hospital's contact information because Christina and Michelle had assured us they would handle it and call us back.
+                            - text: Despite following all instructions and completing the required tests promptly, we encountered numerous failures regarding appointments, prescriptions, and follow-up care. My mother's prescription remains unprocessed, follow-up appointments were never communicated, and the bronchoscopy was missed due to a lack of notification. These lapses not only caused significant distress but also compromised my mother's health. As a daughter trying to secure proper care for my ailing mother, I am deeply disappointed and frustrated by the unprofessionalism and lack of communication at Dr. Agarwal's office. These persistent issues have turned this process into a stressful and unacceptable ordeal.
+                            - text: For anyone considering Dr. Agarwal, please be aware of these serious issues with the office staff. The administrative failures and poor communication could have a serious impact on your care.
+                            - text: To the office manager and owner, this situation is deeply concerning and warrants your immediate attention. I strongly urge you to take swift and decisive action to address these systemic failures. The level of service we encountered is unacceptable, and it is crucial that urgent improvements be made to safeguard the well-being of your patients.
+                        - generic [ref=e1536]:
+                          - button "Helpful (5 reactions)" [ref=e1538] [cursor=pointer]:
+                            - generic [ref=e1545]: Helpful 5
+                          - button "Thanks (3 reactions)" [ref=e1547] [cursor=pointer]:
+                            - generic [ref=e1554]: Thanks 3
+                          - button "Love this (2 reactions)" [ref=e1556] [cursor=pointer]:
+                            - generic [ref=e1563]: Love this 2
+                          - button "Oh no (3 reactions)" [ref=e1565] [cursor=pointer]:
+                            - generic [ref=e1572]: Oh no 3
+                  - listitem [ref=e1573]:
+                    - generic [ref=e1574]:
+                      - generic [ref=e1576]:
+                        - region "Lam L." [ref=e1578]:
+                          - generic [ref=e1579]:
+                            - link "Photo of Lam L." [ref=e1582] [cursor=pointer]:
+                              - /url: /user_details?userid=aZ0o1iKdV5Rifl36swAaDw
+                              - img "Photo of Lam L." [ref=e1583]
+                            - generic [ref=e1584]:
+                              - generic [ref=e1585]:
+                                - link "Lam L." [ref=e1587] [cursor=pointer]:
+                                  - /url: /user_details?userid=aZ0o1iKdV5Rifl36swAaDw
+                                - link "Elite 26" [ref=e1589] [cursor=pointer]:
+                                  - /url: /elite
+                                  - generic [ref=e1590]: Elite 26
+                                - generic [ref=e1591]: San Jose, CA
+                              - generic [ref=e1594]:
+                                - generic "Friends" [ref=e1595]:
+                                  - img [ref=e1596]:
+                                    - img [ref=e1597]
+                                  - generic [ref=e1599]: "297"
+                                - generic "Reviews" [ref=e1600]:
+                                  - img [ref=e1601]:
+                                    - img [ref=e1602]
+                                  - generic [ref=e1605]: "478"
+                                - generic "Photos" [ref=e1606]:
+                                  - img [ref=e1607]:
+                                    - img [ref=e1608]
+                                  - generic [ref=e1611]: "1431"
+                        - button "Menu" [ref=e1615] [cursor=pointer]:
+                          - img [ref=e1617]:
+                            - img [ref=e1618]
+                      - generic [ref=e1620]:
+                        - generic [ref=e1622]:
+                          - img "3 star rating" [ref=e1626]:
+                            - img [ref=e1628]
+                            - img [ref=e1633]
+                            - img [ref=e1638]
+                            - img [ref=e1643]
+                            - img [ref=e1648]
+                          - generic [ref=e1652]: Jun 3, 2022
+                        - paragraph [ref=e1654]:
+                          - generic [ref=e1655]:
+                            - text: Not very responsive when calling for appointment or asking about alternative. Dad went in for throat/lung issue and was given drug that is used to treat for cancer and the cost was expensive. Was told to call in if there is stomach or bowel issue. Called and no response about alternative medicine or what not; no follow up instructions. Folks decided to no longer take medicines and stop going.
+                            - text: Got an authorization request from this place many months later for the drug. We dont want to continue with this medicine ... why do they keep requesting. Guess they get a kick back for ordering this expensive medicine.
+                        - generic [ref=e1658]:
+                          - button "Helpful (3 reactions)" [ref=e1660] [cursor=pointer]:
+                            - generic [ref=e1667]: Helpful 3
+                          - button "Thanks (0 reactions)" [ref=e1669] [cursor=pointer]:
+                            - generic [ref=e1676]: Thanks 0
+                          - button "Love this (2 reactions)" [ref=e1678] [cursor=pointer]:
+                            - generic [ref=e1685]: Love this 2
+                          - button "Oh no (1 reaction)" [ref=e1687] [cursor=pointer]:
+                            - generic [ref=e1694]: Oh no 1
+                      - generic [ref=e1696]:
+                        - region "Business owner information" [ref=e1699]:
+                          - paragraph [ref=e1700]: Business owner information
+                          - generic [ref=e1701]:
+                            - img "Photo of Sanjay A." [ref=e1705]
+                            - generic [ref=e1706]:
+                              - paragraph [ref=e1707]: Sanjay A.
+                              - paragraph [ref=e1709]: Business Owner
+                        - generic [ref=e1710]:
+                          - region [ref=e1711]:
+                            - generic [ref=e1712]:
+                              - paragraph [ref=e1714]: Jul 16, 2023
+                              - paragraph [ref=e1715]:
+                                - generic [ref=e1716]:
+                                  - text: Thank you Lam. Your concern from the layman perspective is heard. Pumonary fibrosis has only TWO medications, that too after waiting for 50 years, and hence are costly. We had to jump through hoops to get approval by your father's insurance. I am sure you are aware that whole existence of the insurance company is to deny payment where ever possible and with slightest opportunity where patient or provider is not persistent. And guess what, this whole back and forth paperwork with insurance and multiple phone calls with prolonged wait is all NOT paid for! Staff dont come free, and I don't get a government salary! My time is my salary and spending hours and hours on this is to get my patients get the best! Unfortunately this is not common knowledge, including smart educated people like your kind self. You could have persevered few more visits and encouraged your father to continue the treatment that we onerously got approval.
+                                  - text: Also, FDA (food and drug administration), DEA, Medical board of California and PHarma Codes are vigilant and really strict. Anti kickback statutes can take away license to practice medicine and jail time or other penalties are guaranteed. I assume you know people first hand who did that and are now being penalized. This office takes pride in doing the right thing and evidence based care, even though we are a private practice.
+                                  - text: Please tell me the name of your father by virtue of call / email and I will be happy to refer him to another Physician of your choice. I wish you and your father the best of health.
+                          - button "Read more" [ref=e1717] [cursor=pointer]:
+                            - paragraph [ref=e1721]: Read more
+                  - listitem [ref=e1722]:
+                    - generic [ref=e1723]:
+                      - generic [ref=e1725]:
+                        - region "Miguel Z." [ref=e1727]:
+                          - generic [ref=e1728]:
+                            - link "Photo of Miguel Z." [ref=e1731] [cursor=pointer]:
+                              - /url: /user_details?userid=vlgAIKWG3ileXeDbw45SSQ
+                              - img "Photo of Miguel Z." [ref=e1732]
+                            - generic [ref=e1733]:
+                              - generic [ref=e1734]:
+                                - link "Miguel Z." [ref=e1736] [cursor=pointer]:
+                                  - /url: /user_details?userid=vlgAIKWG3ileXeDbw45SSQ
+                                - generic [ref=e1737]: Sacramento, CA
+                              - generic [ref=e1740]:
+                                - generic "Friends" [ref=e1741]:
+                                  - img [ref=e1742]:
+                                    - img [ref=e1743]
+                                  - generic [ref=e1745]: "818"
+                                - generic "Reviews" [ref=e1746]:
+                                  - img [ref=e1747]:
+                                    - img [ref=e1748]
+                                  - generic [ref=e1751]: "40"
+                                - generic "Photos" [ref=e1752]:
+                                  - img [ref=e1753]:
+                                    - img [ref=e1754]
+                                  - generic [ref=e1757]: "33"
+                        - button "Menu" [ref=e1761] [cursor=pointer]:
+                          - img [ref=e1763]:
+                            - img [ref=e1764]
+                      - generic [ref=e1766]:
+                        - generic [ref=e1768]:
+                          - img "5 star rating" [ref=e1772]:
+                            - img [ref=e1774]
+                            - img [ref=e1779]
+                            - img [ref=e1784]
+                            - img [ref=e1789]
+                            - img [ref=e1794]
+                          - generic [ref=e1798]: Sep 13, 2022
+                        - paragraph [ref=e1800]:
+                          - generic [ref=e1801]:
+                            - text: (Copied from my google review)
+                            - text: A little late, but a much-deserved review. I came to Dr. Agarwal almost 5 years ago to be seen for Sleep Apnea. I was initially with Kaiser and was told that, while I did have sleep apnea, my condition did not need any treatment despite my sharing with them my inability to stay awake during the day (even dosed off at a work meeting).
+                            - text: After switching insurances, I googled around to find Dr. Agarwal and came in to receive a sleep study where it was discovered that the testing done at Kaiser was not done correctly, and I did need to receive treatment for my sleep apnea. I have moved out of the area but can still connect with Dr. Agarwal, thanks to virtual meetings. He has been thorough in providing me insight into my condition and has answered each question I have presented to him.
+                            - text: 5 years later, I have noticed a difference in my energy levels, and I feel more rested than I could remember.
+                        - generic [ref=e1804]:
+                          - button "Helpful (1 reaction)" [ref=e1806] [cursor=pointer]:
+                            - generic [ref=e1813]: Helpful 1
+                          - button "Thanks (0 reactions)" [ref=e1815] [cursor=pointer]:
+                            - generic [ref=e1822]: Thanks 0
+                          - button "Love this (0 reactions)" [ref=e1824] [cursor=pointer]:
+                            - generic [ref=e1831]: Love this 0
+                          - button "Oh no (0 reactions)" [ref=e1833] [cursor=pointer]:
+                            - generic [ref=e1840]: Oh no 0
+                  - listitem [ref=e1841]:
+                    - generic [ref=e1842]:
+                      - generic [ref=e1844]:
+                        - region "A G." [ref=e1846]:
+                          - generic [ref=e1847]:
+                            - link "Photo of A G." [ref=e1850] [cursor=pointer]:
+                              - /url: /user_details?userid=kz1Ipi2P1G89kjAHlKQsFw
+                              - img "Photo of A G." [ref=e1851]
+                            - generic [ref=e1852]:
+                              - generic [ref=e1853]:
+                                - link "A G." [ref=e1855] [cursor=pointer]:
+                                  - /url: /user_details?userid=kz1Ipi2P1G89kjAHlKQsFw
+                                - generic [ref=e1856]: Tacoma, WA
+                              - generic [ref=e1859]:
+                                - generic "Friends" [ref=e1860]:
+                                  - img [ref=e1861]:
+                                    - img [ref=e1862]
+                                  - generic [ref=e1864]: "0"
+                                - generic "Reviews" [ref=e1865]:
+                                  - img [ref=e1866]:
+                                    - img [ref=e1867]
+                                  - generic [ref=e1870]: "29"
+                                - generic "Photos" [ref=e1871]:
+                                  - img [ref=e1872]:
+                                    - img [ref=e1873]
+                                  - generic [ref=e1876]: "0"
+                        - button "Menu" [ref=e1880] [cursor=pointer]:
+                          - img [ref=e1882]:
+                            - img [ref=e1883]
+                      - generic [ref=e1885]:
+                        - generic [ref=e1887]:
+                          - img "5 star rating" [ref=e1891]:
+                            - img [ref=e1893]
+                            - img [ref=e1898]
+                            - img [ref=e1903]
+                            - img [ref=e1908]
+                            - img [ref=e1913]
+                          - generic [ref=e1917]: Jun 14, 2023
+                        - paragraph [ref=e1919]: I went to see Dr Agarwal to help me understand why I am felt so tired. After taking home, the monitor, he shared with me that my breathing stopped several times an hour. He then prescribed a CPAP machine for me. I'm more than thrilled to get back to my normal self and very appreciative of Dr. Agarwal's help. He is fun to talk to, and very down to earth. I also found this staff to be very professional. I highly recommend him.
+                        - generic [ref=e1922]:
+                          - button "Helpful (1 reaction)" [ref=e1924] [cursor=pointer]:
+                            - generic [ref=e1931]: Helpful 1
+                          - button "Thanks (0 reactions)" [ref=e1933] [cursor=pointer]:
+                            - generic [ref=e1940]: Thanks 0
+                          - button "Love this (0 reactions)" [ref=e1942] [cursor=pointer]:
+                            - generic [ref=e1949]: Love this 0
+                          - button "Oh no (0 reactions)" [ref=e1951] [cursor=pointer]:
+                            - generic [ref=e1958]: Oh no 0
+                  - listitem
+                - navigation "Pagination navigation" [ref=e1959]:
+                  - generic [ref=e1961]:
+                    - img [ref=e1965]:
+                      - img [ref=e1966]
+                    - 'generic "Page: 1" [ref=e1971]': "1"
+                    - 'link "Page: 2" [ref=e1974] [cursor=pointer]':
+                      - /url: https://www.yelp.com/biz/california-specialty-physicians-milpitas?start=10
+                      - 'generic "Page: 2" [ref=e1975]': "2"
+                    - 'link "Page: 3" [ref=e1978] [cursor=pointer]':
+                      - /url: https://www.yelp.com/biz/california-specialty-physicians-milpitas?start=20
+                      - 'generic "Page: 3" [ref=e1979]': "3"
+                    - 'link "Page: 4" [ref=e1982] [cursor=pointer]':
+                      - /url: https://www.yelp.com/biz/california-specialty-physicians-milpitas?start=30
+                      - 'generic "Page: 4" [ref=e1983]': "4"
+                    - 'link "Page: 5" [ref=e1986] [cursor=pointer]':
+                      - /url: https://www.yelp.com/biz/california-specialty-physicians-milpitas?start=40
+                      - 'generic "Page: 5" [ref=e1987]': "5"
+                    - 'link "Page: 6" [ref=e1990] [cursor=pointer]':
+                      - /url: https://www.yelp.com/biz/california-specialty-physicians-milpitas?start=50
+                      - 'generic "Page: 6" [ref=e1991]': "6"
+                    - link "Next" [ref=e1994] [cursor=pointer]:
+                      - /url: https://www.yelp.com/biz/california-specialty-physicians-milpitas?start=10
+                      - img [ref=e1995]:
+                        - img [ref=e1996]
+                  - generic [ref=e1998]: 1 of 6
+              - paragraph [ref=e1999]:
+                - link "6 other reviews that are not currently recommended" [ref=e2000] [cursor=pointer]:
+                  - /url: /not_recommended_reviews/d9LpxbpC20GmMWbJ19nV2w
+                  - text: 6 other reviews that are not currently recommended
+                  - img [ref=e2002]:
+                    - img [ref=e2003]
+          - generic [ref=e2006]:
+            - generic [ref=e2007]:
+              - heading "You Might Also Consider" [level=4] [ref=e2009]
+              - generic [ref=e2011]:
+                - generic [ref=e2012]: Sponsored
+                - dialog "Learn more about Yelp ads" [ref=e2013]:
+                  - img [ref=e2015]:
+                    - img [ref=e2016]
+            - generic [ref=e2020]:
+              - link "Silicon Valley Pediatric Dentistry and Orthodontics" [ref=e2024] [cursor=pointer]:
+                - /url: /adredir?ad_business_id=1sHfDHlI-gGpC0fNpz19eQ&campaign_id=8_ybVGCZd_f9gd4eReVoXw&click_origin=biz_avatar&placement=below_biz_review&placement_slot=1&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fsilicon-valley-pediatric-dentistry-and-orthodontics-santa-clara%3Fhrid%3Dy5J9tg4t5HOilsYPNzBhbA&request_id=b378ce2714f5f0e1&signature=b741df71d9cf0696990c3cb8fe66f7bd6c81d82582890ca1f46809e0ddf4598d&slot=0
+                - img "Silicon Valley Pediatric Dentistry and Orthodontics" [ref=e2025]
+              - generic [ref=e2027]:
+                - generic [ref=e2028]:
+                  - paragraph [ref=e2030]:
+                    - link "Silicon Valley Pediatric Dentistry and Orthodontics" [ref=e2031] [cursor=pointer]:
+                      - /url: /adredir?ad_business_id=1sHfDHlI-gGpC0fNpz19eQ&campaign_id=8_ybVGCZd_f9gd4eReVoXw&click_origin=business_name&placement=below_biz_review&placement_slot=1&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fsilicon-valley-pediatric-dentistry-and-orthodontics-santa-clara&request_id=b378ce2714f5f0e1&signature=31b4c86a78ef339cef2e99d4cb2376d0f45e73d7278e9713c4b99fdad63bb273&slot=0
+                  - img [ref=e2034]:
+                    - img [ref=e2035]
+                - generic [ref=e2037]:
+                  - generic [ref=e2039]:
+                    - img "4.8 star rating" [ref=e2042]:
+                      - img [ref=e2044]
+                      - img [ref=e2049]
+                      - img [ref=e2054]
+                      - img [ref=e2059]
+                      - img [ref=e2064]
+                    - generic [ref=e2068]: 4.8 (687 reviews)
+                  - generic [ref=e2070]:
+                    - img [ref=e2071]:
+                      - img [ref=e2072]
+                    - generic [ref=e2076]:
+                      - strong [ref=e2077]: 6.4 miles
+                      - text: away from California Specialty Physicians
+                - generic [ref=e2079]:
+                  - text: Adam W. said"This place is absolutely worth all the 5-star reviews. Beautiful/clean facility (my daughter didn't want to leave the outdoor play area), they have TVs on the CEILING that kept my daughter happy as a clam for the entire appointment.…"
+                  - link "Opens a new window to user review on Silicon Valley Pediatric Dentistry and Orthodontics page" [ref=e2082] [cursor=pointer]:
+                    - /url: /adredir?ad_business_id=1sHfDHlI-gGpC0fNpz19eQ&campaign_id=8_ybVGCZd_f9gd4eReVoXw&click_origin=read_more&placement=below_biz_review&placement_slot=1&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fsilicon-valley-pediatric-dentistry-and-orthodontics-santa-clara%3Fhrid%3Dy5J9tg4t5HOilsYPNzBhbA&request_id=b378ce2714f5f0e1&signature=b741df71d9cf0696990c3cb8fe66f7bd6c81d82582890ca1f46809e0ddf4598d&slot=0
+                    - text: read more
+                - paragraph [ref=e2084]: in Pediatric Dentists, Orthodontists
+            - generic [ref=e2086]:
+              - link "Abbey Neuropsychology Clinic" [ref=e2090] [cursor=pointer]:
+                - /url: /adredir?ad_business_id=41oUOGWAaKzR5EX4MMDfyA&campaign_id=-m0QTXEYjWqZg_mE4xAriA&click_origin=biz_avatar&placement=below_biz_review&placement_slot=1&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fabbey-neuropsychology-clinic-palo-alto%3Fhrid%3DwsSg1LKaGpIg6pj5vy4QXA&request_id=b378ce2714f5f0e1&signature=62ee069105c67ff301bf7cdf73f748b140dfe4ea6d99d50891a577b0064e2492&slot=1
+                - img "Abbey Neuropsychology Clinic" [ref=e2091]
+              - generic [ref=e2093]:
+                - generic [ref=e2094]:
+                  - paragraph [ref=e2096]:
+                    - link "Abbey Neuropsychology Clinic" [ref=e2097] [cursor=pointer]:
+                      - /url: /adredir?ad_business_id=41oUOGWAaKzR5EX4MMDfyA&campaign_id=-m0QTXEYjWqZg_mE4xAriA&click_origin=business_name&placement=below_biz_review&placement_slot=1&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fabbey-neuropsychology-clinic-palo-alto&request_id=b378ce2714f5f0e1&signature=81f0360624a4e2c77ce0a4e9df633cca5dda2bb162e8fa684316e16922196b7a&slot=1
+                  - img [ref=e2100]:
+                    - img [ref=e2101]
+                - generic [ref=e2103]:
+                  - generic [ref=e2105]:
+                    - img "4.2 star rating" [ref=e2108]:
+                      - img [ref=e2110]
+                      - img [ref=e2115]
+                      - img [ref=e2120]
+                      - img [ref=e2125]
+                      - img [ref=e2130]
+                    - generic [ref=e2134]: 4.2 (30 reviews)
+                  - generic [ref=e2136]:
+                    - img [ref=e2137]:
+                      - img [ref=e2138]
+                    - generic [ref=e2142]:
+                      - strong [ref=e2143]: 14.3 miles
+                      - text: away from California Specialty Physicians
+                - generic [ref=e2145]:
+                  - text: Peter C. said"I'm a successful startup founder, but in the last 20 years I've spent over $250k on doctors, psychiatrists, therapists, dual-diagnosis clinics, and even crazy stuff like IV-ketamine therapy to figure out "what is wrong with my…"
+                  - link "Opens a new window to user review on Abbey Neuropsychology Clinic page" [ref=e2148] [cursor=pointer]:
+                    - /url: /adredir?ad_business_id=41oUOGWAaKzR5EX4MMDfyA&campaign_id=-m0QTXEYjWqZg_mE4xAriA&click_origin=read_more&placement=below_biz_review&placement_slot=1&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fabbey-neuropsychology-clinic-palo-alto%3Fhrid%3DwsSg1LKaGpIg6pj5vy4QXA&request_id=b378ce2714f5f0e1&signature=62ee069105c67ff301bf7cdf73f748b140dfe4ea6d99d50891a577b0064e2492&slot=1
+                    - text: read more
+                - paragraph [ref=e2150]: in Psychologists, Psychiatrists
+        - complementary [ref=e2152]:
+          - generic [ref=e2154]:
+            - generic [ref=e2156]:
+              - link "Business website" [ref=e2158] [cursor=pointer]:
+                - /url: /biz_redir?url=http%3A%2F%2Fwww.cphysicians.com&cachebuster=1775856059&website_link_type=website&src_bizid=d9LpxbpC20GmMWbJ19nV2w&s=04142c6def8b0bca005f517e0dfe0f6cef2ac230b78b60e627219797e26eb6cc
+                - img "Business website" [ref=e2159]:
+                  - img [ref=e2160]
+              - generic [ref=e2162]:
+                - paragraph [ref=e2163]: Business website
+                - paragraph [ref=e2164]:
+                  - link "cphysicians.com" [ref=e2165] [cursor=pointer]:
+                    - /url: /biz_redir?url=http%3A%2F%2Fwww.cphysicians.com&cachebuster=1775856059&website_link_type=website&src_bizid=d9LpxbpC20GmMWbJ19nV2w&s=04142c6def8b0bca005f517e0dfe0f6cef2ac230b78b60e627219797e26eb6cc
+            - generic [ref=e2167]:
+              - img "Business phone number" [ref=e2169]:
+                - img [ref=e2170]
+              - generic [ref=e2172]:
+                - paragraph [ref=e2173]: Phone number
+                - paragraph [ref=e2174]: (408) 942-0300
+            - generic [ref=e2176]:
+              - link "Directions to the business" [ref=e2178] [cursor=pointer]:
+                - /url: /map/california-specialty-physicians-milpitas
+                - img "Directions to the business" [ref=e2179]:
+                  - img [ref=e2180]
+              - generic [ref=e2182]:
+                - paragraph [ref=e2183]:
+                  - link "Get Directions" [ref=e2184] [cursor=pointer]:
+                    - /url: /map/california-specialty-physicians-milpitas
+                - paragraph [ref=e2185]: 995 Montague Expy Ste 218 Milpitas, CA 95035
+            - button "Suggest an edit" [ref=e2187] [cursor=pointer]:
+              - generic [ref=e2188]:
+                - img [ref=e2190]:
+                  - img [ref=e2191]
+                - generic [ref=e2193]: Suggest an edit
+          - generic [ref=e2195]:
+            - heading "You Might Also Consider" [level=4] [ref=e2198]
+            - generic [ref=e2199]:
+              - generic [ref=e2200]: Sponsored
+              - dialog "Learn more about Yelp ads" [ref=e2201]:
+                - img [ref=e2203]:
+                  - img [ref=e2204]
+            - generic [ref=e2207]:
+              - generic [ref=e2208]:
+                - link "iSmile Dental" [ref=e2212] [cursor=pointer]:
+                  - /url: /adredir?ad_business_id=g--m7eBw4aC1HxKzTpwhWg&campaign_id=PmmQvrZG4DyFrJwqEXsXgg&click_origin=biz_avatar&placement=biz_sidebar&placement_slot=2&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fismile-dental-sunnyvale%3Fhrid%3DYFLvBfJOYn_mw6YOU4Kdqw&request_id=b378ce2714f5f0e1&signature=130ce1a08ef53c5a0dffa039e3e08a89f59033961f46f3711e4e8d1426d867a6&slot=0
+                  - img "iSmile Dental" [ref=e2213]
+                - generic [ref=e2214]:
+                  - paragraph [ref=e2217]:
+                    - link "iSmile Dental" [ref=e2218] [cursor=pointer]:
+                      - /url: /adredir?ad_business_id=g--m7eBw4aC1HxKzTpwhWg&campaign_id=PmmQvrZG4DyFrJwqEXsXgg&click_origin=business_name&placement=biz_sidebar&placement_slot=2&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fismile-dental-sunnyvale&request_id=b378ce2714f5f0e1&signature=434230ad7645c4eb4d7a43a625d40f540085c49eb862602f63c7cac07365ffe8&slot=0
+                  - generic [ref=e2219]:
+                    - img "4.2 star rating" [ref=e2222]:
+                      - img [ref=e2224]
+                      - img [ref=e2229]
+                      - img [ref=e2234]
+                      - img [ref=e2239]
+                      - img [ref=e2244]
+                    - generic [ref=e2248]: 4.2 (722 reviews)
+                  - generic [ref=e2249]: 9.4 miles
+              - generic [ref=e2251]:
+                - text: "\"Originally I planned to leave a solid 5-star after my final implant appointment…\""
+                - link "Opens a new window to user review on iSmile Dental page" [ref=e2254] [cursor=pointer]:
+                  - /url: /adredir?ad_business_id=g--m7eBw4aC1HxKzTpwhWg&campaign_id=PmmQvrZG4DyFrJwqEXsXgg&click_origin=read_more&placement=biz_sidebar&placement_slot=2&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fismile-dental-sunnyvale%3Fhrid%3DYFLvBfJOYn_mw6YOU4Kdqw&request_id=b378ce2714f5f0e1&signature=130ce1a08ef53c5a0dffa039e3e08a89f59033961f46f3711e4e8d1426d867a6&slot=0
+                  - text: read more
+            - generic [ref=e2255]:
+              - generic [ref=e2256]:
+                - link "Daryl K. Hoffman, MD" [ref=e2260] [cursor=pointer]:
+                  - /url: /adredir?ad_business_id=ui-X3rHtu8t6eVTEXx4bfg&campaign_id=oL71Kw0cS2JoDgdIhbih_A&click_origin=biz_avatar&placement=biz_sidebar&placement_slot=2&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fdaryl-k-hoffman-md-palo-alto%3Fhrid%3DXuT5P88ohfFb_zw1G_7tfQ&request_id=b378ce2714f5f0e1&signature=a7910ee1dec2bdfe0406551bb98d22999753c517b4e7cc9d8d00ad07fb9597e4&slot=1
+                  - img "Daryl K. Hoffman, MD" [ref=e2261]
+                - generic [ref=e2262]:
+                  - paragraph [ref=e2265]:
+                    - link "Daryl K. Hoffman, MD" [ref=e2266] [cursor=pointer]:
+                      - /url: /adredir?ad_business_id=ui-X3rHtu8t6eVTEXx4bfg&campaign_id=oL71Kw0cS2JoDgdIhbih_A&click_origin=business_name&placement=biz_sidebar&placement_slot=2&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fdaryl-k-hoffman-md-palo-alto&request_id=b378ce2714f5f0e1&signature=26026ac17012f6cc7706cd39e3fd9bfb676f35ae8ec67bf3ddb4eed25936c416&slot=1
+                  - generic [ref=e2267]:
+                    - img "4.6 star rating" [ref=e2270]:
+                      - img [ref=e2272]
+                      - img [ref=e2277]
+                      - img [ref=e2282]
+                      - img [ref=e2287]
+                      - img [ref=e2292]
+                    - generic [ref=e2296]: 4.6 (46 reviews)
+                  - generic [ref=e2297]: 15.3 miles
+              - generic [ref=e2299]:
+                - text: "\"First and foremost, this is a real review and no this isn't a staff member.. I made…\""
+                - link "Opens a new window to user review on Daryl K. Hoffman, MD page" [ref=e2302] [cursor=pointer]:
+                  - /url: /adredir?ad_business_id=ui-X3rHtu8t6eVTEXx4bfg&campaign_id=oL71Kw0cS2JoDgdIhbih_A&click_origin=read_more&placement=biz_sidebar&placement_slot=2&redirect_url=https%3A%2F%2Fwww.yelp.com%2Fbiz%2Fdaryl-k-hoffman-md-palo-alto%3Fhrid%3DXuT5P88ohfFb_zw1G_7tfQ&request_id=b378ce2714f5f0e1&signature=a7910ee1dec2bdfe0406551bb98d22999753c517b4e7cc9d8d00ad07fb9597e4&slot=1
+                  - text: read more
+      - generic [ref=e2304]:
+        - generic [ref=e2305]:
+          - generic [ref=e2306]:
+            - heading "Browse Nearby" [level=3] [ref=e2307]
+            - list [ref=e2308]:
+              - listitem [ref=e2309]:
+                - link "BEST of Milpitas, CA Internal Medicine near California Specialty Physicians" [ref=e2311] [cursor=pointer]:
+                  - /url: /search?find_desc=Internal+Medicine&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2314]: BEST of Milpitas, CA Internal Medicine near California Specialty Physicians
+              - listitem [ref=e2315]:
+                - link "BEST of Milpitas, CA Coffee near California Specialty Physicians" [ref=e2317] [cursor=pointer]:
+                  - /url: /search?find_desc=Coffee&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2320]: BEST of Milpitas, CA Coffee near California Specialty Physicians
+              - listitem [ref=e2321]:
+                - link "BEST of Milpitas, CA Things to Do near California Specialty Physicians" [ref=e2323] [cursor=pointer]:
+                  - /url: /search?find_desc=Things+to+Do&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2326]: BEST of Milpitas, CA Things to Do near California Specialty Physicians
+              - listitem [ref=e2327]:
+                - link "BEST of Milpitas, CA Sleep Specialists near California Specialty Physicians" [ref=e2329] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Specialists&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2332]: BEST of Milpitas, CA Sleep Specialists near California Specialty Physicians
+              - listitem [ref=e2333]:
+                - link "BEST of Milpitas, CA Allergists near California Specialty Physicians" [ref=e2335] [cursor=pointer]:
+                  - /url: /search?find_desc=Allergists&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2338]: BEST of Milpitas, CA Allergists near California Specialty Physicians
+              - listitem [ref=e2339]:
+                - link "BEST of Milpitas, CA Restaurants near California Specialty Physicians" [ref=e2341] [cursor=pointer]:
+                  - /url: /search?find_desc=Restaurants&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2344]: BEST of Milpitas, CA Restaurants near California Specialty Physicians
+              - listitem [ref=e2345]:
+                - link "BEST of Milpitas, CA Oxygen Supply near California Specialty Physicians" [ref=e2347] [cursor=pointer]:
+                  - /url: /search?find_desc=Oxygen+Supply&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2350]: BEST of Milpitas, CA Oxygen Supply near California Specialty Physicians
+              - listitem [ref=e2351]:
+                - link "BEST of Milpitas, CA Scuba Diving Certification near California Specialty Physicians" [ref=e2353] [cursor=pointer]:
+                  - /url: /search?find_desc=Scuba+Diving+Certification&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2356]: BEST of Milpitas, CA Scuba Diving Certification near California Specialty Physicians
+              - listitem [ref=e2357]:
+                - link "BEST of Milpitas, CA Tikka Masala near California Specialty Physicians" [ref=e2359] [cursor=pointer]:
+                  - /url: /search?find_desc=Tikka+Masala&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2362]: BEST of Milpitas, CA Tikka Masala near California Specialty Physicians
+          - generic [ref=e2363]:
+            - heading "Trending Searches in Milpitas, CA" [level=3] [ref=e2364]
+            - list [ref=e2365]:
+              - listitem [ref=e2366]:
+                - link "Bus Tours near California Specialty Physicians" [ref=e2368] [cursor=pointer]:
+                  - /url: /search?find_desc=Bus+Tours&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2371]: Bus Tours near California Specialty Physicians
+              - listitem [ref=e2372]:
+                - link "Entertainment near California Specialty Physicians" [ref=e2374] [cursor=pointer]:
+                  - /url: /search?find_desc=Entertainment&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2377]: Entertainment near California Specialty Physicians
+              - listitem [ref=e2378]:
+                - link "Hair Stylists near California Specialty Physicians" [ref=e2380] [cursor=pointer]:
+                  - /url: /search?find_desc=Hair+Stylists&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2383]: Hair Stylists near California Specialty Physicians
+              - listitem [ref=e2384]:
+                - link "Hot Air Balloons near California Specialty Physicians" [ref=e2386] [cursor=pointer]:
+                  - /url: /search?find_desc=Hot+Air+Balloons&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2389]: Hot Air Balloons near California Specialty Physicians
+              - listitem [ref=e2390]:
+                - link "Hydroponics near California Specialty Physicians" [ref=e2392] [cursor=pointer]:
+                  - /url: /search?find_desc=Hydroponics&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2395]: Hydroponics near California Specialty Physicians
+              - listitem [ref=e2396]:
+                - link "Jet Skis near California Specialty Physicians" [ref=e2398] [cursor=pointer]:
+                  - /url: /search?find_desc=Jet+Skis&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2401]: Jet Skis near California Specialty Physicians
+              - listitem [ref=e2402]:
+                - link "Nurseries & Gardening near California Specialty Physicians" [ref=e2404] [cursor=pointer]:
+                  - /url: /search?find_desc=Nurseries+%26+Gardening&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2407]: Nurseries & Gardening near California Specialty Physicians
+              - listitem [ref=e2408]:
+                - link "Pool & Billiards near California Specialty Physicians" [ref=e2410] [cursor=pointer]:
+                  - /url: /search?find_desc=Pool+%26+Billiards&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2413]: Pool & Billiards near California Specialty Physicians
+              - listitem [ref=e2414]:
+                - link "Religious Organizations near California Specialty Physicians" [ref=e2416] [cursor=pointer]:
+                  - /url: /search?find_desc=Religious+Organizations&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2419]: Religious Organizations near California Specialty Physicians
+              - listitem [ref=e2420]:
+                - link "Sports Clubs near California Specialty Physicians" [ref=e2422] [cursor=pointer]:
+                  - /url: /search?find_desc=Sports+Clubs&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2425]: Sports Clubs near California Specialty Physicians
+              - listitem [ref=e2426]:
+                - link "Summer Camps near California Specialty Physicians" [ref=e2428] [cursor=pointer]:
+                  - /url: /search?find_desc=Summer+Camps&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2431]: Summer Camps near California Specialty Physicians
+              - listitem [ref=e2432]:
+                - link "Sunglasses near California Specialty Physicians" [ref=e2434] [cursor=pointer]:
+                  - /url: /search?find_desc=Sunglasses&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2437]: Sunglasses near California Specialty Physicians
+              - listitem [ref=e2438]:
+                - link "Vacation Rentals near California Specialty Physicians" [ref=e2440] [cursor=pointer]:
+                  - /url: /search?find_desc=Vacation+Rentals&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2443]: Vacation Rentals near California Specialty Physicians
+              - listitem [ref=e2444]:
+                - link "Watches near California Specialty Physicians" [ref=e2446] [cursor=pointer]:
+                  - /url: /search?find_desc=Watches&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2449]: Watches near California Specialty Physicians
+              - listitem [ref=e2450]:
+                - link "Wine Tours near California Specialty Physicians" [ref=e2452] [cursor=pointer]:
+                  - /url: /search?find_desc=Wine+Tours&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2455]: Wine Tours near California Specialty Physicians
+        - generic [ref=e2456]:
+          - generic [ref=e2457]:
+            - heading "Other Pulmonologist Nearby" [level=3] [ref=e2458]
+            - list [ref=e2459]:
+              - listitem [ref=e2460]:
+                - link "Find more Pulmonologist near California Specialty Physicians" [ref=e2462] [cursor=pointer]:
+                  - /url: /search?find_desc=Pulmonologist&find_near=california-specialty-physicians-milpitas
+                  - paragraph [ref=e2465]: Find more Pulmonologist near California Specialty Physicians
+          - generic [ref=e2466]:
+            - heading "Service Offerings in Milpitas" [level=3] [ref=e2467]
+            - list [ref=e2468]:
+              - listitem [ref=e2469]:
+                - link "Virtual Consultations" [ref=e2471] [cursor=pointer]:
+                  - /url: /search?find_desc=Virtual+Consultations&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2474]: Virtual Consultations
+          - generic [ref=e2475]:
+            - heading "Related Searches in Milpitas, CA" [level=3] [ref=e2476]
+            - list [ref=e2477]:
+              - listitem [ref=e2478]:
+                - link "Best Pediatricians Practicing in Milpitas, California" [ref=e2480] [cursor=pointer]:
+                  - /url: /search?find_desc=Pediatricians&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2483]: Best Pediatricians Practicing in Milpitas, California
+              - listitem [ref=e2484]:
+                - link "Book a Comprehensive Sleep Study in Milpitas, California" [ref=e2486] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Study&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2489]: Book a Comprehensive Sleep Study in Milpitas, California
+              - listitem [ref=e2490]:
+                - link "Browse Expert Sleep Specialists in Milpitas, California" [ref=e2492] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Specialists&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2495]: Browse Expert Sleep Specialists in Milpitas, California
+              - listitem [ref=e2496]:
+                - link "Certified Functional Medicine Doctor in Milpitas, California" [ref=e2498] [cursor=pointer]:
+                  - /url: /search?find_desc=Functional+Medicine+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2501]: Certified Functional Medicine Doctor in Milpitas, California
+              - listitem [ref=e2502]:
+                - link "Certified Sleep Consultants in Milpitas, California" [ref=e2504] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Consultant&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2507]: Certified Sleep Consultants in Milpitas, California
+              - listitem [ref=e2508]:
+                - link "Connect With a Primary Doctor in Milpitas, California" [ref=e2510] [cursor=pointer]:
+                  - /url: /search?find_desc=Primary+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2513]: Connect With a Primary Doctor in Milpitas, California
+              - listitem [ref=e2514]:
+                - link "Consult a Homeopathic Doctor in Milpitas, California Today" [ref=e2516] [cursor=pointer]:
+                  - /url: /search?find_desc=Homeopathic+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2519]: Consult a Homeopathic Doctor in Milpitas, California Today
+              - listitem [ref=e2520]:
+                - link "Consult a Skilled Neurologist Near Milpitas, California" [ref=e2522] [cursor=pointer]:
+                  - /url: /search?find_desc=Neurologist&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2525]: Consult a Skilled Neurologist Near Milpitas, California
+              - listitem [ref=e2526]:
+                - link "Consult a Skilled Neurosurgeon in Milpitas, California" [ref=e2528] [cursor=pointer]:
+                  - /url: /search?find_desc=Neurosurgeon&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2531]: Consult a Skilled Neurosurgeon in Milpitas, California
+              - listitem [ref=e2532]:
+                - link "Consult a Sleep Doctor in Milpitas, California Today" [ref=e2534] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2537]: Consult a Sleep Doctor in Milpitas, California Today
+              - listitem [ref=e2538]:
+                - link "Consult a TMJ Specialist Near Milpitas, California" [ref=e2540] [cursor=pointer]:
+                  - /url: /search?find_desc=TMJ+Specialist&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2543]: Consult a TMJ Specialist Near Milpitas, California
+              - listitem [ref=e2544]:
+                - link "Consult a Trusted Asthma Doctor in Milpitas, California" [ref=e2546] [cursor=pointer]:
+                  - /url: /search?find_desc=Asthma+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2549]: Consult a Trusted Asthma Doctor in Milpitas, California
+              - listitem [ref=e2550]:
+                - 'link "Discover Effective Sleep Training Methods in Milpitas, California, {State}" [ref=e2552] [cursor=pointer]':
+                  - /url: /search?find_desc=Sleep+Training&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2555]: "Discover Effective Sleep Training Methods in Milpitas, California, {State}"
+              - listitem [ref=e2556]:
+                - 'link "Discover Sleep Apnea Dentist Solutions in Milpitas, California, {State}" [ref=e2558] [cursor=pointer]':
+                  - /url: /search?find_desc=Sleep+Apnea+Dentist&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2561]: "Discover Sleep Apnea Dentist Solutions in Milpitas, California, {State}"
+              - listitem [ref=e2562]:
+                - 'link "Discover Top Pulmonary Specialists in Milpitas, California, {State}" [ref=e2564] [cursor=pointer]':
+                  - /url: /search?find_desc=Pulmonary&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2567]: "Discover Top Pulmonary Specialists in Milpitas, California, {State}"
+              - listitem [ref=e2568]:
+                - 'link "Discover the Best Sleep Solutions in Milpitas, California, {State}" [ref=e2570] [cursor=pointer]':
+                  - /url: /search?find_desc=Sleep&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2573]: "Discover the Best Sleep Solutions in Milpitas, California, {State}"
+              - listitem [ref=e2574]:
+                - link "Effective Pain Management Services in Milpitas, California" [ref=e2576] [cursor=pointer]:
+                  - /url: /search?find_desc=Pain+Management&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2579]: Effective Pain Management Services in Milpitas, California
+              - listitem [ref=e2580]:
+                - link "Experienced Cardiologists Available in Milpitas, California" [ref=e2582] [cursor=pointer]:
+                  - /url: /search?find_desc=Cardiologists&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2585]: Experienced Cardiologists Available in Milpitas, California
+              - listitem [ref=e2586]:
+                - link "Experienced ENT Doctor Services in Milpitas, California" [ref=e2588] [cursor=pointer]:
+                  - /url: /search?find_desc=Ent+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2591]: Experienced ENT Doctor Services in Milpitas, California
+              - listitem [ref=e2592]:
+                - link "Experienced Family Doctor Care Available in Milpitas, California" [ref=e2594] [cursor=pointer]:
+                  - /url: /search?find_desc=Family+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2597]: Experienced Family Doctor Care Available in Milpitas, California
+              - listitem [ref=e2598]:
+                - link "Experienced Geriatric Doctors Near Milpitas, California" [ref=e2600] [cursor=pointer]:
+                  - /url: /search?find_desc=Geriatric+Doctors&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2603]: Experienced Geriatric Doctors Near Milpitas, California
+              - listitem [ref=e2604]:
+                - link "Experienced Internist Doctor in Milpitas, California" [ref=e2606] [cursor=pointer]:
+                  - /url: /search?find_desc=Internist+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2609]: Experienced Internist Doctor in Milpitas, California
+              - listitem [ref=e2610]:
+                - link "Experienced Podiatrists Serving Patients in Milpitas, California" [ref=e2612] [cursor=pointer]:
+                  - /url: /search?find_desc=Podiatrists&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2615]: Experienced Podiatrists Serving Patients in Milpitas, California
+              - listitem [ref=e2616]:
+                - link "Experienced Primary Care Physician in Milpitas, California" [ref=e2618] [cursor=pointer]:
+                  - /url: /search?find_desc=Primary+Care+Physician&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2621]: Experienced Primary Care Physician in Milpitas, California
+              - listitem [ref=e2622]:
+                - link "Experienced Psychiatrists Near Milpitas, California" [ref=e2624] [cursor=pointer]:
+                  - /url: /search?find_desc=Psychiatrists&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2627]: Experienced Psychiatrists Near Milpitas, California
+              - listitem [ref=e2628]:
+                - link "Experienced Pulmonologist Near You in Milpitas, California" [ref=e2630] [cursor=pointer]:
+                  - /url: /search?find_desc=Pulmonologist&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2633]: Experienced Pulmonologist Near You in Milpitas, California
+              - listitem [ref=e2634]:
+                - link "Experienced Rheumatologists Practicing in Milpitas, California" [ref=e2636] [cursor=pointer]:
+                  - /url: /search?find_desc=Rheumatologists&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2639]: Experienced Rheumatologists Practicing in Milpitas, California
+              - listitem [ref=e2640]:
+                - link "Experienced Sleep Apnea Doctors in Milpitas, California" [ref=e2642] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Apnea+Doctors&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2645]: Experienced Sleep Apnea Doctors in Milpitas, California
+              - listitem [ref=e2646]:
+                - link "Expert Baby Sleep Training Programs in Milpitas, California" [ref=e2648] [cursor=pointer]:
+                  - /url: /search?find_desc=Baby+Sleep+Training&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2651]: Expert Baby Sleep Training Programs in Milpitas, California
+              - listitem [ref=e2652]:
+                - link "Explore Concierge Medicine Options in Milpitas, California" [ref=e2654] [cursor=pointer]:
+                  - /url: /search?find_desc=Concierge+Medicine&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2657]: Explore Concierge Medicine Options in Milpitas, California
+              - listitem [ref=e2658]:
+                - link "Explore Functional Medicine Services in Milpitas, California" [ref=e2660] [cursor=pointer]:
+                  - /url: /search?find_desc=Functional+Medicine&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2663]: Explore Functional Medicine Services in Milpitas, California
+              - listitem [ref=e2664]:
+                - link "Family Doctor Accepting New Patients in Milpitas, California" [ref=e2666] [cursor=pointer]:
+                  - /url: /search?find_desc=Family+Doctor+Accepting+New+Patients&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2669]: Family Doctor Accepting New Patients in Milpitas, California
+              - listitem [ref=e2670]:
+                - link "Find Help for Sleep Disorder in Milpitas, California" [ref=e2672] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Disorder&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2675]: Find Help for Sleep Disorder in Milpitas, California
+              - listitem [ref=e2676]:
+                - link "Find Qualified Osteopathic Physicians Practicing in Milpitas, California" [ref=e2678] [cursor=pointer]:
+                  - /url: /search?find_desc=Osteopathic+Physicians&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2681]: Find Qualified Osteopathic Physicians Practicing in Milpitas, California
+              - listitem [ref=e2682]:
+                - 'link "Find Top Pulmonary Doctors in Milpitas, California, {State}" [ref=e2684] [cursor=pointer]':
+                  - /url: /search?find_desc=Pulmonary+Doctors&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2687]: "Find Top Pulmonary Doctors in Milpitas, California, {State}"
+              - listitem [ref=e2688]:
+                - link "Find Top-Rated Dermatologists in Milpitas, California" [ref=e2690] [cursor=pointer]:
+                  - /url: /search?find_desc=Dermatologists&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2693]: Find Top-Rated Dermatologists in Milpitas, California
+              - listitem [ref=e2694]:
+                - link "Find Trusted Doctors in Milpitas, California" [ref=e2696] [cursor=pointer]:
+                  - /url: /search?find_desc=Doctors&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2699]: Find Trusted Doctors in Milpitas, California
+              - listitem [ref=e2700]:
+                - link "Find Trusted Sleep Medicine Services in Milpitas, California" [ref=e2702] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Medicine&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2705]: Find Trusted Sleep Medicine Services in Milpitas, California
+              - listitem [ref=e2706]:
+                - link "Find a Baby Sleep Consultant Near Milpitas, California" [ref=e2708] [cursor=pointer]:
+                  - /url: /search?find_desc=Baby+Sleep+Consultant&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2711]: Find a Baby Sleep Consultant Near Milpitas, California
+              - listitem [ref=e2712]:
+                - link "Find a General Doctor Near Milpitas, California" [ref=e2714] [cursor=pointer]:
+                  - /url: /search?find_desc=General+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2717]: Find a General Doctor Near Milpitas, California
+              - listitem [ref=e2718]:
+                - link "Find a Sleep Clinic in Milpitas, California" [ref=e2720] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Clinic&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2723]: Find a Sleep Clinic in Milpitas, California
+              - listitem [ref=e2724]:
+                - 'link "Find the Best Asthma Specialist in Milpitas, California, {State}" [ref=e2726] [cursor=pointer]':
+                  - /url: /search?find_desc=Asthma+Specialist&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2729]: "Find the Best Asthma Specialist in Milpitas, California, {State}"
+              - listitem [ref=e2730]:
+                - 'link "Find the Best Snoring Doctor in Milpitas, California, {State}" [ref=e2732] [cursor=pointer]':
+                  - /url: /search?find_desc=Snoring+Doctor&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2735]: "Find the Best Snoring Doctor in Milpitas, California, {State}"
+              - listitem [ref=e2736]:
+                - link "Leading Sleep Centers Near Milpitas, California" [ref=e2738] [cursor=pointer]:
+                  - /url: /search?find_desc=Sleep+Center&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2741]: Leading Sleep Centers Near Milpitas, California
+              - listitem [ref=e2742]:
+                - link "Professional Acupuncture Treatments in Milpitas, California" [ref=e2744] [cursor=pointer]:
+                  - /url: /search?find_desc=Acupuncture&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2747]: Professional Acupuncture Treatments in Milpitas, California
+              - listitem [ref=e2748]:
+                - link "Qualified Pediatric Pulmonologist in Milpitas, California" [ref=e2750] [cursor=pointer]:
+                  - /url: /search?find_desc=Pediatric+Pulmonologist&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2753]: Qualified Pediatric Pulmonologist in Milpitas, California
+              - listitem [ref=e2754]:
+                - link "Quality CPAP Equipment Available in Milpitas, California" [ref=e2756] [cursor=pointer]:
+                  - /url: /search?find_desc=Cpap+Equipment&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2759]: Quality CPAP Equipment Available in Milpitas, California
+              - listitem [ref=e2760]:
+                - link "Quality CPAP Supplies Available in Milpitas, California" [ref=e2762] [cursor=pointer]:
+                  - /url: /search?find_desc=Cpap+Supplies&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2765]: Quality CPAP Supplies Available in Milpitas, California
+              - listitem [ref=e2766]:
+                - link "Reliable CPAP Providers and Services in Milpitas, California" [ref=e2768] [cursor=pointer]:
+                  - /url: /search?find_desc=Cpap&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2771]: Reliable CPAP Providers and Services in Milpitas, California
+              - listitem [ref=e2772]:
+                - link "Reliable Night Nurse Care Available in Milpitas, California" [ref=e2774] [cursor=pointer]:
+                  - /url: /search?find_desc=Night+Nurse&find_loc=Milpitas%2C+CA
+                  - paragraph [ref=e2777]: Reliable Night Nurse Care Available in Milpitas, California
+        - generic [ref=e2779]:
+          - heading "People found California Specialty Physicians by searching for…" [level=3] [ref=e2780]
+          - list [ref=e2781]:
+            - listitem [ref=e2782]:
+              - link "Ent Doctor in Milpitas, California" [ref=e2784] [cursor=pointer]:
+                - /url: /search?find_desc=Ent+Doctor&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2787]:
+                  - strong [ref=e2788]: Ent Doctor in Milpitas, California
+            - listitem [ref=e2789]:
+              - link "Cpap Supplies in Milpitas, California" [ref=e2791] [cursor=pointer]:
+                - /url: /search?find_desc=Cpap+Supplies&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2794]:
+                  - strong [ref=e2795]: Cpap Supplies in Milpitas, California
+            - listitem [ref=e2796]:
+              - link "Sleep Study in Milpitas, California" [ref=e2798] [cursor=pointer]:
+                - /url: /search?find_desc=Sleep+Study&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2801]:
+                  - strong [ref=e2802]: Sleep Study in Milpitas, California
+            - listitem [ref=e2803]:
+              - link "Sleep Clinic in Milpitas, California" [ref=e2805] [cursor=pointer]:
+                - /url: /search?find_desc=Sleep+Clinic&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2808]:
+                  - strong [ref=e2809]: Sleep Clinic in Milpitas, California
+            - listitem [ref=e2810]:
+              - link "Sleep Apnea Doctors in Milpitas, California" [ref=e2812] [cursor=pointer]:
+                - /url: /search?find_desc=Sleep+Apnea+Doctors&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2815]:
+                  - strong [ref=e2816]: Sleep Apnea Doctors in Milpitas, California
+            - listitem [ref=e2817]:
+              - link "Sleep Center in Milpitas, California" [ref=e2819] [cursor=pointer]:
+                - /url: /search?find_desc=Sleep+Center&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2822]:
+                  - strong [ref=e2823]: Sleep Center in Milpitas, California
+            - listitem [ref=e2824]:
+              - link "Primary Care Physician in Milpitas, California" [ref=e2826] [cursor=pointer]:
+                - /url: /search?find_desc=Primary+Care+Physician&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2829]:
+                  - strong [ref=e2830]: Primary Care Physician in Milpitas, California
+            - listitem [ref=e2831]:
+              - link "Pulmonary Doctors in Milpitas, California" [ref=e2833] [cursor=pointer]:
+                - /url: /search?find_desc=Pulmonary+Doctors&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2836]:
+                  - strong [ref=e2837]: Pulmonary Doctors in Milpitas, California
+            - listitem [ref=e2838]:
+              - link "Otolaryngology in Milpitas, California" [ref=e2840] [cursor=pointer]:
+                - /url: /search?find_desc=Otolaryngology&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2843]:
+                  - strong [ref=e2844]: Otolaryngology in Milpitas, California
+            - listitem [ref=e2845]:
+              - link "Cpap in Milpitas, California" [ref=e2847] [cursor=pointer]:
+                - /url: /search?find_desc=Cpap&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2850]:
+                  - strong [ref=e2851]: Cpap in Milpitas, California
+            - listitem [ref=e2852]:
+              - link "Medical Centers in Milpitas, California" [ref=e2854] [cursor=pointer]:
+                - /url: /search?find_desc=Medical+Centers&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2857]:
+                  - strong [ref=e2858]: Medical Centers in Milpitas, California
+            - listitem [ref=e2859]:
+              - link "Registered Dietitian in Milpitas, California" [ref=e2861] [cursor=pointer]:
+                - /url: /search?find_desc=Registered+Dietitian&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2864]:
+                  - strong [ref=e2865]: Registered Dietitian in Milpitas, California
+            - listitem [ref=e2866]:
+              - link "Migraine Specialist in Milpitas, California" [ref=e2868] [cursor=pointer]:
+                - /url: /search?find_desc=Migraine+Specialist&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2871]:
+                  - strong [ref=e2872]: Migraine Specialist in Milpitas, California
+            - listitem [ref=e2873]:
+              - link "Medical Group in Milpitas, California" [ref=e2875] [cursor=pointer]:
+                - /url: /search?find_desc=Medical+Group&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2878]:
+                  - strong [ref=e2879]: Medical Group in Milpitas, California
+            - listitem [ref=e2880]:
+              - link "Internal Medicine Doctors in Milpitas, California" [ref=e2882] [cursor=pointer]:
+                - /url: /search?find_desc=Internal+Medicine+Doctors&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2885]:
+                  - strong [ref=e2886]: Internal Medicine Doctors in Milpitas, California
+            - listitem [ref=e2887]:
+              - link "Family Doctor in Milpitas, California" [ref=e2889] [cursor=pointer]:
+                - /url: /search?find_desc=Family+Doctor&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2892]:
+                  - strong [ref=e2893]: Family Doctor in Milpitas, California
+            - listitem [ref=e2894]:
+              - link "Geriatric Doctor in Milpitas, California" [ref=e2896] [cursor=pointer]:
+                - /url: /search?find_desc=Geriatric+Doctor&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2899]:
+                  - strong [ref=e2900]: Geriatric Doctor in Milpitas, California
+            - listitem [ref=e2901]:
+              - link "Hospitals in Milpitas, California" [ref=e2903] [cursor=pointer]:
+                - /url: /search?find_desc=Hospitals&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2906]:
+                  - strong [ref=e2907]: Hospitals in Milpitas, California
+            - listitem [ref=e2908]:
+              - link "Cpap Equipment in Milpitas, California" [ref=e2910] [cursor=pointer]:
+                - /url: /search?find_desc=Cpap+Equipment&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2913]:
+                  - strong [ref=e2914]: Cpap Equipment in Milpitas, California
+            - listitem [ref=e2915]:
+              - link "Doctors in Milpitas, California" [ref=e2917] [cursor=pointer]:
+                - /url: /search?find_desc=Doctors&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2920]:
+                  - strong [ref=e2921]: Doctors in Milpitas, California
+            - listitem [ref=e2922]:
+              - link "Family Practice in Milpitas, California" [ref=e2924] [cursor=pointer]:
+                - /url: /search?find_desc=Family+Practice&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2927]:
+                  - strong [ref=e2928]: Family Practice in Milpitas, California
+            - listitem [ref=e2929]:
+              - link "Sinus Doctor in Milpitas, California" [ref=e2931] [cursor=pointer]:
+                - /url: /search?find_desc=Sinus+Doctor&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2934]:
+                  - strong [ref=e2935]: Sinus Doctor in Milpitas, California
+            - listitem [ref=e2936]:
+              - link "Diagnostic Services in Milpitas, California" [ref=e2938] [cursor=pointer]:
+                - /url: /search?find_desc=Diagnostic+Services&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2941]:
+                  - strong [ref=e2942]: Diagnostic Services in Milpitas, California
+            - listitem [ref=e2943]:
+              - link "Primary Care Doctor in Milpitas, California" [ref=e2945] [cursor=pointer]:
+                - /url: /search?find_desc=Primary+Care+Doctor&find_loc=Milpitas%2C+CA
+                - paragraph [ref=e2948]:
+                  - strong [ref=e2949]: Primary Care Doctor in Milpitas, California
+      - generic [ref=e2950]:
+        - heading "People Also Viewed" [level=2] [ref=e2953]
+        - generic [ref=e2955]:
+          - generic [ref=e2958]:
+            - generic [ref=e2962]:
+              - link "Sanjay Agarwal, MD on Yelp" [ref=e2964] [cursor=pointer]:
+                - /url: /biz/sanjay-agarwal-md-milpitas?page_src=related_bizes
+                - img "Sanjay Agarwal, MD on Yelp" [ref=e2966]
+              - generic [ref=e2968]:
+                - paragraph [ref=e2973]:
+                  - link "Sanjay Agarwal, MD" [ref=e2974] [cursor=pointer]:
+                    - /url: /biz/sanjay-agarwal-md-milpitas?page_src=related_bizes
+                - generic [ref=e2977]:
+                  - img "2.5 star rating" [ref=e2979]:
+                    - img [ref=e2981]
+                    - img [ref=e2986]
+                    - img [ref=e2991]
+                    - img [ref=e2996]
+                    - img [ref=e3001]
+                  - generic [ref=e3008]: "3"
+                - generic "Categories" [ref=e3010]:
+                  - generic [ref=e3011]: Pulmonologist,
+                  - generic [ref=e3012]: Emergency Medicine,
+                  - text: Sleep Specialists
+            - generic [ref=e3016]:
+              - link "Crescent Medical Center on Yelp" [ref=e3018] [cursor=pointer]:
+                - /url: /biz/crescent-medical-center-san-jose?page_src=related_bizes
+                - img "Crescent Medical Center on Yelp" [ref=e3020]
+              - generic [ref=e3022]:
+                - paragraph [ref=e3027]:
+                  - link "Crescent Medical Center" [ref=e3028] [cursor=pointer]:
+                    - /url: /biz/crescent-medical-center-san-jose?page_src=related_bizes
+                - generic [ref=e3031]:
+                  - img "4.5 star rating" [ref=e3033]:
+                    - img [ref=e3035]
+                    - img [ref=e3040]
+                    - img [ref=e3045]
+                    - img [ref=e3050]
+                    - img [ref=e3055]
+                  - generic [ref=e3062]: "155"
+                - generic "Categories" [ref=e3064]: Medical Centers
+            - generic [ref=e3068]:
+              - link "Sudha Karupaiah MD PC on Yelp" [ref=e3070] [cursor=pointer]:
+                - /url: /biz/sudha-karupaiah-md-pc-san-jose?page_src=related_bizes
+                - img "Sudha Karupaiah MD PC on Yelp" [ref=e3072]
+              - generic [ref=e3074]:
+                - paragraph [ref=e3079]:
+                  - link "Sudha Karupaiah MD PC" [ref=e3080] [cursor=pointer]:
+                    - /url: /biz/sudha-karupaiah-md-pc-san-jose?page_src=related_bizes
+                - generic [ref=e3083]:
+                  - img "4 star rating" [ref=e3085]:
+                    - img [ref=e3087]
+                    - img [ref=e3092]
+                    - img [ref=e3097]
+                    - img [ref=e3102]
+                    - img [ref=e3107]
+                  - generic [ref=e3114]: "19"
+                - generic "Categories" [ref=e3116]:
+                  - generic [ref=e3117]: Internal Medicine,
+                  - text: Sleep Specialists
+            - generic [ref=e3121]:
+              - link "Inovi Care on Yelp" [ref=e3123] [cursor=pointer]:
+                - /url: /biz/inovi-care-milpitas-4?page_src=related_bizes
+                - img "Inovi Care on Yelp" [ref=e3125]
+              - generic [ref=e3127]:
+                - paragraph [ref=e3132]:
+                  - link "Inovi Care" [ref=e3133] [cursor=pointer]:
+                    - /url: /biz/inovi-care-milpitas-4?page_src=related_bizes
+                - generic [ref=e3136]:
+                  - img "5 star rating" [ref=e3138]:
+                    - img [ref=e3140]
+                    - img [ref=e3145]
+                    - img [ref=e3150]
+                    - img [ref=e3155]
+                    - img [ref=e3160]
+                  - generic [ref=e3167]: "14"
+                - generic "Categories" [ref=e3169]:
+                  - generic [ref=e3170]: Family Practice,
+                  - text: Internal Medicine
+            - generic [ref=e3174]:
+              - link "Silicon Valley Medical Clinic on Yelp" [ref=e3176] [cursor=pointer]:
+                - /url: /biz/silicon-valley-medical-clinic-milpitas-4?page_src=related_bizes
+                - img "Silicon Valley Medical Clinic on Yelp" [ref=e3178]
+              - generic [ref=e3180]:
+                - paragraph [ref=e3185]:
+                  - link "Silicon Valley Medical Clinic" [ref=e3186] [cursor=pointer]:
+                    - /url: /biz/silicon-valley-medical-clinic-milpitas-4?page_src=related_bizes
+                - generic [ref=e3189]:
+                  - img "2.5 star rating" [ref=e3191]:
+                    - img [ref=e3193]
+                    - img [ref=e3198]
+                    - img [ref=e3203]
+                    - img [ref=e3208]
+                    - img [ref=e3213]
+                  - generic [ref=e3220]: "27"
+                - generic "Categories" [ref=e3222]:
+                  - generic [ref=e3223]: Family Practice,
+                  - generic [ref=e3224]: Osteopathic Physicians,
+                  - text: Laser Hair Removal
+            - generic [ref=e3228]:
+              - link "Victor Jose Meceda, MD on Yelp" [ref=e3230] [cursor=pointer]:
+                - /url: /biz/victor-jose-meceda-md-fremont?page_src=related_bizes
+                - img "Victor Jose Meceda, MD on Yelp" [ref=e3232]
+              - generic [ref=e3234]:
+                - paragraph [ref=e3239]:
+                  - link "Victor Jose Meceda, MD" [ref=e3240] [cursor=pointer]:
+                    - /url: /biz/victor-jose-meceda-md-fremont?page_src=related_bizes
+                - generic [ref=e3243]:
+                  - img "2.5 star rating" [ref=e3245]:
+                    - img [ref=e3247]
+                    - img [ref=e3252]
+                    - img [ref=e3257]
+                    - img [ref=e3262]
+                    - img [ref=e3267]
+                  - generic [ref=e3274]: "7"
+                - generic "Categories" [ref=e3276]: Family Practice
+            - generic [ref=e3280]:
+              - link "Nicole Thanh-Cam Vecchi, MD on Yelp" [ref=e3282] [cursor=pointer]:
+                - /url: /biz/nicole-thanh-cam-vecchi-md-milpitas?page_src=related_bizes
+                - img "Nicole Thanh-Cam Vecchi, MD on Yelp" [ref=e3284]
+              - generic [ref=e3286]:
+                - paragraph [ref=e3291]:
+                  - link "Nicole Thanh-Cam Vecchi, MD" [ref=e3292] [cursor=pointer]:
+                    - /url: /biz/nicole-thanh-cam-vecchi-md-milpitas?page_src=related_bizes
+                - generic [ref=e3295]:
+                  - img "4 star rating" [ref=e3297]:
+                    - img [ref=e3299]
+                    - img [ref=e3304]
+                    - img [ref=e3309]
+                    - img [ref=e3314]
+                    - img [ref=e3319]
+                  - generic [ref=e3326]: "49"
+                - generic "Categories" [ref=e3328]: Internal Medicine
+            - generic [ref=e3332]:
+              - link "Trang Jacqueline Nguyen, MD on Yelp" [ref=e3334] [cursor=pointer]:
+                - /url: /biz/trang-jacqueline-nguyen-md-milpitas?page_src=related_bizes
+                - img "Trang Jacqueline Nguyen, MD on Yelp" [ref=e3336]
+              - generic [ref=e3338]:
+                - paragraph [ref=e3343]:
+                  - link "Trang Jacqueline Nguyen, MD" [ref=e3344] [cursor=pointer]:
+                    - /url: /biz/trang-jacqueline-nguyen-md-milpitas?page_src=related_bizes
+                - generic [ref=e3347]:
+                  - img "2.5 star rating" [ref=e3349]:
+                    - img [ref=e3351]
+                    - img [ref=e3356]
+                    - img [ref=e3361]
+                    - img [ref=e3366]
+                    - img [ref=e3371]
+                  - generic [ref=e3378]: "44"
+                - generic "Categories" [ref=e3380]: Internal Medicine
+            - generic [ref=e3384]:
+              - link "Tam H Nguyen, DO - 360 Degree Medical Clinic on Yelp" [ref=e3386] [cursor=pointer]:
+                - /url: /biz/tam-h-nguyen-do-360-degree-medical-clinic-san-jose-3?page_src=related_bizes
+                - img "Tam H Nguyen, DO - 360 Degree Medical Clinic on Yelp" [ref=e3388]
+              - generic [ref=e3390]:
+                - paragraph [ref=e3395]:
+                  - link "Tam H Nguyen, DO - 360 Degree Medical Clinic" [ref=e3396] [cursor=pointer]:
+                    - /url: /biz/tam-h-nguyen-do-360-degree-medical-clinic-san-jose-3?page_src=related_bizes
+                - generic [ref=e3399]:
+                  - img "4 star rating" [ref=e3401]:
+                    - img [ref=e3403]
+                    - img [ref=e3408]
+                    - img [ref=e3413]
+                    - img [ref=e3418]
+                    - img [ref=e3423]
+                  - generic [ref=e3430]: "36"
+                - generic "Categories" [ref=e3432]:
+                  - generic [ref=e3433]: Internal Medicine,
+                  - generic [ref=e3434]: Sleep Specialists,
+                  - text: Family Practice
+            - generic [ref=e3438]:
+              - link "Thuy N Huynh, MD on Yelp" [ref=e3440] [cursor=pointer]:
+                - /url: /biz/thuy-n-huynh-md-milpitas?page_src=related_bizes
+                - img "Thuy N Huynh, MD on Yelp" [ref=e3442]
+              - generic [ref=e3444]:
+                - paragraph [ref=e3449]:
+                  - link "Thuy N Huynh, MD" [ref=e3450] [cursor=pointer]:
+                    - /url: /biz/thuy-n-huynh-md-milpitas?page_src=related_bizes
+                - generic [ref=e3453]:
+                  - img "3 star rating" [ref=e3455]:
+                    - img [ref=e3457]
+                    - img [ref=e3462]
+                    - img [ref=e3467]
+                    - img [ref=e3472]
+                    - img [ref=e3477]
+                  - generic [ref=e3484]: "10"
+                - generic "Categories" [ref=e3486]: Internal Medicine
+          - button "Previous" [disabled] [ref=e3487]:
+            - img [ref=e3488]:
+              - img [ref=e3489]
+          - button "Next" [ref=e3491] [cursor=pointer]:
+            - img [ref=e3492]:
+              - img [ref=e3493]
+    - contentinfo [ref=e3496]:
+      - generic [ref=e3497]:
+        - generic [ref=e3498]:
+          - generic [ref=e3499]:
+            - generic [ref=e3500]: About
+            - list [ref=e3501]:
+              - listitem [ref=e3502]:
+                - link "About Yelp" [ref=e3503] [cursor=pointer]:
+                  - /url: https://www.yelp.com/about
+              - listitem [ref=e3504]:
+                - link "Careers" [ref=e3505] [cursor=pointer]:
+                  - /url: https://www.yelp.com/careers/home
+              - listitem [ref=e3506]:
+                - link "Press" [ref=e3507] [cursor=pointer]:
+                  - /url: https://www.yelp.com/press
+              - listitem [ref=e3508]:
+                - link "Investor Relations" [ref=e3509] [cursor=pointer]:
+                  - /url: http://yelp-ir.com/
+              - listitem [ref=e3510]:
+                - link "Trust & Safety" [ref=e3511] [cursor=pointer]:
+                  - /url: https://trust.yelp.com
+              - listitem [ref=e3512]:
+                - link "Content Guidelines" [ref=e3513] [cursor=pointer]:
+                  - /url: https://www.yelp.com/guidelines
+              - listitem [ref=e3514]:
+                - link "Accessibility Statement" [ref=e3515] [cursor=pointer]:
+                  - /url: https://www.yelp-support.com/article/Yelp-Accessibility-Statement
+              - listitem [ref=e3516]:
+                - link "Terms of Service" [ref=e3517] [cursor=pointer]:
+                  - /url: https://www.yelp.com/static?p=tos
+              - listitem [ref=e3518]:
+                - link "Privacy Policy" [ref=e3519] [cursor=pointer]:
+                  - /url: https://www.yelp.com/tos/privacy_policy
+              - listitem [ref=e3520]:
+                - link "Ad Choices" [ref=e3521] [cursor=pointer]:
+                  - /url: https://www.yelp.com/static?p=tos#third-parties
+              - listitem [ref=e3522]:
+                - link "Your Privacy Choices" [ref=e3523] [cursor=pointer]:
+                  - /url: https://www.yelp-support.com/article/Your-Privacy-Choices?l=en_US
+          - generic [ref=e3524]:
+            - generic [ref=e3525]: Discover
+            - list [ref=e3526]:
+              - listitem [ref=e3527]:
+                - link "Yelp Project Cost Guides" [ref=e3528] [cursor=pointer]:
+                  - /url: https://www.yelp.com/costs
+              - listitem [ref=e3529]:
+                - link "Collections" [ref=e3530] [cursor=pointer]:
+                  - /url: https://www.yelp.com/collections
+              - listitem [ref=e3531]:
+                - link "Talk" [ref=e3532] [cursor=pointer]:
+                  - /url: https://www.yelp.com/talk
+              - listitem [ref=e3533]:
+                - link "Events" [ref=e3534] [cursor=pointer]:
+                  - /url: https://www.yelp.com/events
+              - listitem [ref=e3535]:
+                - link "Yelp Blog" [ref=e3536] [cursor=pointer]:
+                  - /url: https://blog.yelp.com/
+              - listitem [ref=e3537]:
+                - link "Support" [ref=e3538] [cursor=pointer]:
+                  - /url: https://www.yelp-support.com/
+              - listitem [ref=e3539]:
+                - link "Yelp Mobile" [ref=e3540] [cursor=pointer]:
+                  - /url: https://www.yelp.com/yelpmobile?source=footer
+              - listitem [ref=e3541]:
+                - link "Developers" [ref=e3542] [cursor=pointer]:
+                  - /url: https://www.yelp.com/developers?country=US
+              - listitem [ref=e3543]:
+                - link "RSS" [ref=e3544] [cursor=pointer]:
+                  - /url: https://www.yelp.com/rss
+          - generic [ref=e3545]:
+            - generic [ref=e3546]: Yelp for Business
+            - list [ref=e3547]:
+              - listitem [ref=e3548]:
+                - link "Yelp for Business" [ref=e3549] [cursor=pointer]:
+                  - /url: https://business.yelp.com/?utm_source=footer&utm_medium=www
+              - listitem [ref=e3550]:
+                - link "Business Owner Login" [ref=e3551] [cursor=pointer]:
+                  - /url: https://biz.yelp.com/login
+              - listitem [ref=e3552]:
+                - link "Claim your Business Page" [ref=e3553] [cursor=pointer]:
+                  - /url: https://business.yelp.com?utm_source=footer&utm_medium=www&utm_content=claim_footer_link&utm_campaign=claim_business
+              - listitem [ref=e3554]:
+                - link "Advertise on Yelp" [ref=e3555] [cursor=pointer]:
+                  - /url: https://business.yelp.com/products/yelp-ads/?utm_source=footer&utm_medium=www&utm_campaign=ad-start-y4bweb
+              - listitem [ref=e3556]:
+                - link "Yelp for Restaurant Owners" [ref=e3557] [cursor=pointer]:
+                  - /url: https://business.yelp.com/restaurants/?utm_source=footer&utm_medium=www
+              - listitem [ref=e3558]:
+                - link "Yelp Guest Manager" [ref=e3559] [cursor=pointer]:
+                  - /url: https://business.yelp.com/restaurants/products/yelp-guest-manager/?utm_source=footer&utm_medium=www
+              - listitem [ref=e3560]:
+                - link "Business Resources" [ref=e3561] [cursor=pointer]:
+                  - /url: https://business.yelp.com/resources/?utm_source=footer&utm_medium=www
+              - listitem [ref=e3562]:
+                - link "Business Support" [ref=e3563] [cursor=pointer]:
+                  - /url: https://www.yelp-support.com/Yelp_for_Business?l=en_US
+              - listitem [ref=e3564]:
+                - link "Marketing & Advertising Agencies" [ref=e3565] [cursor=pointer]:
+                  - /url: https://business.yelp.com/partners/?utm_source=footer&utm_medium=www&utm_content=partners&utm_campaign=partners_cons
+              - listitem [ref=e3566]:
+                - link "Yelp Data for B2B" [ref=e3567] [cursor=pointer]:
+                  - /url: https://business.yelp.com/data/products/fusion-insights/?utm_source=footer&utm_medium=www
+              - listitem [ref=e3568]:
+                - link "Yelp Data for B2C" [ref=e3569] [cursor=pointer]:
+                  - /url: https://business.yelp.com/data/products/fusion/?utm_source=footer&utm_medium=www
+              - listitem [ref=e3570]:
+                - link "Agentic AI" [ref=e3571] [cursor=pointer]:
+                  - /url: https://business.yelp.com/data/products/fusion-ai/?utm_source=footer&utm_medium=www
+          - generic [ref=e3572]:
+            - generic [ref=e3573]: RepairPal
+            - list [ref=e3574]:
+              - listitem [ref=e3575]:
+                - link "RepairPal Home" [ref=e3576] [cursor=pointer]:
+                  - /url: https://repairpal.com
+              - listitem [ref=e3577]:
+                - link "Auto Repair Near Me" [ref=e3578] [cursor=pointer]:
+                  - /url: https://repairpal.com/auto-repair-near-me
+              - listitem [ref=e3579]:
+                - link "Car Repair Estimates" [ref=e3580] [cursor=pointer]:
+                  - /url: https://repairpal.com/estimator
+              - listitem [ref=e3581]:
+                - link "Auto Safety Recalls" [ref=e3582] [cursor=pointer]:
+                  - /url: https://repairpal.com/recalls
+              - listitem [ref=e3583]:
+                - link "Symptom Guides" [ref=e3584] [cursor=pointer]:
+                  - /url: https://repairpal.com/symptoms
+              - listitem [ref=e3585]:
+                - link "Common Problems" [ref=e3586] [cursor=pointer]:
+                  - /url: https://repairpal.com/problems
+          - generic [ref=e3588]:
+            - generic [ref=e3589]:
+              - text: Languages
+              - generic [ref=e3593]:
+                - button "English" [ref=e3595] [cursor=pointer]:
+                  - generic [ref=e3596]: English
+                - button "See more" [ref=e3597] [cursor=pointer]:
+                  - img [ref=e3598]:
+                    - img [ref=e3599]
+            - generic [ref=e3601]:
+              - text: Cities
+              - generic [ref=e3605]:
+                - button "Explore a City" [ref=e3607] [cursor=pointer]:
+                  - generic [ref=e3608]: Explore a City
+                - button "See more" [ref=e3609] [cursor=pointer]:
+                  - img [ref=e3610]:
+                    - img [ref=e3611]
+        - text: • • • • • • • • • • • • • •
+        - separator [ref=e3613]
+        - paragraph [ref=e3616]:
+          - text: Copyright © 2004–2026 Yelp Inc. Yelp, Elite Squad,
+          - img "Yelp logo" [ref=e3617]
+          - text: ","
+          - img "Yelp burst" [ref=e3618]
+          - text: and related marks are registered trademarks of Yelp.
+  - generic:
+    - list

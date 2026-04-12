@@ -1,0 +1,324 @@
+- generic [ref=e9]:
+  - main "SK Agarwal, MD" [ref=e21]:
+    - tablist [ref=e24]:
+      - tab "Overview of SK Agarwal, MD" [ref=e25]:
+        - generic [ref=e27]: Overview
+      - tab "Reviews for SK Agarwal, MD" [selected] [ref=e29]:
+        - generic [ref=e31]: Reviews
+      - tab "About SK Agarwal, MD" [ref=e33]:
+        - generic [ref=e35]: About
+    - generic [ref=e37]:
+      - button "Information" [ref=e39] [cursor=pointer]:
+        - generic [ref=e40]: 
+      - generic [ref=e42]:
+        - table [ref=e44]:
+          - rowgroup [ref=e45]:
+            - img "5 stars, 50 reviews" [ref=e46]: "5"
+            - img "4 stars, 4 reviews" [ref=e49]: "4"
+            - img "3 stars, 3 reviews" [ref=e52]: "3"
+            - img "2 stars, 1 review" [ref=e55]: "2"
+            - img "1 stars, 16 reviews" [ref=e58]: "1"
+        - generic [ref=e61]:
+          - generic [ref=e62]: "4.0"
+          - img "4.0 stars" [ref=e63]
+          - generic [ref=e69]: 74 reviews
+      - generic [ref=e72]:
+        - generic [ref=e74]: 
+        - generic [ref=e75]:
+          - generic [ref=e76]: Posting is currently turned off
+          - button "Details" [ref=e78]:
+            - generic [ref=e80] [cursor=pointer]: Details
+      - generic [ref=e82]:
+        - button "Search reviews" [ref=e88] [cursor=pointer]:
+          - generic [ref=e90]: 
+        - button "Sort reviews" [ref=e92] [cursor=pointer]:
+          - generic [ref=e93]:
+            - generic [ref=e94]: 
+            - generic [ref=e95]: Sort
+      - radiogroup "Refine reviews" [ref=e96]:
+        - radio "All reviews" [checked] [ref=e98] [cursor=pointer]:
+          - generic [ref=e100]: All
+        - radio "questions, mentioned in 9 reviews" [ref=e102] [cursor=pointer]:
+          - generic [ref=e103]:
+            - generic [ref=e104]: questions
+            - generic [ref=e105]: "9"
+        - radio "sleep study, mentioned in 8 reviews" [ref=e107] [cursor=pointer]:
+          - generic [ref=e108]:
+            - generic [ref=e109]: sleep study
+            - generic [ref=e110]: "8"
+        - radio "sleep apnea, mentioned in 8 reviews" [ref=e112] [cursor=pointer]:
+          - generic [ref=e113]:
+            - generic [ref=e114]: sleep apnea
+            - generic [ref=e115]: "8"
+        - radio "dad, mentioned in 6 reviews" [ref=e117] [cursor=pointer]:
+          - generic [ref=e118]:
+            - generic [ref=e119]: dad
+            - generic [ref=e120]: "6"
+        - radio "insurance, mentioned in 5 reviews" [ref=e122] [cursor=pointer]:
+          - generic [ref=e123]:
+            - generic [ref=e124]: insurance
+            - generic [ref=e125]: "5"
+        - radio "feel, mentioned in 5 reviews" [ref=e127] [cursor=pointer]:
+          - generic [ref=e128]:
+            - generic [ref=e129]: feel
+            - generic [ref=e130]: "5"
+        - radio "clinic, mentioned in 5 reviews" [ref=e132] [cursor=pointer]:
+          - generic [ref=e133]:
+            - generic [ref=e134]: clinic
+            - generic [ref=e135]: "5"
+        - radio "results, mentioned in 3 reviews" [ref=e137] [cursor=pointer]:
+          - generic [ref=e138]:
+            - generic [ref=e139]: results
+            - generic [ref=e140]: "3"
+        - radio "zoom, mentioned in 2 reviews" [ref=e142] [cursor=pointer]:
+          - generic [ref=e143]:
+            - generic [ref=e144]: zoom
+            - generic [ref=e145]: "2"
+        - radio "sleep medicine, mentioned in 2 reviews" [ref=e147] [cursor=pointer]:
+          - generic [ref=e148]:
+            - generic [ref=e149]: sleep medicine
+            - generic [ref=e150]: "2"
+      - generic [ref=e151]:
+        - generic "B C" [ref=e152]:
+          - generic [ref=e154]:
+            - button "Photo of B C" [ref=e155]
+            - generic [ref=e157]:
+              - button "B C Local Guide · 32 reviews · 329 photos" [ref=e159]:
+                - generic [ref=e160]: B C
+                - generic [ref=e161]: Local Guide · 32 reviews · 329 photos
+              - button "Actions for B C's review" [ref=e162] [cursor=pointer]:
+                - generic [ref=e164]: 
+            - generic [ref=e165]:
+              - generic [ref=e166]:
+                - img "5 stars" [ref=e167]:
+                  - generic [ref=e168]: 
+                  - generic [ref=e169]: 
+                  - generic [ref=e170]: 
+                  - generic [ref=e171]: 
+                  - generic [ref=e172]: 
+                - generic [ref=e173]: 4 months ago
+              - generic [ref=e175]:
+                - text: I called around to 7 different Sleep Medicine Clinic's and couldn't get through past and answering machine. Called to Dr. Agarwal 's and got through instantly. Staff was very helpful and friendly over the phone even though I mentioned I …
+                - button "See more" [ref=e177] [cursor=pointer]: More
+              - generic [ref=e178]:
+                - button "Like" [ref=e179]:
+                  - generic [ref=e180] [cursor=pointer]:
+                    - generic [ref=e181]: 
+                    - generic [ref=e183]: Like
+                - button "Share B C's review." [ref=e184]:
+                  - generic [ref=e185] [cursor=pointer]:
+                    - generic [ref=e186]: 
+                    - generic [ref=e187]: Share
+        - generic "Jojo Daquigan" [ref=e191]:
+          - generic [ref=e193]:
+            - button "Photo of Jojo Daquigan" [ref=e194]
+            - generic [ref=e196]:
+              - button "Jojo Daquigan 2 reviews" [ref=e198]:
+                - generic [ref=e199]: Jojo Daquigan
+                - generic [ref=e200]: 2 reviews
+              - button "Actions for Jojo Daquigan's review" [ref=e201] [cursor=pointer]:
+                - generic [ref=e203]: 
+            - generic [ref=e204]:
+              - generic [ref=e205]:
+                - img "5 stars" [ref=e206]:
+                  - generic [ref=e207]: 
+                  - generic [ref=e208]: 
+                  - generic [ref=e209]: 
+                  - generic [ref=e210]: 
+                  - generic [ref=e211]: 
+                - generic [ref=e212]: 3 months ago
+              - generic [ref=e214]:
+                - text: My dad had an appointment with him for some sleep issue. Usually it's my older sister who would take him, but this time I was the one who brought him, so obviously I had no idea about this doctor's personality and patients' care like during …
+                - button "See more" [ref=e216] [cursor=pointer]: More
+              - generic [ref=e217]:
+                - button "Like" [ref=e218]:
+                  - generic [ref=e219] [cursor=pointer]:
+                    - generic [ref=e220]: 
+                    - generic [ref=e222]: Like
+                - button "Share Jojo Daquigan's review." [ref=e223]:
+                  - generic [ref=e224] [cursor=pointer]:
+                    - generic [ref=e225]: 
+                    - generic [ref=e226]: Share
+        - generic "kit tran" [ref=e230]:
+          - generic [ref=e232]:
+            - button "Photo of kit tran" [ref=e233]
+            - generic [ref=e235]:
+              - button "kit tran 3 reviews" [ref=e237]:
+                - generic [ref=e238]: kit tran
+                - generic [ref=e239]: 3 reviews
+              - button "Actions for kit tran's review" [ref=e240] [cursor=pointer]:
+                - generic [ref=e242]: 
+            - generic [ref=e243]:
+              - generic [ref=e244]:
+                - img "5 stars" [ref=e245]:
+                  - generic [ref=e246]: 
+                  - generic [ref=e247]: 
+                  - generic [ref=e248]: 
+                  - generic [ref=e249]: 
+                  - generic [ref=e250]: 
+                - generic [ref=e251]: 4 months ago
+              - generic [ref=e253]: Been going to Dr. Agarwal for a few months. Staff is professional and on top of things. Yes at times it gets busy and hectic, but what doctor’s office isn’t. Dr. Agarwal is very professional and to the point. No sugar coating, which is needed sometimes with stubborn patients (myself included).
+              - generic [ref=e254]:
+                - button "Like" [ref=e255]:
+                  - generic [ref=e256] [cursor=pointer]:
+                    - generic [ref=e257]: 
+                    - generic [ref=e259]: Like
+                - button "Share kit tran's review." [ref=e260]:
+                  - generic [ref=e261] [cursor=pointer]:
+                    - generic [ref=e262]: 
+                    - generic [ref=e263]: Share
+        - generic "Shawn Puri" [ref=e267]:
+          - generic [ref=e269]:
+            - button "Photo of Shawn Puri" [ref=e270]
+            - generic [ref=e272]:
+              - button "Shawn Puri 8 reviews · 7 photos" [ref=e274]:
+                - generic [ref=e275]: Shawn Puri
+                - generic [ref=e276]: 8 reviews · 7 photos
+              - button "Actions for Shawn Puri's review" [ref=e277] [cursor=pointer]:
+                - generic [ref=e279]: 
+            - generic [ref=e280]:
+              - generic [ref=e281]:
+                - img "3 stars" [ref=e282]:
+                  - generic [ref=e283]: 
+                  - generic [ref=e284]: 
+                  - generic [ref=e285]: 
+                  - generic [ref=e286]: 
+                  - generic [ref=e287]: 
+                - generic [ref=e288]: Edited 7 months ago
+              - generic [ref=e290]:
+                - text: I had an appointment with them to go over my test results, and the lab tech didn't complete the results in time for the appointment. After 2 minutes the appointment was over and they asked me to schedule a new appointment. I then had to …
+                - button "See more" [ref=e292] [cursor=pointer]: More
+              - generic [ref=e293]:
+                - button "Like" [ref=e294]:
+                  - generic [ref=e295] [cursor=pointer]:
+                    - generic [ref=e296]: 
+                    - generic [ref=e298]: Like
+                - button "Share Shawn Puri's review." [ref=e299]:
+                  - generic [ref=e300] [cursor=pointer]:
+                    - generic [ref=e301]: 
+                    - generic [ref=e302]: Share
+        - generic "Angelica Erazo" [ref=e306]:
+          - generic [ref=e308]:
+            - button "Photo of Angelica Erazo" [ref=e309]
+            - generic [ref=e311]:
+              - button "Angelica Erazo 5 reviews" [ref=e313]:
+                - generic [ref=e314]: Angelica Erazo
+                - generic [ref=e315]: 5 reviews
+              - button "Actions for Angelica Erazo's review" [ref=e316] [cursor=pointer]:
+                - generic [ref=e318]: 
+            - generic [ref=e319]:
+              - generic [ref=e320]:
+                - img "1 star" [ref=e321]:
+                  - generic [ref=e322]: 
+                  - generic [ref=e323]: 
+                  - generic [ref=e324]: 
+                  - generic [ref=e325]: 
+                  - generic [ref=e326]: 
+                - generic [ref=e327]: 5 months ago
+              - generic [ref=e329]:
+                - text: I was referred to this office from my employer's on-site clinic. I checked in for an appointment but was never actually seen by the doctor or given an initial consultation. Despite this, I was billed and repeatedly emailed for payment over …
+                - button "See more" [ref=e331] [cursor=pointer]: More
+              - generic [ref=e332]:
+                - button "1 like" [ref=e333]:
+                  - generic [ref=e334] [cursor=pointer]:
+                    - generic [ref=e335]: 
+                    - generic [ref=e337]: "1"
+                - button "Share Angelica Erazo's review." [ref=e338]:
+                  - generic [ref=e339] [cursor=pointer]:
+                    - generic [ref=e340]: 
+                    - generic [ref=e341]: Share
+        - generic "Louie Robledo" [ref=e345]:
+          - generic [ref=e347]:
+            - button "Photo of Louie Robledo" [ref=e348]
+            - generic [ref=e350]:
+              - button "Louie Robledo 4 reviews · 4 photos" [ref=e352]:
+                - generic [ref=e353]: Louie Robledo
+                - generic [ref=e354]: 4 reviews · 4 photos
+              - button "Actions for Louie Robledo's review" [ref=e355] [cursor=pointer]:
+                - generic [ref=e357]: 
+            - generic [ref=e358]:
+              - generic [ref=e359]:
+                - img "3 stars" [ref=e360]:
+                  - generic [ref=e361]: 
+                  - generic [ref=e362]: 
+                  - generic [ref=e363]: 
+                  - generic [ref=e364]: 
+                  - generic [ref=e365]: 
+                - generic [ref=e366]: a year ago
+              - generic [ref=e368]:
+                - text: I initially wanted to give this office the benefit of the doubt, as I noticed the staff was in training. My first visit was delayed, with my appointment starting nearly an hour after my scheduled time. On my return visit, I was once again …
+                - button "See more" [ref=e370] [cursor=pointer]: More
+              - generic [ref=e371]:
+                - button "1 like" [ref=e372]:
+                  - generic [ref=e373] [cursor=pointer]:
+                    - generic [ref=e374]: 
+                    - generic [ref=e376]: "1"
+                - button "Share Louie Robledo's review." [ref=e377]:
+                  - generic [ref=e378] [cursor=pointer]:
+                    - generic [ref=e379]: 
+                    - generic [ref=e380]: Share
+        - generic "Yoly Rebugio" [ref=e384]:
+          - generic [ref=e386]:
+            - button "Photo of Yoly Rebugio" [ref=e387]
+            - generic [ref=e389]:
+              - button "Yoly Rebugio 1 review" [ref=e391]:
+                - generic [ref=e392]: Yoly Rebugio
+                - generic [ref=e393]: 1 review
+              - button "Actions for Yoly Rebugio's review" [ref=e394] [cursor=pointer]:
+                - generic [ref=e396]: 
+            - generic [ref=e397]:
+              - generic [ref=e398]:
+                - img "5 stars" [ref=e399]:
+                  - generic [ref=e400]: 
+                  - generic [ref=e401]: 
+                  - generic [ref=e402]: 
+                  - generic [ref=e403]: 
+                  - generic [ref=e404]: 
+                - generic [ref=e405]: 6 months ago
+              - generic [ref=e407]: I’ve been seeing Dr. Agarwal for several years now. He cares for me to insure that I get better. I entrusted my lung health in his hands.
+              - generic [ref=e408]:
+                - button "Like" [ref=e409]:
+                  - generic [ref=e410] [cursor=pointer]:
+                    - generic [ref=e411]: 
+                    - generic [ref=e413]: Like
+                - button "Share Yoly Rebugio's review." [ref=e414]:
+                  - generic [ref=e415] [cursor=pointer]:
+                    - generic [ref=e416]: 
+                    - generic [ref=e417]: Share
+        - generic "Andrew Reyes-Ortiz" [ref=e421]:
+          - generic [ref=e423]:
+            - button "Photo of Andrew Reyes-Ortiz" [ref=e424]
+            - generic [ref=e426]:
+              - button "Andrew Reyes-Ortiz 1 review · 1 photo" [ref=e428]:
+                - generic [ref=e429]: Andrew Reyes-Ortiz
+                - generic [ref=e430]: 1 review · 1 photo
+              - button "Actions for Andrew Reyes-Ortiz's review" [ref=e431] [cursor=pointer]:
+                - generic [ref=e433]: 
+            - generic [ref=e434]:
+              - generic [ref=e435]:
+                - img "1 star" [ref=e436]:
+                  - generic [ref=e437]: 
+                  - generic [ref=e438]: 
+                  - generic [ref=e439]: 
+                  - generic [ref=e440]: 
+                  - generic [ref=e441]: 
+                - generic [ref=e442]: a year ago
+              - generic [ref=e444]:
+                - text: My wife was crying after her visit with this rude doctor. She had to wait one hour past her appointment to be seen by Dr. Agarwal for two test results that apparently were positive for COPD and Sleep Apnea. …
+                - button "See more" [ref=e446] [cursor=pointer]: More
+              - generic [ref=e447]:
+                - button "2 likes" [ref=e448]:
+                  - generic [ref=e449] [cursor=pointer]:
+                    - generic [ref=e450]: 
+                    - generic [ref=e452]: "2"
+                - button "Share Andrew Reyes-Ortiz's review." [ref=e453]:
+                  - generic [ref=e454] [cursor=pointer]:
+                    - generic [ref=e455]: 
+                    - generic [ref=e456]: Share
+              - generic [ref=e457]:
+                - generic [ref=e458]: Response from the owner a year ago
+                - generic [ref=e459]:
+                  - text: Andrew, you never followed any recommendations made to you on your only visit to office in 2021. You sent your wife to office for evaluation for sleep problems. She was not ready to be here either. She never answered questions, argued about …
+                  - button "See more" [ref=e461] [cursor=pointer]: More
+  - button "Collapse side panel" [ref=e498] [cursor=pointer]:
+    - generic [ref=e499]: 
