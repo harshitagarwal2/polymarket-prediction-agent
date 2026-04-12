@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "Prediction Market Agent"
+type: software
+version: "0.1.0"
+license: MIT
+repository-code: "https://github.com/harshitagarwal2/polymarket-prediction-agent"
+url: "https://github.com/harshitagarwal2/polymarket-prediction-agent"
+abstract: "A Polymarket-first prediction market research and supervised trading workspace with an offline sports benchmark toolkit, calibration overlays, and replay evaluation artifacts."
+keywords:
+  - prediction markets
+  - forecasting
+  - sports betting
+  - reproducibility
+  - benchmark toolkit
+authors:
+  - family-names: "Agarwal"
+    given-names: "Pulkit"
+  - family-names: "Agarwal"
+    given-names: "Harshit"
