@@ -41,14 +41,49 @@ jobs:
           risk/limits.py
           research/calibration.py
           research/datasets.py
+          research/data/__init__.py
+          research/data/build_training_set.py
+          research/data/capture_polymarket.py
+          research/data/capture_sports_inputs.py
+          research/data/schemas.py
+          research/features/__init__.py
+          research/features/joiners.py
+          research/features/market_features.py
+          research/features/sports_features.py
           research/fair_values.py
+          research/models/__init__.py
+          research/models/blend.py
+          research/models/bradley_terry.py
+          research/models/calibration.py
+          research/models/elo.py
           research/replay.py
           research/paper.py
           research/schemas.py
           research/benchmark_runner.py
           research/benchmark_suite.py
           research/benchmark_reporting.py
+          research/eval/__init__.py
+          research/eval/dm_test.py
+          research/eval/metrics.py
+          research/eval/reports.py
+          research/eval/walk_forward.py
           research/storage.py
+          research/train/__init__.py
+          research/train/train_blend.py
+          research/train/train_bt.py
+          research/train/train_elo.py
+          adapters/polymarket/__init__.py
+          adapters/polymarket/_legacy.py
+          adapters/polymarket/clob_client.py
+          adapters/polymarket/gamma_client.py
+          adapters/polymarket/normalize.py
+          adapters/polymarket/ws_market.py
+          adapters/polymarket/ws_sports.py
+          adapters/polymarket/ws_user.py
+          scripts/config_loader.py
+          scripts/ingest_live_data.py
+          scripts/train_models.py
+          scripts/build_fair_values.py
           scripts/run_agent_loop.py
           scripts/operator_cli.py
           scripts/build_sports_fair_values.py
