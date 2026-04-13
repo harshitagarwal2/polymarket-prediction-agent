@@ -9,16 +9,84 @@ def _utc_now() -> datetime:
 
 
 @dataclass(frozen=True)
-class CaptureRecord:
+class SportsInputRow:
     source: str
     captured_at: datetime = field(default_factory=_utc_now)
-    payload: dict[str, object] = field(default_factory=dict)
+    source_event_id: str | None = None
+    sport_key: str | None = None
+    bookmaker: str | None = None
+    decimal_odds: float | None = None
+    event_key: str | None = None
+    sport: str | None = None
+    series: str | None = None
+    game_id: str | None = None
+    sports_market_type: str | None = None
+    selection_name: str | None = None
+    outcome: str | None = None
+    home_team: str | None = None
+    away_team: str | None = None
+    label: int | None = None
+    raw: dict[str, object] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, object]:
         return {
             "source": self.source,
             "captured_at": self.captured_at.isoformat(),
-            "payload": self.payload,
+            "source_event_id": self.source_event_id,
+            "sport_key": self.sport_key,
+            "bookmaker": self.bookmaker,
+            "decimal_odds": self.decimal_odds,
+            "event_key": self.event_key,
+            "sport": self.sport,
+            "series": self.series,
+            "game_id": self.game_id,
+            "sports_market_type": self.sports_market_type,
+            "selection_name": self.selection_name,
+            "outcome": self.outcome,
+            "home_team": self.home_team,
+            "away_team": self.away_team,
+            "label": self.label,
+            "raw": self.raw,
+        }
+
+
+@dataclass(frozen=True)
+class PolymarketMarketRecord:
+    layer: str
+    captured_at: datetime = field(default_factory=_utc_now)
+    contract: dict[str, object] | None = None
+    market_key: str | None = None
+    condition_id: str | None = None
+    event_key: str | None = None
+    sport: str | None = None
+    series: str | None = None
+    game_id: str | None = None
+    sports_market_type: str | None = None
+    title: str | None = None
+    best_bid: float | None = None
+    best_ask: float | None = None
+    midpoint: float | None = None
+    volume: float | None = None
+    raw: dict[str, object] = field(default_factory=dict)
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "layer": self.layer,
+            "captured_at": self.captured_at.isoformat(),
+            "contract": self.contract,
+            "market_key": self.market_key,
+            "condition_id": self.condition_id,
+            "event_key": self.event_key,
+            "sport": self.sport,
+            "series": self.series,
+            "game_id": self.game_id,
+            "sports_market_type": self.sports_market_type,
+            "title": self.title,
+            "best_bid": self.best_bid,
+            "best_ask": self.best_ask,
+            "midpoint": self.midpoint,
+            "volume": self.volume,
+            "raw": self.raw,
         }
 
 

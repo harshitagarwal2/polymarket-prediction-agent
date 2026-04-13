@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from adapters.types import Contract, OutcomeSide, Venue
 from adapters.types import MarketSummary, deserialize_market_summary
 from research.calibration import HistogramCalibrator, load_calibration_artifact
 
@@ -280,11 +281,53 @@ def load_market_snapshot(path: str | Path) -> list[MarketSummary]:
         raise RuntimeError(
             "market snapshot must be a JSON list or an object with 'markets'"
         )
-    return [
-        deserialize_market_summary(item)
-        for item in raw_markets
-        if isinstance(item, dict)
-    ]
+    markets: list[MarketSummary] = []
+    for item in raw_markets:
+        if not isinstance(item, dict):
+            continue
+        if "contract" in item:
+            markets.append(deserialize_market_summary(item))
+            continue
+        market_key = item.get("market_key")
+        if not isinstance(market_key, str) or ":" not in market_key:
+            continue
+        symbol, outcome = market_key.rsplit(":", 1)
+        markets.append(
+            MarketSummary(
+                contract=Contract(
+                    venue=Venue.POLYMARKET,
+                    symbol=symbol,
+                    outcome=OutcomeSide(outcome),
+                    title=item.get("title"),
+                ),
+                title=item.get("title"),
+                best_bid=(
+                    float(item["best_bid"])
+                    if item.get("best_bid") is not None
+                    else None
+                ),
+                best_ask=(
+                    float(item["best_ask"])
+                    if item.get("best_ask") is not None
+                    else None
+                ),
+                midpoint=(
+                    float(item["midpoint"])
+                    if item.get("midpoint") is not None
+                    else None
+                ),
+                volume=(
+                    float(item["volume"]) if item.get("volume") is not None else None
+                ),
+                sport=item.get("sport"),
+                series=item.get("series"),
+                event_key=item.get("event_key"),
+                game_id=item.get("game_id"),
+                sports_market_type=item.get("sports_market_type"),
+                raw=item.get("raw"),
+            )
+        )
+    return markets
 
 
 def resolve_rows_to_markets(
