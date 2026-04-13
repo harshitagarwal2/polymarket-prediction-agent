@@ -34,7 +34,12 @@ The diagrams are grounded in these implementation files:
 - `docs/GETTING_STARTED.md`
 - `adapters/base.py`
 - `adapters/types.py`
-- `adapters/polymarket.py`
+- `adapters/polymarket/__init__.py`
+- `adapters/polymarket/_legacy.py`
+- `adapters/polymarket/gamma_client.py`
+- `adapters/polymarket/clob_client.py`
+- `adapters/polymarket/ws_market.py`
+- `adapters/polymarket/ws_user.py`
 - `adapters/kalshi.py`
 - `engine/accounting.py`
 - `engine/order_state.py`

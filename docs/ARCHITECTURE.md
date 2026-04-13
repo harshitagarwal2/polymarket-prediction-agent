@@ -44,7 +44,7 @@ external sportsbook rows or model output
 
 This is the venue boundary.
 
-- `adapters/polymarket.py` is the richest adapter today
+- `adapters/polymarket/` is the richest adapter today, with `__init__.py` as the stable facade and extracted modules such as `gamma_client.py`, `clob_client.py`, `ws_market.py`, `ws_user.py`, `ws_sports.py`, and `normalize.py`
 - `adapters/kalshi.py` provides a thinner path with normalized types
 - `adapters/types.py` holds the shared domain model used across runtime and research code
 
@@ -57,6 +57,8 @@ Polymarket-specific runtime details that matter today:
 - phase-1 live-state overlays for user order and fill freshness
 - market-state overlay support
 - depth-admission settings applied from runtime policy
+
+`adapters/polymarket/ws_sports.py` is currently a real websocket transport boundary helper, but not yet a full live ingestion orchestrator on its own.
 
 ### `engine/`
 
