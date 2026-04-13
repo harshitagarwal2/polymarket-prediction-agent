@@ -55,6 +55,9 @@ Common entrypoints:
 
 - `run-agent-loop`
 - `operator-cli`
+- `ingest-live-data`
+- `train-models`
+- `build-fair-values`
 - `build-sports-fair-values`
 - `refresh-sports-fair-values`
 - `prediction-market-sports-benchmark`
@@ -132,6 +135,17 @@ The manifest format is more than a flat market-to-probability map. Each value ca
 - `event_key`
 - sports metadata used for identity matching and event-level risk grouping
 
+You can also let the sample sports config set the fair-value build defaults:
+
+```bash
+build-fair-values \
+  --input runtime/sportsbook_odds.json \
+  --output runtime/fair_values.json \
+  --config-file configs/sports_nba.yaml
+```
+
+With the checked-in sample config, that currently resolves to `best-line` aggregation and `multiplicative` devigging.
+
 ### 4. Run a preview cycle
 
 ```bash
@@ -148,6 +162,17 @@ Useful modes:
 - `run`
 - `pair-preview`
 - `pair-run`
+
+If you want the sample runtime defaults from `configs/sports_nba.yaml`, you can run:
+
+```bash
+run-agent-loop \
+  --venue polymarket \
+  --fair-values-file runtime/fair_values.json \
+  --config-file configs/sports_nba.yaml
+```
+
+That path currently provides `configs/runtime_policy.preview.json` and keeps the loop in preview mode.
 
 For a long-running supervised preview process, add `--interval-seconds` and a larger `--max-cycles`.
 
@@ -254,6 +279,25 @@ It currently supports:
 - chronological walk-forward split generation with `generate_walk_forward_splits(...)`
 
 Snapshot outputs are written under `research/datasets/<dataset-name>/<version>/` when you use `DatasetRegistry`.
+
+## Captured-data helpers
+
+The new sports + Polymarket research tree also supports config-driven helper paths:
+
+```bash
+ingest-live-data \
+  --layer sports-inputs \
+  --config-file configs/sports_nba.yaml \
+  --event-map-file runtime/odds_event_map.json \
+  --output runtime/sports_inputs.json
+
+train-models \
+  --config-file configs/sports_nba.yaml \
+  --training-data runtime/sports_inputs_labeled.json \
+  --output runtime/elo_artifact.json
+```
+
+`ingest-live-data` writes typed capture artifacts (`markets` for Polymarket, `rows` for sports inputs). The checked-in league configs currently drive the `sports-inputs` path by supplying league-to-sport-key defaults; Gamma/CLOB capture still needs its layer selected explicitly. `train-models` can train from captured sports-input rows when they include labels.
 
 ## Environment variables
 

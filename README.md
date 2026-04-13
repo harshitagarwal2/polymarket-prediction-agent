@@ -147,6 +147,26 @@ Additional architecture-aligned helper entrypoints now exist for the split resea
 - `train-models` - write lightweight Elo, Bradley–Terry, or blend artifacts from benchmark cases
 - `build-fair-values` - thin wrapper around the existing sports fair-value manifest builder
 
+The sample league configs can drive the new helper entrypoints directly:
+
+```bash
+ingest-live-data \
+  --layer sports-inputs \
+  --config-file configs/sports_nba.yaml \
+  --event-map-file runtime/odds_event_map.json \
+  --output runtime/sports_inputs.json
+
+train-models \
+  --config-file configs/sports_nba.yaml \
+  --training-data runtime/sports_inputs_labeled.json \
+  --output runtime/elo_artifact.json
+
+build-fair-values \
+  --input runtime/sportsbook_odds.json \
+  --output runtime/fair_values.json \
+  --config-file configs/sports_nba.yaml
+```
+
 ### 3. Run one supervised Polymarket preview cycle
 
 ```bash
@@ -182,6 +202,17 @@ The policy file is the source of truth for:
 - engine timing and overlay recovery settings
 - lifecycle cleanup policy
 - Polymarket depth admission settings
+
+The sample sports configs can also set runtime defaults:
+
+```bash
+run-agent-loop \
+  --venue polymarket \
+  --fair-values-file runtime/fair_values.json \
+  --config-file configs/sports_nba.yaml
+```
+
+With the current sample config, that path supplies `configs/runtime_policy.preview.json` and keeps the loop in preview mode.
 
 ### 5. Inspect runtime state
 
@@ -230,6 +261,7 @@ The benchmark stack is useful when you want a reproducible offline slice of the 
 - `docs/GETTING_STARTED.md` for the new-engineer setup path
 - `docs/ARCHITECTURE.md` for the current system shape
 - `docs/architecture/sports_polymarket_architecture.md` for the target sports + Polymarket architecture
+- `docs/VERIFICATION_SPORTS_POLYMARKET.md` for the current verification record of the added sports + Polymarket paths
 - `docs/OPERATOR_RUNBOOK.md` for supervised runtime operation
 - `docs/BENCHMARK_TOOLKIT.md` for the offline benchmark flow
 - `docs/BENCHMARK_PROTOCOL.md` for suite artifacts and evaluation rules
