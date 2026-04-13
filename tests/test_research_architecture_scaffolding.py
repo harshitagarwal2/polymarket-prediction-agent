@@ -3,16 +3,21 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from engine.runtime_policy import load_runtime_policy
 from research.data.build_training_set import build_training_set_rows
+from research.data.build_training_set import load_training_set_rows
 from research.data.capture_polymarket import (
     build_polymarket_capture,
+    load_polymarket_capture,
     write_polymarket_capture,
 )
 from research.data.capture_sports_inputs import (
     build_sports_input_capture,
+    load_sports_input_capture,
     write_sports_input_capture,
 )
 from research.eval.dm_test import compare_loss_differentials
@@ -20,10 +25,12 @@ from research.eval.metrics import score_forecasts
 from research.features.joiners import merge_feature_sets
 from research.features.market_features import build_market_microstructure_features
 from research.features.sports_features import build_team_strength_features
+from research.fair_values import load_market_snapshot
 from research.models.bradley_terry import fit_bradley_terry_from_rows
 from research.models.blend import blend_probability
 from research.schemas import SportsBenchmarkCase
 from scripts.config_loader import load_config_file, nested_config_value
+from scripts import train_models
 
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "research" / "fixtures"
@@ -46,19 +53,54 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
         )
 
     def test_capture_envelopes_write_json(self):
+        captured_at = datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc)
         with tempfile.TemporaryDirectory() as temp_dir:
             poly_path = write_polymarket_capture(
-                build_polymarket_capture([{"condition_id": "abc"}], layer="gamma"),
+                build_polymarket_capture(
+                    [
+                        {
+                            "market_key": "token-a:yes",
+                            "condition_id": "abc",
+                            "event_key": "event-1",
+                        }
+                    ],
+                    layer="gamma",
+                    captured_at=captured_at,
+                ),
                 Path(temp_dir) / "gamma.json",
             )
             sports_path = write_sports_input_capture(
-                build_sports_input_capture([{"sport": "nba"}], source="sports-inputs"),
+                build_sports_input_capture(
+                    [
+                        {
+                            "sport": "nba",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "label": 1,
+                        }
+                    ],
+                    source="sports-inputs",
+                    captured_at=captured_at,
+                ),
                 Path(temp_dir) / "sports.json",
             )
-            self.assertEqual(json.loads(poly_path.read_text())["layer"], "gamma")
-            self.assertEqual(
-                json.loads(sports_path.read_text())["source"], "sports-inputs"
-            )
+            poly_payload = json.loads(poly_path.read_text())
+            sports_payload = json.loads(sports_path.read_text())
+            self.assertEqual(poly_payload["layer"], "gamma")
+            self.assertIn("markets", poly_payload)
+            self.assertEqual(poly_payload["markets"][0]["condition_id"], "abc")
+            self.assertEqual(sports_payload["source"], "sports-inputs")
+            self.assertIn("rows", sports_payload)
+            self.assertEqual(sports_payload["rows"][0]["label"], 1)
+
+            loaded_poly = load_polymarket_capture(poly_path)
+            loaded_sports = load_sports_input_capture(sports_path)
+            self.assertEqual(loaded_poly.captured_at, captured_at)
+            self.assertEqual(loaded_sports.captured_at, captured_at)
+
+            markets = load_market_snapshot(poly_path)
+            self.assertEqual(len(markets), 1)
+            self.assertEqual(markets[0].contract.symbol, "token-a")
 
     def test_feature_helpers_and_research_exports_work(self):
         market_features = build_market_microstructure_features(
@@ -84,6 +126,83 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
         self.assertTrue(artifact.skill_by_team)
         self.assertGreater(score.accuracy, 0.0)
         self.assertEqual(dm.sample_count, 2)
+
+    def test_train_models_can_use_training_data_capture(self):
+        training_payload = {
+            "source": "sports-inputs",
+            "rows": [
+                {
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "label": 1,
+                    "event_key": "event-1",
+                    "sport": "nba",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            training_path = Path(temp_dir) / "training.json"
+            output_path = Path(temp_dir) / "elo.json"
+            training_path.write_text(json.dumps(training_payload))
+            rows = load_training_set_rows(str(training_path))
+            self.assertEqual(len(rows), 1)
+
+            with patch(
+                "sys.argv",
+                [
+                    "train_models.py",
+                    "--model",
+                    "elo",
+                    "--training-data",
+                    str(training_path),
+                    "--output",
+                    str(output_path),
+                ],
+            ):
+                train_models.main()
+
+            artifact_payload = json.loads(output_path.read_text())
+
+        self.assertEqual(artifact_payload["model_generator"], "elo")
+        self.assertEqual(artifact_payload["training_match_count"], 1)
+
+    def test_train_models_can_read_model_from_config_file(self):
+        training_payload = {
+            "source": "sports-inputs",
+            "rows": [
+                {
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "label": 1,
+                    "event_key": "event-1",
+                    "sport": "nba",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            training_path = Path(temp_dir) / "training.json"
+            output_path = Path(temp_dir) / "elo.json"
+            training_path.write_text(json.dumps(training_payload))
+
+            with patch(
+                "sys.argv",
+                [
+                    "train_models.py",
+                    "--config-file",
+                    "configs/sports_nba.yaml",
+                    "--training-data",
+                    str(training_path),
+                    "--output",
+                    str(output_path),
+                ],
+            ):
+                train_models.main()
+
+            artifact_payload = json.loads(output_path.read_text())
+
+        self.assertEqual(artifact_payload["model_generator"], "elo")
 
 
 if __name__ == "__main__":
