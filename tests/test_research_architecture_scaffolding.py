@@ -204,6 +204,43 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
 
         self.assertEqual(artifact_payload["model_generator"], "elo")
 
+    def test_train_models_can_train_bt_from_training_data_capture(self):
+        training_payload = {
+            "source": "sports-inputs",
+            "rows": [
+                {
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "label": 1,
+                    "event_key": "event-1",
+                    "sport": "nba",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            training_path = Path(temp_dir) / "training.json"
+            output_path = Path(temp_dir) / "bt.json"
+            training_path.write_text(json.dumps(training_payload))
+
+            with patch(
+                "sys.argv",
+                [
+                    "train_models.py",
+                    "--model",
+                    "bt",
+                    "--training-data",
+                    str(training_path),
+                    "--output",
+                    str(output_path),
+                ],
+            ):
+                train_models.main()
+
+            artifact_payload = json.loads(output_path.read_text())
+
+        self.assertIn("skill_by_team", artifact_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

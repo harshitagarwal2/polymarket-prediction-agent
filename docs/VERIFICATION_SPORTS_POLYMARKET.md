@@ -2,8 +2,6 @@
 
 This file records the latest local verification evidence for the added sports + Polymarket architecture paths.
 
-Current HEAD for this record: `b37d5871bcbeb79c5075ff204bc139aced0376ab`
-
 Machine-readable companion artifact: `docs/verification_sports_polymarket.json`
 
 ## Focused automated checks
@@ -22,7 +20,7 @@ uv run --locked python -m unittest \
 Observed result:
 
 ```text
-Ran 38 tests in 0.056s
+Ran 39 tests in 0.045s
 
 OK
 ```
@@ -38,7 +36,7 @@ uv run --locked python -m unittest discover -s tests -p "test_*.py"
 Observed result:
 
 ```text
-Ran 329 tests in 1.611s
+Ran 330 tests in 1.749s
 
 OK
 ```
@@ -124,6 +122,17 @@ Artifact excerpt:
 {
   "model_generator": "elo",
   "training_match_count": 1
+}
+```
+
+Observed BT training artifact excerpt:
+
+```json
+{
+  "skill_by_team": {
+    "Away Team": -0.6931471805599453,
+    "Home Team": 0.6931471805599453
+  }
 }
 ```
 
