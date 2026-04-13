@@ -39,7 +39,6 @@ It is not an unattended live trading system. The live path is still supervised, 
 - `configs/` - sample league and runtime-policy configuration files
 - `docs/` - onboarding, architecture, runbook, and benchmark docs
 - `tests/` - unit coverage for runtime policy, risk, replay, benchmark, and CLI behavior
-- `upstreams/` - pinned references and dependency sources, not the product core
 
 ## Install
 
@@ -163,6 +162,7 @@ train-models \
 
 build-fair-values \
   --input runtime/sportsbook_odds.json \
+  --markets-file runtime/polymarket_markets.json \
   --output runtime/fair_values.json \
   --config-file configs/sports_nba.yaml
 ```

@@ -140,6 +140,7 @@ You can also let the sample sports config set the fair-value build defaults:
 ```bash
 build-fair-values \
   --input runtime/sportsbook_odds.json \
+  --markets-file runtime/polymarket_markets.json \
   --output runtime/fair_values.json \
   --config-file configs/sports_nba.yaml
 ```

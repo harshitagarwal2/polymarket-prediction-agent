@@ -15,14 +15,6 @@
         "source": "sportsbook-devig:multiplicative:best-line"
       }
     },
-    "config_driven_run_agent_loop": {
-      "automated_test": "tests.test_run_agent_loop.RunAgentLoopTests.test_main_can_apply_runtime_defaults_from_config_file",
-      "observed": {
-        "mode": "run",
-        "policy_file": "configs/runtime_policy.preview.json",
-        "result": 0
-      }
-    },
     "live_gamma_capture": {
       "command": "ingest-live-data --layer gamma --config-file configs/sports_nba.yaml --output <gamma.json> --limit 2",
       "observed": {
@@ -37,6 +29,16 @@
         "model_generator": "elo",
         "training_match_count": 1
       }
+    }
+  },
+  "automated_verification": {
+    "config_driven_run_agent_loop": {
+      "automated_test": "tests.test_run_agent_loop.RunAgentLoopTests.test_main_can_apply_runtime_defaults_from_config_file",
+      "observed": {
+        "mode": "run",
+        "policy_file": "configs/runtime_policy.preview.json",
+        "result": 0
+      }
     },
     "training_bt_from_captured_rows": {
       "automated_test": "tests.test_research_architecture_scaffolding.ResearchArchitectureScaffoldingTests.test_train_models_can_train_bt_from_training_data_capture",
@@ -46,7 +48,9 @@
           "Home Team": 0.6931471805599453
         }
       }
-    },
+    }
+  },
+  "manual_qa_additional": {
     "walk_forward_bt_generation": {
       "command": "run-sports-benchmark-suite --dataset-root <datasets> --dataset-name bt-manual --dataset-version v1 --walk-forward --min-train-size 1 --test-size 1 --model-generator bt --output-dir <output>",
       "observed": {
@@ -56,7 +60,9 @@
           "skill_by_team"
         ]
       }
-    },
+    }
+  },
+  "automated_boundary_checks": {
     "ws_sports_boundary": {
       "command": "python -m unittest tests.test_polymarket_ws_sports",
       "observed": {
