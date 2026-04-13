@@ -1,0 +1,59 @@
+{
+  "git_head": "b37d5871bcbeb79c5075ff204bc139aced0376ab",
+  "focused_tests": {
+    "command": "uv run --locked python -m unittest tests.test_build_sports_fair_values tests.test_run_agent_loop tests.test_research_architecture_scaffolding tests.test_ingest_live_data tests.test_polymarket_ws_sports",
+    "result": "Ran 38 tests in 0.056s\n\nOK"
+  },
+  "full_suite": {
+    "command": "uv run --locked python -m unittest discover -s tests -p \"test_*.py\"",
+    "result": "Ran 329 tests in 1.611s\n\nOK"
+  },
+  "manual_qa": {
+    "config_driven_build_fair_values": {
+      "command": "build-fair-values --input <rows.json> --output <manifest.json> --config-file configs/sports_nba.yaml",
+      "observed": {
+        "book_aggregation": "best-line",
+        "source": "sportsbook-devig:multiplicative:best-line"
+      }
+    },
+    "config_driven_run_agent_loop": {
+      "command": "run-agent-loop --venue polymarket --fair-values-file <fair_values.json> --config-file configs/sports_nba.yaml",
+      "observed": {
+        "mode": "preview",
+        "policy_file": "configs/runtime_policy.preview.json",
+        "result": 0
+      }
+    },
+    "live_gamma_capture": {
+      "command": "ingest-live-data --layer gamma --config-file configs/sports_nba.yaml --output <gamma.json> --limit 2",
+      "observed": {
+        "layer": "gamma",
+        "market_count": 2
+      }
+    },
+    "training_from_captured_rows": {
+      "command": "train-models --config-file configs/sports_nba.yaml --training-data <sports_inputs_labeled.json> --output <elo.json>",
+      "observed": {
+        "model_generator": "elo",
+        "training_match_count": 1
+      }
+    },
+    "walk_forward_bt_generation": {
+      "command": "run-sports-benchmark-suite --dataset-root <datasets> --dataset-name bt-manual --dataset-version v1 --walk-forward --min-train-size 1 --test-size 1 --model-generator bt --output-dir <output>",
+      "observed": {
+        "model_generator": "bt",
+        "split_model_keys": [
+          "model_generator",
+          "skill_by_team"
+        ]
+      }
+    },
+    "ws_sports_boundary": {
+      "command": "python -m unittest tests.test_polymarket_ws_sports",
+      "observed": {
+        "supported": true,
+        "transport": "websocket"
+      }
+    }
+  }
+}
