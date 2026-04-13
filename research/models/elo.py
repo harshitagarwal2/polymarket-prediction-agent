@@ -125,18 +125,45 @@ def fit_elo_model(
     initial_rating: float = 1500.0,
     k_factor: float = 32.0,
 ) -> EloModelArtifact:
+    rows = [
+        {
+            "home_team": example.home_team,
+            "away_team": example.away_team,
+            "label": example.home_win,
+        }
+        for case in cases
+        if (example := extract_elo_training_example(case)) is not None
+    ]
+    return fit_elo_model_from_rows(
+        rows,
+        initial_rating=initial_rating,
+        k_factor=k_factor,
+    )
+
+
+def fit_elo_model_from_rows(
+    rows: list[dict[str, object]],
+    *,
+    initial_rating: float = 1500.0,
+    k_factor: float = 32.0,
+) -> EloModelArtifact:
     ratings: dict[str, float] = {}
     training_match_count = 0
-    for case in cases:
-        example = extract_elo_training_example(case)
-        if example is None:
+    for row in rows:
+        home_team = str(row.get("home_team", "")).strip()
+        away_team = str(row.get("away_team", "")).strip()
+        raw_label = row.get("label", 0)
+        if not home_team or not away_team:
             continue
-        home_rating = float(ratings.get(example.home_team, initial_rating))
-        away_rating = float(ratings.get(example.away_team, initial_rating))
+        if isinstance(raw_label, bool) or not isinstance(raw_label, (int, float, str)):
+            continue
+        label = int(raw_label)
+        home_rating = float(ratings.get(home_team, initial_rating))
+        away_rating = float(ratings.get(away_team, initial_rating))
         expected_home = 1.0 / (1.0 + 10 ** ((away_rating - home_rating) / 400.0))
-        rating_delta = float(k_factor) * (float(example.home_win) - expected_home)
-        ratings[example.home_team] = home_rating + rating_delta
-        ratings[example.away_team] = away_rating - rating_delta
+        rating_delta = float(k_factor) * (float(label) - expected_home)
+        ratings[home_team] = home_rating + rating_delta
+        ratings[away_team] = away_rating - rating_delta
         training_match_count += 1
     return EloModelArtifact(
         initial_rating=float(initial_rating),
