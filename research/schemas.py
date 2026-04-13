@@ -181,6 +181,8 @@ class FairValueBenchmarkCase:
     source: str | None = None
     expected_market_keys: tuple[str, ...] = ()
     outcome_labels: dict[str, int] = field(default_factory=dict)
+    model_fair_values: dict[str, float] = field(default_factory=dict)
+    model_blend_weight: float | None = None
     calibration_samples: tuple[CalibrationSample, ...] = ()
     calibration_bin_count: int = 5
 
@@ -199,6 +201,10 @@ class FairValueBenchmarkCase:
             "expected_market_keys": list(self.expected_market_keys),
             "outcome_labels": self.outcome_labels,
         }
+        if self.model_fair_values:
+            payload["model_fair_values"] = self.model_fair_values
+        if self.model_blend_weight is not None:
+            payload["model_blend_weight"] = self.model_blend_weight
         if self.calibration_samples:
             payload["calibration_samples"] = [
                 sample.to_payload() for sample in self.calibration_samples
@@ -229,6 +235,16 @@ class FairValueBenchmarkCase:
         }
         if invalid_labels:
             raise ValueError("fair_value_case.outcome_labels values must be 0 or 1")
+        model_fair_values = payload.get("model_fair_values", {})
+        if not isinstance(model_fair_values, dict):
+            raise ValueError("fair_value_case.model_fair_values must be an object")
+        normalized_model_fair_values = {
+            str(key): _coerce_unit_probability(
+                f"fair_value_case.model_fair_values[{key}]",
+                value,
+            )
+            for key, value in model_fair_values.items()
+        }
         raw_calibration_samples = payload.get("calibration_samples", [])
         if not isinstance(raw_calibration_samples, list):
             raise ValueError("fair_value_case.calibration_samples must be a list")
@@ -276,6 +292,15 @@ class FairValueBenchmarkCase:
                 str(item) for item in payload.get("expected_market_keys", [])
             ),
             outcome_labels=normalized_labels,
+            model_fair_values=normalized_model_fair_values,
+            model_blend_weight=(
+                _coerce_unit_probability(
+                    "fair_value_case.model_blend_weight",
+                    payload["model_blend_weight"],
+                )
+                if payload.get("model_blend_weight") is not None
+                else None
+            ),
             calibration_samples=tuple(calibration_samples),
             calibration_bin_count=calibration_bin_count,
         )

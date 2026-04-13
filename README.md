@@ -36,35 +36,53 @@ It is not an unattended live trading system. The live path is still supervised, 
 - `risk/` - exposure caps, cleanup helpers, deterministic risk checks
 - `research/` - fair-value builder, calibration, replay, benchmark runner, dataset registry
 - `scripts/` - user-facing CLI entrypoints
+- `configs/` - sample league and runtime-policy configuration files
 - `docs/` - onboarding, architecture, runbook, and benchmark docs
 - `tests/` - unit coverage for runtime policy, risk, replay, benchmark, and CLI behavior
 - `upstreams/` - pinned references and dependency sources, not the product core
 
 ## Install
 
-From the repo root:
+The canonical local setup is a locked `uv` environment, verified on Python 3.10.
+
+From the repo root, sync the base environment:
 
 ```bash
-pip install -e .
+uv sync --locked
 ```
 
 For the reproducible offline benchmark path:
 
 ```bash
-pip install -e ".[research]"
+uv sync --locked --extra research
 ```
 
 For venue-specific runtime integrations:
 
 ```bash
-pip install -e ".[polymarket]"
-pip install -e ".[kalshi]"
+uv sync --locked --extra polymarket
+uv sync --locked --extra kalshi
+```
+
+If you want the console entrypoints on your shell `PATH`, activate the virtualenv after syncing:
+
+```bash
+source .venv/bin/activate
+```
+
+The committed `uv.lock` file is the source of truth for dependency resolution. If dependency declarations change, refresh it with:
+
+```bash
+uv lock
 ```
 
 The package installs these console entrypoints from `pyproject.toml`:
 
 - `run-agent-loop`
 - `operator-cli`
+- `ingest-live-data`
+- `train-models`
+- `build-fair-values`
 - `build-sports-fair-values`
 - `refresh-sports-fair-values`
 - `run-sports-benchmark`
@@ -77,11 +95,12 @@ The package installs these console entrypoints from `pyproject.toml`:
 ### 1. Run the offline benchmark first
 
 ```bash
+make sync-research
 make reproduce
 
 # or run the suite command directly
-prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
-prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+uv run --locked --extra research prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
+uv run --locked --extra research prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
 ```
 
 Containerized reproduction path:
@@ -121,6 +140,12 @@ The emitted manifest can include:
 - `condition_id`
 - `event_key`
 - sport metadata such as `sport`, `series`, `game_id`, and `sports_market_type`
+
+Additional architecture-aligned helper entrypoints now exist for the split research tree:
+
+- `ingest-live-data` - write normalized offline capture envelopes for Gamma, CLOB, Data API, or sports-input payloads
+- `train-models` - write lightweight Elo, Bradley–Terry, or blend artifacts from benchmark cases
+- `build-fair-values` - thin wrapper around the existing sports fair-value manifest builder
 
 ### 3. Run one supervised Polymarket preview cycle
 
@@ -187,9 +212,10 @@ The benchmark stack is useful when you want a reproducible offline slice of the 
 
 ## CI
 
-`.github/workflows/python-ci.yml` currently does three things on pushes and pull requests:
+`.github/workflows/python-ci.yml` currently does four things on pushes and pull requests:
 
-- installs the package
+- checks that `uv.lock` matches the dependency declarations
+- installs the package from the committed lockfile
 - compiles the key runtime and research modules with `py_compile`
 - runs `python -m unittest discover -s tests -p "test_*.py"`
 
@@ -203,6 +229,7 @@ The benchmark stack is useful when you want a reproducible offline slice of the 
 
 - `docs/GETTING_STARTED.md` for the new-engineer setup path
 - `docs/ARCHITECTURE.md` for the current system shape
+- `docs/architecture/sports_polymarket_architecture.md` for the target sports + Polymarket architecture
 - `docs/OPERATOR_RUNBOOK.md` for supervised runtime operation
 - `docs/BENCHMARK_TOOLKIT.md` for the offline benchmark flow
 - `docs/BENCHMARK_PROTOCOL.md` for suite artifacts and evaluation rules

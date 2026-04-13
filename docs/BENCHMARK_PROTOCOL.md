@@ -20,7 +20,11 @@ It is not a live trading protocol.
    - optional market snapshots for row-to-market resolution
    - optional replay steps
    - optional binary outcome labels keyed by market key
+   - optional model fair values keyed by market key
+   - optional model blend weight for sportsbook/model combination
    - optional calibration samples
+
+Walk-forward dataset runs can also generate `model_fair_value` internally with `--model-generator elo`, fitting Elo ratings on prior-window benchmark cases and applying them only to future-window test cases.
 2. **Run the fair-value lane**
    - resolve row identity through `event_key`, `condition_id`, or `game_id`
    - aggregate books as `independent` or `best-line`
@@ -50,6 +54,8 @@ Fair-value baselines:
 - `bookmaker_power_independent`
 - `bookmaker_multiplicative_best_line`
 - `market_midpoint`
+- `model_fair_value`
+- `blended_fair_value`
 
 Replay baselines:
 
@@ -62,19 +68,43 @@ These are research comparisons, not claims of production model quality.
 ### Single case
 
 ```bash
-python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
+uv run --locked --extra research python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
 ```
 
 ### Packaged suite
 
 ```bash
-python3 scripts/run_sports_benchmark_suite.py --output-dir runtime/benchmark-suite
+uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py --output-dir runtime/benchmark-suite
+```
+
+### Dataset snapshot suite
+
+```bash
+uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py \
+  --dataset-root research/datasets \
+  --dataset-name benchmark-cases \
+  --dataset-version v1 \
+  --output-dir runtime/benchmark-suite
+```
+
+### Walk-forward dataset suite
+
+```bash
+uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py \
+  --dataset-root research/datasets \
+  --dataset-name benchmark-cases \
+  --dataset-version v1 \
+  --walk-forward \
+  --min-train-size 10 \
+  --test-size 5 \
+  --step-size 5 \
+  --output-dir runtime/benchmark-suite-walk-forward
 ```
 
 Installed console entrypoint:
 
 ```bash
-prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+uv run --locked --extra research prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
 ```
 
 ## Output contract
@@ -85,6 +115,21 @@ The suite currently writes:
 - `benchmark_suite_summary.md`
 - `benchmark_suite_edge_ledger.json`
 - `cases/<safe-case-name>.json`
+
+Walk-forward runs additionally write:
+
+- `walk_forward_benchmark_summary.json`
+- `splits/<split-id>/benchmark_suite_summary.json`
+- `splits/<split-id>/benchmark_suite_summary.md`
+- `splits/<split-id>/benchmark_suite_edge_ledger.json`
+- `splits/<split-id>/cases/<safe-case-name>.json`
+
+`walk_forward_benchmark_summary.json` includes:
+
+- dataset provenance
+- walk-forward split settings and counts
+- a pooled out-of-fold `aggregate` across all split test reports
+- split-level calibration provenance and artifact paths
 
 `benchmark_suite_summary.json` has four top-level sections:
 
@@ -118,6 +163,8 @@ Top-level fields can include:
 Per-value records can include:
 
 - `fair_value`
+- optional `model_fair_value`
+- optional `blended_fair_value`
 - optional `calibrated_fair_value`
 - `condition_id`
 - `event_key`
@@ -136,6 +183,8 @@ That gives you:
 - versioned benchmark-case snapshots
 - manifest metadata per snapshot
 - chronological walk-forward splits through `generate_walk_forward_splits(...)`
+
+The suite CLI can now consume benchmark-case snapshots directly, and in walk-forward mode it fits calibration only from prior-window training edge-ledger rows before applying that prefit calibrator to future-window test cases. The root walk-forward summary pools the split test reports into one out-of-fold aggregate so the top-level metrics reflect evaluated future windows, not just split counts.
 
 This protocol does not require dataset snapshots, but it supports them cleanly.
 

@@ -18,24 +18,34 @@ The main supported venue path is Polymarket. Kalshi support exists behind the sa
 
 ## Install
 
-From the repo root:
+The canonical local setup is a locked `uv` environment, verified on Python 3.10.
+
+From the repo root, sync the base environment:
 
 ```bash
-pip install -e .
+uv sync --locked
 ```
 
 For the reproducible offline benchmark path:
 
 ```bash
-pip install -e ".[research]"
+uv sync --locked --extra research
 ```
 
 For venue-specific runtime integrations:
 
 ```bash
-pip install -e ".[polymarket]"
-pip install -e ".[kalshi]"
+uv sync --locked --extra polymarket
+uv sync --locked --extra kalshi
 ```
+
+If you want the console entrypoints on your shell `PATH`, activate the virtualenv after syncing:
+
+```bash
+source .venv/bin/activate
+```
+
+The committed `uv.lock` file is the source of truth for dependency resolution. If dependency declarations change, refresh it with `uv lock`.
 
 ## Know the entrypoints
 
@@ -55,11 +65,12 @@ Common entrypoints:
 This is the easiest way to touch the repo without live credentials.
 
 ```bash
+make sync-research
 make reproduce
 
 # or run the suite command directly
-prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
-prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+uv run --locked --extra research prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
+uv run --locked --extra research prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
 ```
 
 Containerized reproduction path:
@@ -261,7 +272,7 @@ Snapshot outputs are written under `research/datasets/<dataset-name>/<version>/`
 
 ## CI and local validation expectations
 
-GitHub Actions currently installs the package, compiles key modules with `py_compile`, and runs `python -m unittest discover -s tests -p "test_*.py"`.
+GitHub Actions currently checks that `uv.lock` matches the dependency declarations, installs the package from the lockfile, compiles key modules with `py_compile`, and runs `python -m unittest discover -s tests -p "test_*.py"`.
 
 If you are changing runtime or research behavior, that test suite is the baseline contract.
 

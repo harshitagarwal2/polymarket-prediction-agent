@@ -15,3 +15,19 @@ dist/
 
 # Local vendor/reference clones
 upstreams/
+
+# Operational runtime state
+runtime/state/
+runtime/cache/
+runtime/journals/
+runtime/fair_values/*.json
+runtime/*.json
+runtime/*.jsonl
+
+# Offline research captures and generated artifacts
+research/data/raw/
+research/data/captures/
+research/data/warehouse/
+research/data/checkpoints/
+research/data/training/
+research/models/checkpoints/

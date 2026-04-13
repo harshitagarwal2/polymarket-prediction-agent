@@ -1,10 +1,12 @@
-FROM python:3.11-slim
+ARG PYTHON_VERSION=3.10
+FROM python:${PYTHON_VERSION}-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.27 /uv /uvx /bin/
 
 WORKDIR /app
 
 COPY . /app
 
-RUN python -m pip install --upgrade pip \
- && python -m pip install -e ".[research]"
+RUN uv sync --locked --extra research
 
-CMD ["prediction-market-sports-benchmark-suite", "--output-dir", "runtime/benchmark-suite"]
+CMD ["uv", "run", "--locked", "--extra", "research", "prediction-market-sports-benchmark-suite", "--output-dir", "runtime/benchmark-suite"]

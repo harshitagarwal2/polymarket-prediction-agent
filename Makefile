@@ -1,4 +1,12 @@
-.PHONY: reproduce
+.PHONY: sync sync-research reproduce
+
+UV ?= uv
+
+sync:
+	$(UV) sync --locked
+
+sync-research:
+	$(UV) sync --locked --extra research
 
 reproduce:
-	prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+	$(UV) run --locked --extra research prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite

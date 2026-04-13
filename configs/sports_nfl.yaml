@@ -1,0 +1,14 @@
+league: nfl
+venue: polymarket
+capture:
+  market_source: gamma
+  book_source: clob
+  trade_source: data-api
+research:
+  model_generator: elo
+  book_aggregation: best-line
+  devig_method: multiplicative
+  evaluation_mode: walk-forward
+runtime:
+  policy_file: configs/runtime_policy.preview.json
+  preview_only: true

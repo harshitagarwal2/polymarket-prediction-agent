@@ -25,6 +25,8 @@ Current fields:
 - `source` - optional source label
 - `expected_market_keys` - optional fail-closed list of market keys that must resolve
 - `outcome_labels` - optional binary labels keyed by market key
+- `model_fair_values` - optional model-only probabilities keyed by market key
+- `model_blend_weight` - optional blend weight in `[0,1]` for logit-combining sportsbook and model probabilities
 - `calibration_samples` - optional list of `{ "prediction": ..., "outcome": ... }`
 - `calibration_bin_count` - optional positive integer, default `5`
 
@@ -53,6 +55,22 @@ When `calibration_samples` are present:
 - the report includes raw and calibrated forecast metrics
 - the report includes calibrated market probabilities
 - per-market evaluation rows include both raw and calibrated error columns
+
+### Model and blended fair-value fields
+
+When `model_fair_values` are present:
+
+- the benchmark reports a `model_fair_value` baseline
+- manifest records can surface per-market `model_fair_value`
+- per-market evaluation rows can include model error columns
+
+When walk-forward evaluation is run with `--model-generator elo`, the benchmark suite can populate `model_fair_value` internally for test cases even when the case payload itself does not include `model_fair_values`.
+
+When `model_blend_weight` is also present:
+
+- the benchmark reports a `blended_fair_value` baseline
+- the blend uses a logit combiner between sportsbook `fair_value` and `model_fair_value`
+- manifest records and evaluation rows can surface `blended_fair_value`
 
 ## `replay_case`
 
@@ -93,10 +111,12 @@ The replay schema mirrors the current `ReplayRiskConfig`, not the full live runt
 
 ## CLI contract
 
-- `prediction-market-sports-benchmark --fixture ...` accepts packaged fixture names shipped with the project
-- `prediction-market-sports-benchmark-suite --output-dir ...` runs the packaged multi-case suite
-- `python3 scripts/run_sports_benchmark.py --case /path/to/case.json` runs an explicit case file
-- `python3 scripts/run_sports_benchmark_suite.py --fixtures-dir /path/to/cases --output-dir ...` runs a directory of case files
+- `uv run --locked --extra research prediction-market-sports-benchmark --fixture ...` accepts packaged fixture names shipped with the project
+- `uv run --locked --extra research prediction-market-sports-benchmark-suite --output-dir ...` runs the packaged multi-case suite
+- `uv run --locked --extra research python3 scripts/run_sports_benchmark.py --case /path/to/case.json` runs an explicit case file
+- `uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py --fixtures-dir /path/to/cases --output-dir ...` runs a directory of case files
+- `uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py --dataset-root research/datasets --dataset-name benchmark-cases --dataset-version v1 --output-dir ...` runs a benchmark-case dataset snapshot
+- `uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py --dataset-root research/datasets --dataset-name benchmark-cases --dataset-version v1 --walk-forward --min-train-size 10 --test-size 5 --step-size 5 --output-dir ...` runs walk-forward evaluation over a dated benchmark-case snapshot
 
 ## Suite artifact contract
 
@@ -106,6 +126,13 @@ Suite artifacts are written as:
 - `benchmark_suite_summary.md`
 - `benchmark_suite_edge_ledger.json`
 - `cases/<safe-case-name>.json`
+
+Walk-forward suite artifacts additionally include:
+
+- `walk_forward_benchmark_summary.json`
+- `splits/<split-id>/...` per-split suite artifacts
+
+The root walk-forward summary records dataset provenance, split settings, pooled out-of-fold aggregate metrics across the split test reports, and artifact links for each split.
 
 The suite summary JSON currently exposes:
 

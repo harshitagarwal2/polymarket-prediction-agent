@@ -121,6 +121,71 @@ class BenchmarkSchemaTests(unittest.TestCase):
         self.assertEqual(len(case.fair_value_case.calibration_samples), 2)
         self.assertEqual(case.fair_value_case.calibration_bin_count, 2)
 
+    def test_model_fair_values_and_blend_weight_are_loaded_when_present(self):
+        payload = {
+            "name": "modeled-case",
+            "fair_value_case": {
+                "rows": [],
+                "model_fair_values": {
+                    "token-home:yes": 0.63,
+                    "token-home:no": 0.37,
+                },
+                "model_blend_weight": 0.4,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            case = load_benchmark_case(handle.name)
+
+        if case.fair_value_case is None:
+            self.fail("expected fair-value case")
+        self.assertEqual(
+            case.fair_value_case.model_fair_values,
+            {"token-home:yes": 0.63, "token-home:no": 0.37},
+        )
+        self.assertEqual(case.fair_value_case.model_blend_weight, 0.4)
+
+    def test_invalid_model_fair_value_fails_closed(self):
+        payload = {
+            "name": "invalid-case",
+            "fair_value_case": {
+                "rows": [],
+                "model_fair_values": {"token-home:yes": 1.1},
+            },
+        }
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"fair_value_case.model_fair_values\[token-home:yes\] must be between 0 and 1",
+            ):
+                load_benchmark_case(handle.name)
+
+    def test_invalid_model_blend_weight_fails_closed(self):
+        payload = {
+            "name": "invalid-case",
+            "fair_value_case": {
+                "rows": [],
+                "model_blend_weight": -0.01,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"fair_value_case.model_blend_weight must be between 0 and 1",
+            ):
+                load_benchmark_case(handle.name)
+
     def test_invalid_calibration_bin_count_fails_closed(self):
         payload = {
             "name": "invalid-case",

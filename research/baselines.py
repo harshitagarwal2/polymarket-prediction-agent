@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from engine.interfaces import NoopStrategy
+from research.blend import blend_binary_probabilities
 from research.fair_values import (
     BookAggregation,
     DevigMethod,
@@ -29,6 +30,7 @@ class FairValueBaselineReport:
     description: str
     forecast_score: ForecastScore | None = None
     skipped_reason: str | None = None
+    prediction_map: dict[str, float] | None = None
 
     def to_payload(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -39,6 +41,11 @@ class FairValueBaselineReport:
             payload["forecast_score"] = self.forecast_score.to_payload()
         if self.skipped_reason is not None:
             payload["skipped_reason"] = self.skipped_reason
+        if self.prediction_map is not None:
+            payload["prediction_map"] = {
+                market_key: float(probability)
+                for market_key, probability in self.prediction_map.items()
+            }
         return payload
 
 
@@ -68,6 +75,18 @@ def _safe_forecast_score(
     if not predictions or set(predictions) != set(labels):
         return None
     return score_binary_forecasts(predictions, labels)
+
+
+def _missing_label_keys_reason(
+    *,
+    predictions: dict[str, float],
+    labels: dict[str, int],
+    prefix: str,
+) -> str | None:
+    if set(predictions) == set(labels):
+        return None
+    missing = sorted(set(labels) - set(predictions))
+    return f"{prefix}: {', '.join(missing)}"
 
 
 def _market_midpoint_predictions(
@@ -117,6 +136,62 @@ def _build_bookmaker_baseline_predictions(
     return predictions, None
 
 
+def _build_model_baseline_predictions(
+    *,
+    case: FairValueBenchmarkCase,
+) -> tuple[dict[str, float] | None, str | None]:
+    if not case.model_fair_values:
+        return None, "case does not define model fair values"
+    predictions = {
+        market_key: float(probability)
+        for market_key, probability in case.model_fair_values.items()
+        if market_key in case.outcome_labels
+    }
+    skipped_reason = _missing_label_keys_reason(
+        predictions=predictions,
+        labels=case.outcome_labels,
+        prefix="missing labeled model fair values",
+    )
+    if skipped_reason is not None:
+        return None, skipped_reason
+    return predictions, None
+
+
+def _build_blended_baseline_predictions(
+    *,
+    case: FairValueBenchmarkCase,
+    resolved_rows: list[SportsbookFairValueRow],
+) -> tuple[dict[str, float] | None, str | None]:
+    if case.model_blend_weight is None:
+        return None, "case does not define model blend weight"
+    model_predictions, model_skipped_reason = _build_model_baseline_predictions(
+        case=case
+    )
+    if model_predictions is None:
+        return None, model_skipped_reason
+    sportsbook_predictions, sportsbook_skipped_reason = (
+        _build_bookmaker_baseline_predictions(
+            rows=resolved_rows,
+            method=case.devig_method,
+            aggregation=case.book_aggregation,
+            labels=case.outcome_labels,
+        )
+    )
+    if sportsbook_predictions is None:
+        return None, sportsbook_skipped_reason
+    return (
+        {
+            market_key: blend_binary_probabilities(
+                sportsbook_probability=sportsbook_predictions[market_key],
+                model_probability=model_predictions[market_key],
+                model_weight=case.model_blend_weight,
+            )
+            for market_key in case.outcome_labels
+        },
+        None,
+    )
+
+
 def evaluate_fair_value_baselines(
     *,
     case: FairValueBenchmarkCase,
@@ -163,6 +238,7 @@ def evaluate_fair_value_baselines(
                     else None
                 ),
                 skipped_reason=skipped_reason,
+                prediction_map=predictions,
             )
         )
 
@@ -182,6 +258,44 @@ def evaluate_fair_value_baselines(
                 if midpoint_score is not None
                 else "market snapshots do not provide complete midpoint coverage"
             ),
+            prediction_map=(
+                midpoint_predictions if midpoint_score is not None else None
+            ),
+        )
+    )
+
+    model_predictions, model_skipped_reason = _build_model_baseline_predictions(
+        case=case,
+    )
+    baselines.append(
+        FairValueBaselineReport(
+            name="model_fair_value",
+            description="Model-only baseline derived from case-provided model fair values.",
+            forecast_score=(
+                _safe_forecast_score(model_predictions, case.outcome_labels)
+                if model_predictions is not None
+                else None
+            ),
+            skipped_reason=model_skipped_reason,
+            prediction_map=model_predictions,
+        )
+    )
+
+    blended_predictions, blended_skipped_reason = _build_blended_baseline_predictions(
+        case=case,
+        resolved_rows=resolved_rows,
+    )
+    baselines.append(
+        FairValueBaselineReport(
+            name="blended_fair_value",
+            description="Logit blend of sportsbook fair values and case-provided model fair values.",
+            forecast_score=(
+                _safe_forecast_score(blended_predictions, case.outcome_labels)
+                if blended_predictions is not None
+                else None
+            ),
+            skipped_reason=blended_skipped_reason,
+            prediction_map=blended_predictions,
         )
     )
     return tuple(baselines)

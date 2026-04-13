@@ -1,10 +1,103 @@
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from research.replay import ReplayResult
+
+
+_DEFAULT_BOOTSTRAP_SEED = 1729
+
+
+def _coerce_finite_series(values: Sequence[float], *, name: str) -> tuple[float, ...]:
+    if not values:
+        raise ValueError(f"{name} must not be empty")
+    series = tuple(float(value) for value in values)
+    if any(not math.isfinite(value) for value in series):
+        raise ValueError(f"{name} must contain only finite values")
+    return series
+
+
+def _quantile(sorted_values: Sequence[float], probability: float) -> float:
+    if not sorted_values:
+        raise ValueError("sorted_values must not be empty")
+    if probability <= 0.0:
+        return float(sorted_values[0])
+    if probability >= 1.0:
+        return float(sorted_values[-1])
+    index = (len(sorted_values) - 1) * probability
+    lower_index = math.floor(index)
+    upper_index = math.ceil(index)
+    if lower_index == upper_index:
+        return float(sorted_values[lower_index])
+    lower_value = float(sorted_values[lower_index])
+    upper_value = float(sorted_values[upper_index])
+    weight = index - lower_index
+    return lower_value + ((upper_value - lower_value) * weight)
+
+
+@dataclass(frozen=True)
+class BootstrapMeanConfidenceInterval:
+    sample_count: int
+    sample_mean: float
+    confidence_level: float
+    lower_bound: float
+    upper_bound: float
+    statistic: str
+    interval_method: str
+    resample_count: int
+    seed: int
+
+    def to_payload(self) -> dict[str, float | int | str]:
+        return {
+            "sample_count": self.sample_count,
+            "sample_mean": self.sample_mean,
+            "confidence_level": self.confidence_level,
+            "lower_bound": self.lower_bound,
+            "upper_bound": self.upper_bound,
+            "statistic": self.statistic,
+            "interval_method": self.interval_method,
+            "resample_count": self.resample_count,
+            "seed": self.seed,
+        }
+
+
+@dataclass(frozen=True)
+class PairedLossComparison:
+    sample_count: int
+    mean_loss_differential: float
+    standard_error: float
+    test_statistic: float | None
+    p_value_two_sided: float | None
+    comparison_method: str
+    variance_estimator: str
+    null_hypothesis: str
+    alternative_hypothesis: str
+    assumptions: tuple[str, ...]
+    bootstrap_mean_confidence_interval: BootstrapMeanConfidenceInterval
+    comparison_note: str | None = None
+
+    def to_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "sample_count": self.sample_count,
+            "mean_loss_differential": self.mean_loss_differential,
+            "standard_error": self.standard_error,
+            "test_statistic": self.test_statistic,
+            "p_value_two_sided": self.p_value_two_sided,
+            "comparison_method": self.comparison_method,
+            "variance_estimator": self.variance_estimator,
+            "null_hypothesis": self.null_hypothesis,
+            "alternative_hypothesis": self.alternative_hypothesis,
+            "assumptions": list(self.assumptions),
+            "bootstrap_mean_confidence_interval": (
+                self.bootstrap_mean_confidence_interval.to_payload()
+            ),
+        }
+        if self.comparison_note is not None:
+            payload["comparison_note"] = self.comparison_note
+        return payload
 
 
 @dataclass(frozen=True)
@@ -77,6 +170,103 @@ class ReplayScore:
             "net_pnl": self.net_pnl,
             "return_pct": self.return_pct,
         }
+
+
+def bootstrap_mean_confidence_interval(
+    values: Sequence[float],
+    *,
+    confidence_level: float = 0.95,
+    resample_count: int = 5000,
+    seed: int = _DEFAULT_BOOTSTRAP_SEED,
+) -> BootstrapMeanConfidenceInterval:
+    series = _coerce_finite_series(values, name="values")
+    if confidence_level <= 0.0 or confidence_level >= 1.0:
+        raise ValueError("confidence_level must be between 0 and 1")
+    if resample_count <= 0:
+        raise ValueError("resample_count must be positive")
+
+    sample_count = len(series)
+    sample_mean = sum(series) / sample_count
+    rng = random.Random(seed)
+    bootstrap_means = sorted(
+        sum(series[rng.randrange(sample_count)] for _ in range(sample_count))
+        / sample_count
+        for _ in range(resample_count)
+    )
+    tail_probability = (1.0 - confidence_level) / 2.0
+    return BootstrapMeanConfidenceInterval(
+        sample_count=sample_count,
+        sample_mean=sample_mean,
+        confidence_level=confidence_level,
+        lower_bound=_quantile(bootstrap_means, tail_probability),
+        upper_bound=_quantile(bootstrap_means, 1.0 - tail_probability),
+        statistic="mean",
+        interval_method="percentile_bootstrap",
+        resample_count=resample_count,
+        seed=seed,
+    )
+
+
+def compare_paired_loss_differentials(
+    loss_differentials: Sequence[float],
+    *,
+    confidence_level: float = 0.95,
+    bootstrap_resample_count: int = 5000,
+    seed: int = _DEFAULT_BOOTSTRAP_SEED,
+) -> PairedLossComparison:
+    series = _coerce_finite_series(
+        loss_differentials,
+        name="loss_differentials",
+    )
+    sample_count = len(series)
+    mean_loss_differential = sum(series) / sample_count
+    if sample_count == 1:
+        standard_error = 0.0
+    else:
+        centered_sum = sum((value - mean_loss_differential) ** 2 for value in series)
+        sample_variance = centered_sum / (sample_count - 1)
+        standard_error = math.sqrt(sample_variance / sample_count)
+    if standard_error == 0.0:
+        if mean_loss_differential == 0.0:
+            test_statistic = 0.0
+            p_value_two_sided = 1.0
+            comparison_note = (
+                "all paired loss differentials are identical; the normal approximation "
+                "is degenerate"
+            )
+        else:
+            test_statistic = None
+            p_value_two_sided = None
+            comparison_note = (
+                "all paired loss differentials are identical; the normal-approximation "
+                "test statistic is omitted"
+            )
+    else:
+        test_statistic = mean_loss_differential / standard_error
+        p_value_two_sided = math.erfc(abs(test_statistic) / math.sqrt(2.0))
+        comparison_note = None
+    return PairedLossComparison(
+        sample_count=sample_count,
+        mean_loss_differential=mean_loss_differential,
+        standard_error=standard_error,
+        test_statistic=test_statistic,
+        p_value_two_sided=p_value_two_sided,
+        comparison_method="diebold_mariano_style_two_sided_normal_approximation",
+        variance_estimator="sample_variance_of_paired_loss_differentials",
+        null_hypothesis="mean_loss_differential_equals_zero",
+        alternative_hypothesis="mean_loss_differential_not_equal_zero",
+        assumptions=(
+            "paired loss differentials are treated as approximately iid",
+            "normal approximation is applied to the mean loss differential",
+        ),
+        bootstrap_mean_confidence_interval=bootstrap_mean_confidence_interval(
+            series,
+            confidence_level=confidence_level,
+            resample_count=bootstrap_resample_count,
+            seed=seed,
+        ),
+        comparison_note=comparison_note,
+    )
 
 
 def score_binary_forecasts(

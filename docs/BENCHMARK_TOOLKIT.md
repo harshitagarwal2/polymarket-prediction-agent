@@ -53,11 +53,14 @@ Checked-in example suite output:
 
 ## Quick start
 
-After `pip install -e ".[research]"`, run either form.
+After `uv sync --locked --extra research`, run either form.
+
+If you do not activate `.venv`, prefix direct console entrypoints with `uv run --locked --extra research ...`.
 
 Canonical local reproduction path:
 
 ```bash
+make sync-research
 make reproduce
 ```
 
@@ -71,19 +74,19 @@ docker run --rm polymarket-prediction-agent:v0.1.0
 Single packaged fixture:
 
 ```bash
-prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
+uv run --locked --extra research prediction-market-sports-benchmark --fixture sports_benchmark_tiny.json
 ```
 
 Equivalent script form:
 
 ```bash
-python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
+uv run --locked --extra research python3 scripts/run_sports_benchmark.py --fixture sports_benchmark_tiny.json
 ```
 
 Write both report and manifest:
 
 ```bash
-python3 scripts/run_sports_benchmark.py \
+uv run --locked --extra research python3 scripts/run_sports_benchmark.py \
   --fixture sports_benchmark_tiny.json \
   --output runtime/sports_benchmark_report.json \
   --write-manifest runtime/sports_benchmark_manifest.json
@@ -92,7 +95,7 @@ python3 scripts/run_sports_benchmark.py \
 Run the packaged suite:
 
 ```bash
-prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
+uv run --locked --extra research prediction-market-sports-benchmark-suite --output-dir runtime/benchmark-suite
 ```
 
 ## Fair-value lane
@@ -104,7 +107,11 @@ The fair-value lane currently supports:
 - `independent` and `best-line` bookmaker aggregation
 - fail-closed expected market-key checks
 - fail-closed labeled-outcome checks
+- optional `model_fair_values` inputs for model-only fair-value baselines
+- optional `model_blend_weight` for logit-combined blended fair values
 - optional calibration samples that produce calibrated probabilities and before-versus-after metrics
+
+Walk-forward suites also support `--model-generator elo`, which fits Elo ratings from prior benchmark cases in each training window and injects generated `model_fair_value` probabilities into future-window test cases.
 
 When calibration is present, the benchmark report includes:
 
@@ -113,6 +120,12 @@ When calibration is present, the benchmark report includes:
 - calibration artifact payload
 - calibrated market probabilities
 - per-market raw and calibrated evaluation rows
+
+When model inputs are present, the fair-value report can also include:
+
+- `model_fair_value` and `blended_fair_value` baseline scores
+- per-market `model_fair_value` / `blended_fair_value` values in the manifest payload
+- per-market model/blended evaluation columns in the fair-value report and suite edge ledger
 
 That same calibrated value can be carried into runtime manifests through `calibrated_fair_value`, while preserving the original raw `fair_value`.
 

@@ -4,9 +4,15 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping, Sequence, Union
 
 from engine.strategies import FairValueBandStrategy
-from research.calibration import fit_histogram_calibrator
+from research.blend import blend_binary_probabilities
+from research.calibration import (
+    HistogramCalibrator,
+    fit_histogram_calibrator,
+    load_calibration_artifact,
+)
 from research.baselines import (
     FairValueBaselineReport,
     ReplayBaselineReport,
@@ -29,6 +35,14 @@ from research.scoring import (
     score_replay_result,
 )
 from risk.limits import RiskEngine, RiskLimits, RiskState
+
+CalibrationArtifactSource = Union[
+    HistogramCalibrator,
+    Mapping[str, object],
+    Sequence[Mapping[str, object]],
+    str,
+    Path,
+]
 
 
 @dataclass(frozen=True)
@@ -54,6 +68,18 @@ class FairValueEvaluationRow:
     sports_market_type: str | None = None
     source: str | None = None
     match_strategy: str | None = None
+    model_fair_value: float | None = None
+    model_fair_value_minus_outcome: float | None = None
+    model_absolute_error: float | None = None
+    model_brier_error: float | None = None
+    model_log_loss: float | None = None
+    model_correct: bool | None = None
+    blended_fair_value: float | None = None
+    blended_fair_value_minus_outcome: float | None = None
+    blended_absolute_error: float | None = None
+    blended_brier_error: float | None = None
+    blended_log_loss: float | None = None
+    blended_correct: bool | None = None
     calibrated_fair_value: float | None = None
     calibrated_fair_value_minus_outcome: float | None = None
     calibrated_absolute_error: float | None = None
@@ -86,6 +112,18 @@ class FairValueEvaluationRow:
             "sports_market_type": self.sports_market_type,
             "source": self.source,
             "match_strategy": self.match_strategy,
+            "model_fair_value": self.model_fair_value,
+            "model_fair_value_minus_outcome": self.model_fair_value_minus_outcome,
+            "model_absolute_error": self.model_absolute_error,
+            "model_brier_error": self.model_brier_error,
+            "model_log_loss": self.model_log_loss,
+            "model_correct": self.model_correct,
+            "blended_fair_value": self.blended_fair_value,
+            "blended_fair_value_minus_outcome": self.blended_fair_value_minus_outcome,
+            "blended_absolute_error": self.blended_absolute_error,
+            "blended_brier_error": self.blended_brier_error,
+            "blended_log_loss": self.blended_log_loss,
+            "blended_correct": self.blended_correct,
             "calibrated_fair_value": self.calibrated_fair_value,
             "calibrated_fair_value_minus_outcome": self.calibrated_fair_value_minus_outcome,
             "calibrated_absolute_error": self.calibrated_absolute_error,
@@ -256,10 +294,80 @@ def _binary_log_loss(*, prediction: float, outcome: int) -> float:
     )
 
 
+def _binary_probability_metrics(
+    *,
+    prediction: float,
+    outcome: int,
+) -> tuple[float, float, float, float, bool]:
+    prediction_minus_outcome = prediction - outcome
+    return (
+        prediction_minus_outcome,
+        abs(prediction_minus_outcome),
+        prediction_minus_outcome**2,
+        _binary_log_loss(prediction=prediction, outcome=outcome),
+        (prediction >= 0.5) == bool(outcome),
+    )
+
+
+def _build_model_market_probabilities(
+    case: FairValueBenchmarkCase,
+    resolved_market_keys: tuple[str, ...],
+) -> dict[str, float]:
+    return {
+        market_key: float(probability)
+        for market_key, probability in case.model_fair_values.items()
+        if market_key in resolved_market_keys
+    }
+
+
+def _build_blended_market_probabilities(
+    *,
+    manifest_probabilities: dict[str, float],
+    model_market_probabilities: dict[str, float],
+    model_blend_weight: float | None,
+) -> dict[str, float]:
+    if model_blend_weight is None:
+        return {}
+    return {
+        market_key: blend_binary_probabilities(
+            sportsbook_probability=sportsbook_probability,
+            model_probability=model_market_probabilities[market_key],
+            model_weight=model_blend_weight,
+        )
+        for market_key, sportsbook_probability in manifest_probabilities.items()
+        if market_key in model_market_probabilities
+    }
+
+
+def _enrich_manifest_payload_with_optional_probabilities(
+    *,
+    manifest_payload: dict[str, object],
+    model_market_probabilities: dict[str, float],
+    blended_market_probabilities: dict[str, float],
+) -> dict[str, object]:
+    manifest_values = manifest_payload.get("values")
+    if not isinstance(manifest_values, dict):
+        return manifest_payload
+    for market_key, record in manifest_values.items():
+        if not isinstance(record, dict):
+            continue
+        if market_key in model_market_probabilities:
+            record["model_fair_value"] = _json_float(
+                model_market_probabilities[market_key]
+            )
+        if market_key in blended_market_probabilities:
+            record["blended_fair_value"] = _json_float(
+                blended_market_probabilities[market_key]
+            )
+    return manifest_payload
+
+
 def _build_fair_value_evaluation_rows(
     *,
     manifest_values: dict[str, dict[str, object]],
     outcome_labels: dict[str, int],
+    model_market_probabilities: dict[str, float] | None = None,
+    blended_market_probabilities: dict[str, float] | None = None,
     calibrated_market_probabilities: dict[str, float] | None = None,
 ) -> tuple[FairValueEvaluationRow, ...]:
     rows: list[FairValueEvaluationRow] = []
@@ -267,7 +375,58 @@ def _build_fair_value_evaluation_rows(
         record = manifest_values[market_key]
         outcome_label = int(outcome_labels[market_key])
         fair_value = _coerce_probability(record)
-        fair_value_minus_outcome = fair_value - outcome_label
+        (
+            fair_value_minus_outcome,
+            absolute_error,
+            brier_error,
+            log_loss,
+            correct,
+        ) = _binary_probability_metrics(
+            prediction=fair_value,
+            outcome=outcome_label,
+        )
+        model_fair_value = None
+        model_fair_value_minus_outcome = None
+        model_absolute_error = None
+        model_brier_error = None
+        model_log_loss = None
+        model_correct = None
+        if (
+            model_market_probabilities is not None
+            and market_key in model_market_probabilities
+        ):
+            model_fair_value = float(model_market_probabilities[market_key])
+            (
+                model_fair_value_minus_outcome,
+                model_absolute_error,
+                model_brier_error,
+                model_log_loss,
+                model_correct,
+            ) = _binary_probability_metrics(
+                prediction=model_fair_value,
+                outcome=outcome_label,
+            )
+        blended_fair_value = None
+        blended_fair_value_minus_outcome = None
+        blended_absolute_error = None
+        blended_brier_error = None
+        blended_log_loss = None
+        blended_correct = None
+        if (
+            blended_market_probabilities is not None
+            and market_key in blended_market_probabilities
+        ):
+            blended_fair_value = float(blended_market_probabilities[market_key])
+            (
+                blended_fair_value_minus_outcome,
+                blended_absolute_error,
+                blended_brier_error,
+                blended_log_loss,
+                blended_correct,
+            ) = _binary_probability_metrics(
+                prediction=blended_fair_value,
+                outcome=outcome_label,
+            )
         calibrated_fair_value = None
         calibrated_fair_value_minus_outcome = None
         calibrated_absolute_error = None
@@ -276,27 +435,26 @@ def _build_fair_value_evaluation_rows(
         calibrated_correct = None
         if calibrated_market_probabilities is not None:
             calibrated_fair_value = float(calibrated_market_probabilities[market_key])
-            calibrated_fair_value_minus_outcome = calibrated_fair_value - outcome_label
-            calibrated_absolute_error = abs(calibrated_fair_value_minus_outcome)
-            calibrated_brier_error = calibrated_fair_value_minus_outcome**2
-            calibrated_log_loss = _binary_log_loss(
+            (
+                calibrated_fair_value_minus_outcome,
+                calibrated_absolute_error,
+                calibrated_brier_error,
+                calibrated_log_loss,
+                calibrated_correct,
+            ) = _binary_probability_metrics(
                 prediction=calibrated_fair_value,
                 outcome=outcome_label,
             )
-            calibrated_correct = (calibrated_fair_value >= 0.5) == bool(outcome_label)
         rows.append(
             FairValueEvaluationRow(
                 market_key=market_key,
                 outcome_label=outcome_label,
                 fair_value=fair_value,
                 fair_value_minus_outcome=fair_value_minus_outcome,
-                absolute_error=abs(fair_value_minus_outcome),
-                brier_error=fair_value_minus_outcome**2,
-                log_loss=_binary_log_loss(
-                    prediction=fair_value,
-                    outcome=outcome_label,
-                ),
-                correct=(fair_value >= 0.5) == bool(outcome_label),
+                absolute_error=absolute_error,
+                brier_error=brier_error,
+                log_loss=log_loss,
+                correct=correct,
                 bookmaker=(
                     str(record["bookmaker"])
                     if record.get("bookmaker") is not None
@@ -356,6 +514,18 @@ def _build_fair_value_evaluation_rows(
                     if record.get("match_strategy") is not None
                     else None
                 ),
+                model_fair_value=model_fair_value,
+                model_fair_value_minus_outcome=model_fair_value_minus_outcome,
+                model_absolute_error=model_absolute_error,
+                model_brier_error=model_brier_error,
+                model_log_loss=model_log_loss,
+                model_correct=model_correct,
+                blended_fair_value=blended_fair_value,
+                blended_fair_value_minus_outcome=blended_fair_value_minus_outcome,
+                blended_absolute_error=blended_absolute_error,
+                blended_brier_error=blended_brier_error,
+                blended_log_loss=blended_log_loss,
+                blended_correct=blended_correct,
                 calibrated_fair_value=calibrated_fair_value,
                 calibrated_fair_value_minus_outcome=calibrated_fair_value_minus_outcome,
                 calibrated_absolute_error=calibrated_absolute_error,
@@ -367,7 +537,21 @@ def _build_fair_value_evaluation_rows(
     return tuple(rows)
 
 
-def run_fair_value_benchmark(case: FairValueBenchmarkCase) -> FairValueBenchmarkReport:
+def _resolve_prefit_calibrator(
+    prefit_calibration: CalibrationArtifactSource | None,
+) -> HistogramCalibrator | None:
+    if prefit_calibration is None:
+        return None
+    if isinstance(prefit_calibration, HistogramCalibrator):
+        return prefit_calibration
+    return load_calibration_artifact(prefit_calibration)
+
+
+def run_fair_value_benchmark(
+    case: FairValueBenchmarkCase,
+    *,
+    prefit_calibration: CalibrationArtifactSource | None = None,
+) -> FairValueBenchmarkReport:
     rows = case.materialize_rows()
     resolved_rows = rows
     skipped_rows: list[dict[str, object]] = []
@@ -394,11 +578,26 @@ def run_fair_value_benchmark(case: FairValueBenchmarkCase) -> FairValueBenchmark
     skipped_groups = list(manifest.skipped_groups)
 
     manifest_probabilities = _manifest_probability_map(manifest.values)
+    model_market_probabilities = _build_model_market_probabilities(
+        case,
+        resolved_market_keys,
+    )
+    blended_market_probabilities = _build_blended_market_probabilities(
+        manifest_probabilities=manifest_probabilities,
+        model_market_probabilities=model_market_probabilities,
+        model_blend_weight=case.model_blend_weight,
+    )
+    manifest_payload = _enrich_manifest_payload_with_optional_probabilities(
+        manifest_payload=manifest_payload,
+        model_market_probabilities=model_market_probabilities,
+        blended_market_probabilities=blended_market_probabilities,
+    )
     forecast_score = None
     calibrated_forecast_score = None
     calibration_payload = None
     calibrated_market_probabilities: dict[str, float] | None = None
     evaluation_rows: tuple[FairValueEvaluationRow, ...] = ()
+    calibrator = _resolve_prefit_calibrator(prefit_calibration)
     if case.outcome_labels:
         _ensure_outcome_labels_resolved(
             outcome_labels=case.outcome_labels,
@@ -413,18 +612,22 @@ def run_fair_value_benchmark(case: FairValueBenchmarkCase) -> FairValueBenchmark
             case.outcome_labels,
         )
 
-    if case.calibration_samples:
+    if calibrator is None and case.calibration_samples:
         calibrator = fit_histogram_calibrator(
             case.calibration_samples,
             bin_count=case.calibration_bin_count,
         )
+    if calibrator is not None:
         calibrated_market_probabilities = calibrator.apply_mapping(
             manifest_probabilities
         )
         calibration_payload = {
-            "sample_count": len(case.calibration_samples),
+            "sample_count": calibrator.sample_count,
             "artifact": calibrator.to_payload(),
             "calibrated_market_probabilities": calibrated_market_probabilities,
+            "source": "prefit"
+            if prefit_calibration is not None
+            else "case_calibration_samples",
         }
         if forecast_score is not None:
             calibrated_predictions = {
@@ -455,6 +658,8 @@ def run_fair_value_benchmark(case: FairValueBenchmarkCase) -> FairValueBenchmark
         evaluation_rows = _build_fair_value_evaluation_rows(
             manifest_values=manifest.values,
             outcome_labels=case.outcome_labels,
+            model_market_probabilities=model_market_probabilities,
+            blended_market_probabilities=blended_market_probabilities,
             calibrated_market_probabilities=calibrated_market_probabilities,
         )
 
@@ -515,12 +720,19 @@ def run_replay_benchmark(case: ReplayBenchmarkCase) -> ReplayBenchmarkReport:
     )
 
 
-def run_benchmark_case(case: SportsBenchmarkCase) -> SportsBenchmarkReport:
+def run_benchmark_case(
+    case: SportsBenchmarkCase,
+    *,
+    prefit_calibration: CalibrationArtifactSource | None = None,
+) -> SportsBenchmarkReport:
     return SportsBenchmarkReport(
         case_name=case.name,
         description=case.description,
         fair_value_report=(
-            run_fair_value_benchmark(case.fair_value_case)
+            run_fair_value_benchmark(
+                case.fair_value_case,
+                prefit_calibration=prefit_calibration,
+            )
             if case.fair_value_case is not None
             else None
         ),
@@ -532,8 +744,15 @@ def run_benchmark_case(case: SportsBenchmarkCase) -> SportsBenchmarkReport:
     )
 
 
-def load_and_run_benchmark_case(path: str | Path) -> SportsBenchmarkReport:
-    return run_benchmark_case(load_benchmark_case(path))
+def load_and_run_benchmark_case(
+    path: str | Path,
+    *,
+    prefit_calibration: CalibrationArtifactSource | None = None,
+) -> SportsBenchmarkReport:
+    return run_benchmark_case(
+        load_benchmark_case(path),
+        prefit_calibration=prefit_calibration,
+    )
 
 
 def write_benchmark_report(

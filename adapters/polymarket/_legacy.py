@@ -32,6 +32,11 @@ from adapters.types import (
     PriceLevel,
     Venue,
 )
+from . import clob_client
+from . import gamma_client
+from . import normalize
+from . import ws_market
+from . import ws_user
 
 
 @dataclass
@@ -515,170 +520,40 @@ class PolymarketAdapter:
             return self._heartbeat_status_locked()
 
     def _configure_client_timeout(self) -> None:
-        try:
-            helpers = importlib.import_module("py_clob_client.http_helpers.helpers")
-            httpx = importlib.import_module("httpx")
-        except ImportError:
-            return
-        http_client = getattr(helpers, "_http_client", None)
-        if http_client is None:
-            return
-        http_client.timeout = httpx.Timeout(self.config.request_timeout_seconds)
+        clob_client.configure_client_timeout(self)
 
     def _parse_datetime_value(self, value: Any) -> datetime | None:
-        if value in (None, ""):
-            return None
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, (int, float)):
-            timestamp = float(value)
-            if timestamp > 1_000_000_000_000:
-                timestamp /= 1000.0
-            return datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        text = str(value).strip()
-        if not text:
-            return None
-        try:
-            numeric = float(text)
-        except ValueError:
-            numeric = None
-        if numeric is not None:
-            if numeric > 1_000_000_000_000:
-                numeric /= 1000.0
-            return datetime.fromtimestamp(numeric, tz=timezone.utc)
-        try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00"))
-        except ValueError:
-            return None
+        return normalize.parse_datetime_value(value)
 
     def _raw_order_timestamp(
         self, order: dict[str, Any], *keys: str
     ) -> datetime | None:
-        for key in keys:
-            parsed = self._parse_datetime_value(order.get(key))
-            if parsed is not None:
-                return parsed
-        return None
+        return normalize.raw_order_timestamp(self, order, *keys)
 
     def _stable_order_times(
         self, order_id: str, order: dict[str, Any]
     ) -> tuple[datetime, datetime]:
-        now = datetime.now(timezone.utc)
-        created_at = self._raw_order_timestamp(
-            order,
-            "created_at",
-            "createdAt",
-            "created_time",
-            "createdTime",
-            "placed_at",
-            "placedAt",
-            "timestamp",
-        )
-        if created_at is None:
-            created_at = self._open_order_first_seen_at.get(order_id)
-        if created_at is None:
-            created_at = now
-        self._open_order_first_seen_at[order_id] = created_at
-        updated_at = self._raw_order_timestamp(
-            order,
-            "updated_at",
-            "updatedAt",
-            "last_update_time",
-            "lastUpdateTime",
-            "timestamp",
-        )
-        if updated_at is None:
-            updated_at = now
-        return created_at, updated_at
+        return normalize.stable_order_times(self, order_id, order)
 
     def _raw_live_event_time(self, payload: dict[str, Any]) -> datetime | None:
-        return self._parse_datetime_value(payload.get("__live_event_at"))
+        return normalize.raw_live_event_time(payload)
 
     def _live_order_event_time(
         self, order: dict[str, Any], observed_at: datetime
     ) -> datetime:
-        return (
-            self._raw_order_timestamp(
-                order,
-                "updated_at",
-                "updatedAt",
-                "last_update_time",
-                "lastUpdateTime",
-                "timestamp",
-                "created_at",
-                "createdAt",
-            )
-            or observed_at
-        )
+        return normalize.live_order_event_time(self, order, observed_at)
 
     def _order_condition_id(self, order: dict[str, Any]) -> str | None:
-        for key in (
-            "condition_id",
-            "conditionId",
-            "market",
-            "market_id",
-            "marketId",
-        ):
-            value = order.get(key)
-            if value not in (None, ""):
-                return str(value)
-        symbol = order.get("asset_id") or order.get("token_id")
-        if symbol not in (None, ""):
-            return self._condition_id_by_token.get(str(symbol))
-        return None
+        return normalize.order_condition_id(self, order)
 
     def _fill_condition_id(self, trade: dict[str, Any]) -> str | None:
-        for key in (
-            "condition_id",
-            "conditionId",
-            "market",
-            "market_id",
-            "marketId",
-        ):
-            value = trade.get(key)
-            if value not in (None, ""):
-                return str(value)
-        symbol = (
-            trade.get("asset_id")
-            or trade.get("assetId")
-            or trade.get("token_id")
-            or trade.get("tokenId")
-        )
-        if symbol not in (None, ""):
-            return self._condition_id_by_token.get(str(symbol))
-        return None
+        return normalize.fill_condition_id(self, trade)
 
     def _cache_condition_mapping(self, symbol: str, condition_id: str | None) -> None:
-        if condition_id in (None, ""):
-            return
-        self._condition_id_by_token[str(symbol)] = str(condition_id)
+        normalize.cache_condition_mapping(self, symbol, condition_id)
 
     def _live_state_subscription_markets(self) -> tuple[str, ...]:
-        configured_markets = {
-            str(item) for item in (self.config.live_user_markets or []) if str(item)
-        }
-        mapped_markets = {
-            market for market in self._condition_id_by_token.values() if market
-        }
-        order_markets = {
-            market
-            for market in (
-                self._order_condition_id(order)
-                for order in self._live_state_orders_raw.values()
-            )
-            if market is not None
-        }
-        fill_markets = {
-            market
-            for market in (
-                self._fill_condition_id(trade)
-                for trade in self._live_state_fills_raw.values()
-            )
-            if market is not None
-        }
-        return tuple(
-            sorted(configured_markets | mapped_markets | order_markets | fill_markets)
-        )
+        return normalize.live_state_subscription_markets(self)
 
     def _live_state_bootstrap(self) -> tuple[str, ...]:
         observed_at = datetime.now(timezone.utc)
@@ -716,116 +591,22 @@ class PolymarketAdapter:
     def _normalize_open_orders(
         self, raw_orders: list[dict[str, Any]], contract: Contract | None = None
     ) -> list[NormalizedOrder]:
-        normalized: list[NormalizedOrder] = []
-        seen_order_ids: set[str] = set()
-        for order in raw_orders:
-            order_id_value = (
-                order.get("id") or order.get("orderID") or order.get("order_id")
-            )
-            if order_id_value in (None, ""):
-                continue
-            order_id = str(order_id_value)
-            created_at, updated_at = self._stable_order_times(order_id, order)
-            seen_order_ids.add(order_id)
-            symbol = (
-                order.get("asset_id")
-                or order.get("token_id")
-                or (contract.symbol if contract else "unknown")
-            )
-            quantity = self._open_order_quantity(order)
-            remaining_quantity = self._open_order_remaining_quantity(order, quantity)
-            normalized_contract = Contract(
-                venue=self.venue,
-                symbol=str(symbol),
-                outcome=contract.outcome
-                if contract
-                else Contract(self.venue, str(symbol)).outcome,
-            )
-            normalized.append(
-                NormalizedOrder(
-                    order_id=order_id,
-                    contract=normalized_contract,
-                    action=OrderAction.BUY
-                    if str(order.get("side", "BUY")).upper() == "BUY"
-                    else OrderAction.SELL,
-                    price=float(order.get("price", 0.0)),
-                    quantity=quantity,
-                    remaining_quantity=remaining_quantity,
-                    status=self._open_order_status(order, quantity, remaining_quantity),
-                    created_at=created_at,
-                    updated_at=updated_at,
-                    post_only=bool(
-                        order.get("postOnly", order.get("post_only", False))
-                    ),
-                    expiration_ts=(
-                        int(order["expiration"])
-                        if order.get("expiration") not in (None, "")
-                        else None
-                    ),
-                    raw=order,
-                )
-            )
-        self._open_order_first_seen_at = {
-            order_id: created_at
-            for order_id, created_at in self._open_order_first_seen_at.items()
-            if order_id in seen_order_ids
-        }
-        if contract is None:
-            return normalized
-        return [
-            order for order in normalized if order.contract.symbol == contract.symbol
-        ]
+        return normalize.normalize_open_orders(self, raw_orders, contract)
 
     def _retryable_status_code(self, status_code: int | None) -> bool:
-        if status_code is None:
-            return False
-        return status_code in {425, 429} or 500 <= status_code < 600
+        return clob_client.retryable_status_code(status_code)
 
     def _exception_status_code(self, exc: Exception) -> int | None:
-        status_code = getattr(exc, "status_code", None)
-        if isinstance(status_code, int):
-            return status_code
-        if isinstance(exc, HTTPError):
-            return int(exc.code)
-        return None
+        return clob_client.exception_status_code(exc)
 
     def _is_retryable_error(self, exc: Exception) -> bool:
-        status_code = self._exception_status_code(exc)
-        if self._retryable_status_code(status_code):
-            return True
-        if status_code is not None:
-            return False
-        if exc.__class__.__name__ == "PolyApiException":
-            return True
-        if isinstance(exc, (TimeoutError, socket.timeout, ConnectionError, URLError)):
-            return True
-        return False
+        return clob_client.is_retryable_error(exc)
 
     def _call_with_retry(self, operation: str, func, *args, **kwargs):
-        attempts = max(1, self.config.retry_max_attempts)
-        backoff = max(0.0, self.config.retry_backoff_seconds)
-        multiplier = max(1.0, self.config.retry_backoff_multiplier)
-        max_backoff = max(backoff, self.config.retry_max_backoff_seconds)
-        last_error: Exception | None = None
-
-        for attempt in range(1, attempts + 1):
-            try:
-                return func(*args, **kwargs)
-            except Exception as exc:
-                last_error = exc
-                if attempt >= attempts or not self._is_retryable_error(exc):
-                    raise
-                time.sleep(min(backoff, max_backoff))
-                backoff = min(max_backoff, backoff * multiplier)
-
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError(f"{operation} failed without returning or raising")
+        return clob_client.call_with_retry(self, operation, func, *args, **kwargs)
 
     def _call_client(self, operation: str, method_name: str, *args, **kwargs):
-        client = self._ensure_client()
-        method = getattr(client, method_name)
-        return self._call_with_retry(operation, method, *args, **kwargs)
+        return clob_client.call_client(self, operation, method_name, *args, **kwargs)
 
     def _set_live_orders_cache(
         self,
@@ -852,48 +633,7 @@ class PolymarketAdapter:
             self._live_state_markets = self._live_state_subscription_markets()
 
     def _fill_cache_key(self, trade: dict[str, Any]) -> str | None:
-        for key in (
-            "fill_id",
-            "fillId",
-            "id",
-            "trade_id",
-            "tradeId",
-            "match_id",
-            "matchId",
-        ):
-            value = trade.get(key)
-            if value not in (None, ""):
-                return str(value)
-        order_id = self._fill_order_id(trade)
-        symbol = (
-            trade.get("asset_id")
-            or trade.get("assetId")
-            or trade.get("token_id")
-            or trade.get("tokenId")
-            or ""
-        )
-        size = (
-            trade.get("size")
-            or trade.get("quantity")
-            or trade.get("filled_size")
-            or trade.get("filledSize")
-            or ""
-        )
-        price = trade.get("price")
-        timestamp = self._raw_fill_timestamp(
-            trade,
-            "timestamp",
-            "created_at",
-            "createdAt",
-            "created_time",
-            "createdTime",
-        )
-        if order_id or symbol or price not in (None, "") or size not in (None, ""):
-            return (
-                f"{order_id}:{symbol}:{trade.get('side') or ''}:{price or ''}:"
-                f"{size}:{timestamp.isoformat() if timestamp is not None else ''}"
-            )
-        return None
+        return normalize.fill_cache_key(self, trade)
 
     def _set_live_fills_cache(
         self,
@@ -1298,67 +1038,14 @@ class PolymarketAdapter:
         )
 
     def _open_order_quantity(self, order: dict[str, Any]) -> float:
-        for key in ("original_size", "originalSize", "initial_size", "initialSize"):
-            if order.get(key) not in (None, ""):
-                return max(0.0, self._parse_quantity(order.get(key)))
-        remaining_quantity = None
-        for key in (
-            "remaining_size",
-            "remainingSize",
-            "size_left",
-            "sizeLeft",
-            "unfilled_size",
-            "unfilledSize",
-        ):
-            if order.get(key) not in (None, ""):
-                remaining_quantity = max(0.0, self._parse_quantity(order.get(key)))
-                break
-        matched_quantity = None
-        for key in (
-            "matched_size",
-            "matchedSize",
-            "size_matched",
-            "filled_size",
-            "filledSize",
-        ):
-            if order.get(key) not in (None, ""):
-                matched_quantity = max(0.0, self._parse_quantity(order.get(key)))
-                break
-        if remaining_quantity is not None and matched_quantity is not None:
-            return remaining_quantity + matched_quantity
-        if order.get("size") not in (None, ""):
-            return max(0.0, self._parse_quantity(order.get("size")))
-        if order.get("quantity") not in (None, ""):
-            return max(0.0, self._parse_quantity(order.get("quantity")))
-        if remaining_quantity is not None:
-            return remaining_quantity
-        return 0.0
+        return normalize.open_order_quantity(self, order)
 
     def _open_order_remaining_quantity(
         self,
         order: dict[str, Any],
         quantity: float,
     ) -> float:
-        for key in (
-            "remaining_size",
-            "remainingSize",
-            "size_left",
-            "sizeLeft",
-            "unfilled_size",
-            "unfilledSize",
-        ):
-            if order.get(key) not in (None, ""):
-                return min(max(0.0, self._parse_quantity(order.get(key))), quantity)
-        for key in (
-            "matched_size",
-            "matchedSize",
-            "size_matched",
-            "filled_size",
-            "filledSize",
-        ):
-            if order.get(key) not in (None, ""):
-                return max(0.0, quantity - self._parse_quantity(order.get(key)))
-        return max(0.0, quantity)
+        return normalize.open_order_remaining_quantity(self, order, quantity)
 
     def _open_order_status(
         self,
@@ -1366,47 +1053,7 @@ class PolymarketAdapter:
         quantity: float,
         remaining_quantity: float,
     ) -> OrderStatus:
-        status_value = (
-            order.get("status")
-            or order.get("order_status")
-            or order.get("orderStatus")
-            or order.get("state")
-        )
-        if status_value is not None:
-            normalized = str(status_value).strip().lower()
-            if normalized.startswith("order_status_"):
-                normalized = normalized.removeprefix("order_status_")
-            if normalized in {"live", "resting", "open", "booked", "unmatched"}:
-                return OrderStatus.RESTING
-            if normalized in {"pending", "queued", "accepted", "processing"}:
-                return OrderStatus.PENDING
-            if normalized in {
-                "partial",
-                "partially_filled",
-                "partially-filled",
-                "partially matched",
-                "partially_matched",
-                "matched_partially",
-            }:
-                return OrderStatus.PARTIALLY_FILLED
-            if normalized in {"filled", "matched", "complete", "completed"}:
-                return OrderStatus.FILLED
-            if (
-                normalized in {"cancelled", "canceled"}
-                or normalized.startswith("canceled_")
-                or normalized.startswith("cancelled_")
-            ):
-                return OrderStatus.CANCELLED
-            if normalized in {"rejected", "error", "failed"} or normalized.startswith(
-                "rejected_"
-            ):
-                return OrderStatus.REJECTED
-        matched = max(0.0, quantity - remaining_quantity)
-        if matched > 0.0:
-            if remaining_quantity > 0.0:
-                return OrderStatus.PARTIALLY_FILLED
-            return OrderStatus.FILLED
-        return OrderStatus.RESTING
+        return normalize.open_order_status(order, quantity, remaining_quantity)
 
     def _refresh_live_fills_cache(self, *, observed_at: datetime | None = None) -> None:
         self._set_live_fills_cache(
@@ -1469,306 +1116,61 @@ class PolymarketAdapter:
             self._live_state_last_error = str(exc)
 
     def _live_state_auth_payload(self) -> dict[str, str]:
-        client = self._ensure_client()
-        creds = getattr(client, "creds", None)
-        if creds is None:
-            raise RuntimeError("Polymarket API credentials are unavailable for user WS")
-        return {
-            "apiKey": str(creds.api_key),
-            "secret": str(creds.api_secret),
-            "passphrase": str(creds.api_passphrase),
-        }
+        return ws_user.live_state_auth_payload(self)
 
     def _live_state_subscription_payload(
         self, markets: tuple[str, ...]
     ) -> dict[str, Any]:
-        return {
-            "type": "user",
-            "auth": self._live_state_auth_payload(),
-            "markets": list(markets),
-        }
+        return ws_user.live_state_subscription_payload(self, markets)
 
     def _market_state_subscription_assets(self) -> tuple[str, ...]:
-        configured = {
-            str(asset) for asset in (self.config.live_market_assets or []) if str(asset)
-        }
-        return tuple(sorted(configured | self._market_state_tracked_assets))
+        return ws_market.market_state_subscription_assets(self)
 
     def _market_state_subscription_payload(
         self, assets: tuple[str, ...]
     ) -> dict[str, Any]:
-        return {
-            "type": "market",
-            "assets_ids": list(assets),
-            "custom_feature_enabled": True,
-            "initial_dump": True,
-            "level": 2,
-        }
+        return ws_market.market_state_subscription_payload(self, assets)
 
     def _connect_live_market_websocket(self):
-        try:
-            ws_module = importlib.import_module("websockets.sync.client")
-            connect = getattr(ws_module, "connect")
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError(
-                "websockets is required for Polymarket live market state support"
-            ) from exc
-        return connect(
-            self.config.market_ws_host,
-            open_timeout=self.config.request_timeout_seconds,
-        )
+        return ws_market.connect_live_market_websocket(self)
 
     def _connect_live_user_websocket(self):
-        try:
-            ws_module = importlib.import_module("websockets.sync.client")
-            connect = getattr(ws_module, "connect")
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError(
-                "websockets is required for Polymarket live user state support"
-            ) from exc
-        return connect(
-            self.config.user_ws_host,
-            open_timeout=self.config.request_timeout_seconds,
-        )
+        return ws_user.connect_live_user_websocket(self)
 
     def _live_state_recv(self, websocket) -> str | None:
-        recv = getattr(websocket, "recv")
-        try:
-            message = recv(timeout=1.0)
-        except TypeError:
-            message = recv()
-        if message is None:
-            return None
-        if isinstance(message, bytes):
-            return message.decode("utf-8")
-        return str(message)
+        return ws_user.live_state_recv(websocket)
 
     def _live_state_send_ping(self, websocket) -> None:
-        ping = getattr(websocket, "ping", None)
-        if callable(ping):
-            ping()
-            return
-        send = getattr(websocket, "send", None)
-        if callable(send):
-            send("PING")
+        ws_user.live_state_send_ping(websocket)
 
     def _is_terminal_live_order(self, payload: dict[str, Any]) -> bool:
-        status = (
-            payload.get("status")
-            or payload.get("order_status")
-            or payload.get("orderStatus")
-            or payload.get("state")
-        )
-        if status is None:
-            return False
-        normalized = str(status).strip().lower()
-        if normalized.startswith("order_status_"):
-            normalized = normalized.removeprefix("order_status_")
-        return (
-            normalized
-            in {
-                "cancelled",
-                "canceled",
-                "filled",
-                "matched",
-                "complete",
-                "completed",
-                "rejected",
-                "failed",
-            }
-            or normalized.startswith("canceled_")
-            or normalized.startswith("cancelled_")
-            or normalized.startswith("rejected_")
-        )
+        return ws_user.is_terminal_live_order(payload)
 
     def _fill_order_id(self, trade: dict[str, Any]) -> str:
-        return str(
-            trade.get("taker_order_id")
-            or trade.get("takerOrderId")
-            or trade.get("order_id")
-            or trade.get("orderId")
-            or trade.get("maker_order_id")
-            or trade.get("makerOrderId")
-            or trade.get("id")
-            or trade.get("trade_id")
-            or trade.get("tradeId")
-            or trade.get("match_id")
-            or trade.get("matchId")
-            or ""
-        )
+        return normalize.fill_order_id(trade)
 
     def _raw_fill_timestamp(self, trade: dict[str, Any], *keys: str) -> datetime | None:
-        for key in keys:
-            parsed = self._parse_datetime_value(trade.get(key))
-            if parsed is not None:
-                return parsed
-        return None
+        return normalize.raw_fill_timestamp(self, trade, *keys)
 
     def _looks_like_live_fill(self, payload: dict[str, Any]) -> bool:
-        if any(
-            key in payload
-            for key in (
-                "fill_id",
-                "fillId",
-                "trade_id",
-                "tradeId",
-                "match_id",
-                "matchId",
-            )
-        ):
-            return True
-        has_order_reference = any(
-            key in payload
-            for key in (
-                "taker_order_id",
-                "takerOrderId",
-                "maker_order_id",
-                "makerOrderId",
-                "order_id",
-                "orderId",
-                "id",
-            )
-        )
-        has_trade_fields = any(
-            key in payload
-            for key in (
-                "price",
-                "size",
-                "quantity",
-                "filled_size",
-                "filledSize",
-            )
-        )
-        has_asset_reference = any(
-            key in payload
-            for key in ("asset_id", "assetId", "token_id", "tokenId", "side")
-        )
-        return has_order_reference and has_trade_fields and has_asset_reference
+        return ws_user.looks_like_live_fill(payload)
 
     def _iter_live_order_payloads(self, message: Any) -> list[dict[str, Any]]:
-        if not isinstance(message, dict):
-            return []
-        candidates: list[Any] = []
-        for key in ("orders", "order"):
-            if key in message:
-                candidates.append(message[key])
-        payload = message.get("payload") or message.get("data")
-        if payload is not None:
-            candidates.append(payload)
-        event_type = str(message.get("event_type") or message.get("type") or "").lower()
-        if not candidates and event_type == "order":
-            candidates.append(message)
-
-        normalized: list[dict[str, Any]] = []
-        for candidate in candidates:
-            if isinstance(candidate, dict):
-                if any(
-                    key in candidate
-                    for key in (
-                        "id",
-                        "orderID",
-                        "order_id",
-                        "asset_id",
-                        "token_id",
-                    )
-                ):
-                    normalized.append(candidate)
-            elif isinstance(candidate, list):
-                normalized.extend(item for item in candidate if isinstance(item, dict))
-        return normalized
+        return ws_user.iter_live_order_payloads(message)
 
     def _iter_live_fill_payloads(self, message: Any) -> list[dict[str, Any]]:
-        if not isinstance(message, dict):
-            return []
-        candidates: list[Any] = []
-        for key in ("fills", "fill", "trades", "trade"):
-            if key in message:
-                candidates.append(message[key])
-        payload = message.get("payload") or message.get("data")
-        if isinstance(payload, dict):
-            for key in ("fills", "fill", "trades", "trade"):
-                if key in payload:
-                    candidates.append(payload[key])
-        if payload is not None:
-            candidates.append(payload)
-        event_type = str(message.get("event_type") or message.get("type") or "").lower()
-        if not candidates and event_type in {"trade", "fill", "match"}:
-            candidates.append(message)
-
-        normalized: list[dict[str, Any]] = []
-        for candidate in candidates:
-            if isinstance(candidate, dict):
-                if self._looks_like_live_fill(candidate):
-                    normalized.append(candidate)
-            elif isinstance(candidate, list):
-                normalized.extend(
-                    item
-                    for item in candidate
-                    if isinstance(item, dict) and self._looks_like_live_fill(item)
-                )
-        return normalized
+        return ws_user.iter_live_fill_payloads(message)
 
     def _market_message_asset_ids(self, message: dict[str, Any]) -> list[str]:
-        payload = (
-            message.get("payload") if isinstance(message.get("payload"), dict) else None
-        )
-        candidates = [message, payload or {}]
-        asset_ids: list[str] = []
-        for candidate in candidates:
-            for key in ("asset_id", "assetId"):
-                value = candidate.get(key)
-                if value not in (None, ""):
-                    asset_ids.append(str(value))
-            for key in ("assets_ids", "asset_ids", "clob_token_ids"):
-                values = candidate.get(key)
-                if isinstance(values, list):
-                    asset_ids.extend(
-                        str(value) for value in values if value not in (None, "")
-                    )
-            price_changes = candidate.get("price_changes")
-            if isinstance(price_changes, list):
-                for change in price_changes:
-                    if not isinstance(change, dict):
-                        continue
-                    for key in ("asset_id", "assetId"):
-                        value = change.get(key)
-                        if value not in (None, ""):
-                            asset_ids.append(str(value))
-        return list(dict.fromkeys(asset_ids))
+        return ws_market.market_message_asset_ids(message)
 
     def _iter_market_price_changes(
         self, message: dict[str, Any]
     ) -> list[dict[str, Any]]:
-        payload = (
-            message.get("payload") if isinstance(message.get("payload"), dict) else None
-        )
-        candidates = [message, payload or {}]
-        normalized: list[dict[str, Any]] = []
-        for candidate in candidates:
-            changes = candidate.get("price_changes")
-            if isinstance(changes, list):
-                normalized.extend(item for item in changes if isinstance(item, dict))
-        if normalized:
-            return normalized
-        return [message]
+        return ws_market.iter_market_price_changes(message)
 
     def _market_level_map(self, entries: Any) -> dict[float, float]:
-        levels: dict[float, float] = {}
-        for entry in entries or []:
-            price = None
-            size = None
-            if isinstance(entry, dict):
-                price = entry.get("price")
-                size = entry.get("size") or entry.get("quantity") or entry.get("amount")
-            elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
-                price, size = entry[0], entry[1]
-            else:
-                price = getattr(entry, "price", None)
-                size = getattr(entry, "size", None)
-            if price in (None, "") or size in (None, ""):
-                continue
-            levels[float(price)] = float(size)
-        return levels
+        return ws_market.market_level_map(entries)
 
     def _market_state_snapshot_for_asset(self, asset_id: str) -> dict[str, Any]:
         state = self._market_state_books.get(asset_id, {})
@@ -1956,304 +1358,34 @@ class PolymarketAdapter:
                 self._market_state_last_error = None
 
     def _run_market_state_session(self) -> None:
-        assets = self._market_state_subscription_assets()
-        if not assets:
-            raise RuntimeError("Polymarket live market state requires tracked assets")
-        websocket = self._connect_live_market_websocket()
-        try:
-            send = getattr(websocket, "send")
-            send(json.dumps(self._market_state_subscription_payload(assets)))
-            next_ping_at = time.monotonic() + max(
-                1.0, self.config.live_market_ping_interval_seconds
-            )
-            while not self._market_state_stop_event.is_set():
-                now = time.monotonic()
-                if now >= next_ping_at:
-                    self._live_state_send_ping(websocket)
-                    next_ping_at = now + max(
-                        1.0, self.config.live_market_ping_interval_seconds
-                    )
-                message = self._live_state_recv(websocket)
-                if message in (None, "", "PONG"):
-                    continue
-                parsed = json.loads(message)
-                if parsed == "PONG":
-                    continue
-                self._apply_market_state_message(parsed)
-        finally:
-            close = getattr(websocket, "close", None)
-            if callable(close):
-                close()
+        ws_market.run_market_state_session(self)
 
     def _market_state_loop(self) -> None:
-        backoff = max(0.5, self.config.live_state_reconnect_backoff_seconds)
-        max_backoff = max(backoff, self.config.live_state_reconnect_max_backoff_seconds)
-        try:
-            while not self._market_state_stop_event.is_set():
-                with self._market_state_lock:
-                    self._set_market_state_mode_locked(
-                        "recovering", reason="reconnecting live market state"
-                    )
-                try:
-                    self._run_market_state_session()
-                    backoff = max(0.5, self.config.live_state_reconnect_backoff_seconds)
-                except Exception as exc:
-                    with self._market_state_lock:
-                        self._set_market_state_mode_locked("degraded", reason=str(exc))
-                    if self._market_state_stop_event.wait(backoff):
-                        break
-                    backoff = min(max_backoff, backoff * 2)
-        finally:
-            with self._market_state_lock:
-                self._market_state_running = False
-                self._market_state_thread = None
+        ws_market.market_state_loop(self)
 
     def start_live_market_state(self) -> MarketStateStatus:
-        desired_assets = self._market_state_subscription_assets()
-        with self._market_state_lock:
-            running_thread = self._market_state_thread
-            running = running_thread is not None and running_thread.is_alive()
-            current_assets = self._market_state_assets
-        if running and desired_assets and desired_assets != current_assets:
-            self.stop_live_market_state()
-
-        with self._market_state_lock:
-            if (
-                self._market_state_thread is not None
-                and self._market_state_thread.is_alive()
-            ):
-                self._market_state_active = True
-                return self._market_state_status_locked()
-            self._market_state_stop_event = threading.Event()
-            self._market_state_active = True
-            self._market_state_running = False
-            self._market_state_last_error = None
-            self._market_state_assets = desired_assets
-            self._set_market_state_mode_locked(
-                "recovering", reason="starting live market state"
-            )
-            if not desired_assets:
-                return self._market_state_status_locked()
-            thread = threading.Thread(
-                target=self._market_state_loop,
-                name="polymarket-live-market-state",
-                daemon=True,
-            )
-            self._market_state_thread = thread
-            self._market_state_running = True
-            thread.start()
-            return self._market_state_status_locked()
+        return ws_market.start_live_market_state(self)
 
     def stop_live_market_state(self) -> MarketStateStatus:
-        with self._market_state_lock:
-            thread = self._market_state_thread
-            self._market_state_active = False
-            self._market_state_running = False
-            self._set_market_state_mode_locked("inactive")
-            self._market_state_stop_event.set()
-        if (
-            thread is not None
-            and thread.is_alive()
-            and thread is not threading.current_thread()
-        ):
-            thread.join(timeout=max(0.1, self.config.request_timeout_seconds))
-        with self._market_state_lock:
-            self._market_state_thread = None
-            return self._market_state_status_locked()
+        return ws_market.stop_live_market_state(self)
 
     def _ensure_market_state_asset(self, asset_id: str) -> None:
-        if asset_id in self._market_state_tracked_assets:
-            return
-        self._market_state_tracked_assets.add(asset_id)
-        if self._market_state_active:
-            self.start_live_market_state()
+        ws_market.ensure_market_state_asset(self, asset_id)
 
     def _apply_live_state_message(self, message: dict[str, Any]) -> None:
-        orders = self._iter_live_order_payloads(message)
-        fills = self._iter_live_fill_payloads(message)
-        if not orders and not fills:
-            return
-        observed_at = datetime.now(timezone.utc)
-        if orders:
-            with self._live_state_lock:
-                orders_changed = False
-                for order in orders:
-                    order_id = str(
-                        order.get("id")
-                        or order.get("orderID")
-                        or order.get("order_id")
-                        or ""
-                    )
-                    if not order_id:
-                        continue
-                    event_at = self._live_order_event_time(order, observed_at)
-                    tombstone = self._live_state_terminal_order_markers.get(order_id)
-                    if tombstone is not None and event_at <= tombstone[0]:
-                        continue
-                    existing = dict(self._live_state_orders_raw.get(order_id, {}))
-                    existing_event_at = self._raw_live_event_time(existing)
-                    if existing_event_at is not None and event_at < existing_event_at:
-                        continue
-                    existing.update(order)
-                    existing["__live_event_at"] = event_at.isoformat()
-                    if self._is_terminal_live_order(existing):
-                        self._live_state_orders_raw.pop(order_id, None)
-                        self._live_state_terminal_order_markers[order_id] = (
-                            event_at,
-                            str(
-                                existing.get("status")
-                                or existing.get("order_status")
-                                or existing.get("orderStatus")
-                                or existing.get("state")
-                                or ""
-                            )
-                            or None,
-                        )
-                        orders_changed = True
-                        continue
-                    self._live_state_terminal_order_markers.pop(order_id, None)
-                    self._live_state_orders_raw[order_id] = existing
-                    orders_changed = True
-                if orders_changed:
-                    self._live_state_initialized = True
-                    self._live_state_last_update_at = observed_at
-                    self._live_state_last_error = None
-                    self._live_state_markets = self._live_state_subscription_markets()
-        if fills:
-            self._merge_live_fills_cache(fills, observed_at=observed_at)
+        ws_user.apply_live_state_message(self, message)
 
     def _run_live_state_session(self) -> None:
-        markets = self._live_state_subscription_markets()
-        if not markets:
-            raise RuntimeError(
-                "Polymarket live user stream requires configured or discoverable condition ids"
-            )
-        try:
-            self._refresh_live_fills_cache(observed_at=datetime.now(timezone.utc))
-        except Exception as exc:
-            self._record_live_state_error(exc)
-        websocket = self._connect_live_user_websocket()
-        try:
-            send = getattr(websocket, "send")
-            send(json.dumps(self._live_state_subscription_payload(markets)))
-            next_ping_at = time.monotonic() + max(
-                1.0, self.config.live_state_ping_interval_seconds
-            )
-            while not self._live_state_stop_event.is_set():
-                now = time.monotonic()
-                if now >= next_ping_at:
-                    self._live_state_send_ping(websocket)
-                    next_ping_at = now + max(
-                        1.0, self.config.live_state_ping_interval_seconds
-                    )
-                message = self._live_state_recv(websocket)
-                if message in (None, "", "PONG"):
-                    continue
-                payload = json.loads(message)
-                if payload == "PONG":
-                    continue
-                self._apply_live_state_message(payload)
-        finally:
-            close = getattr(websocket, "close", None)
-            if callable(close):
-                close()
+        ws_user.run_live_state_session(self)
 
     def start_live_user_state(self) -> LiveStateStatus:
-        if not self._live_state_supported():
-            return self.live_state_status()
-
-        desired_markets = self._live_state_subscription_markets()
-        with self._live_state_lock:
-            running_thread = self._live_state_thread
-            running = running_thread is not None and running_thread.is_alive()
-            current_markets = self._live_state_markets
-            current_mode = self._live_state_mode
-        if running and (
-            (desired_markets and desired_markets != current_markets)
-            or current_mode == "degraded"
-        ):
-            self.stop_live_user_state()
-
-        with self._live_state_lock:
-            if (
-                self._live_state_thread is not None
-                and self._live_state_thread.is_alive()
-            ):
-                self._live_state_active = True
-                return self._live_state_status_locked()
-            self._live_state_stop_event = threading.Event()
-            self._live_state_active = True
-            self._live_state_running = False
-            self._live_state_last_error = None
-            self._mark_live_state_recovering_locked("starting live user state")
-
-        try:
-            self._live_state_bootstrap()
-        except Exception as exc:
-            self._record_live_state_error(exc)
-            with self._live_state_lock:
-                self._set_live_state_mode_locked("degraded", reason=str(exc))
-                return self._live_state_status_locked()
-
-        with self._live_state_lock:
-            if not self._live_state_markets:
-                self._live_state_last_error = (
-                    "Polymarket live user stream requires condition ids"
-                )
-                self._set_live_state_mode_locked(
-                    "degraded", reason=self._live_state_last_error
-                )
-                return self._live_state_status_locked()
-            thread = threading.Thread(
-                target=self._live_state_loop,
-                name="polymarket-live-user-state",
-                daemon=True,
-            )
-            self._live_state_thread = thread
-            self._live_state_running = True
-            thread.start()
-            return self._live_state_status_locked()
+        return ws_user.start_live_user_state(self)
 
     def _live_state_loop(self) -> None:
-        backoff = max(0.5, self.config.live_state_reconnect_backoff_seconds)
-        max_backoff = max(backoff, self.config.live_state_reconnect_max_backoff_seconds)
-        try:
-            while not self._live_state_stop_event.is_set():
-                with self._live_state_lock:
-                    self._mark_live_state_recovering_locked(
-                        "reconnecting live user state"
-                    )
-                try:
-                    self._run_live_state_session()
-                    backoff = max(0.5, self.config.live_state_reconnect_backoff_seconds)
-                except Exception as exc:
-                    self._record_live_state_error(exc)
-                    with self._live_state_lock:
-                        self._set_live_state_mode_locked("degraded", reason=str(exc))
-                    if self._live_state_stop_event.wait(backoff):
-                        break
-                    backoff = min(max_backoff, backoff * 2)
-        finally:
-            with self._live_state_lock:
-                self._live_state_running = False
-                self._live_state_thread = None
+        ws_user.live_state_loop(self)
 
     def stop_live_user_state(self) -> LiveStateStatus:
-        with self._live_state_lock:
-            thread = self._live_state_thread
-            self._live_state_active = False
-            self._live_state_running = False
-            self._set_live_state_mode_locked("inactive")
-            self._live_state_stop_event.set()
-        if (
-            thread is not None
-            and thread.is_alive()
-            and thread is not threading.current_thread()
-        ):
-            thread.join(timeout=max(0.1, self.config.request_timeout_seconds))
-        with self._live_state_lock:
-            self._live_state_thread = None
-            return self._live_state_status_locked()
+        return ws_user.stop_live_user_state(self)
 
     def _response_message(self, payload: dict[str, Any]) -> str | None:
         for key in ("error", "errorMsg", "error_message", "message", "detail"):
@@ -2685,34 +1817,7 @@ class PolymarketAdapter:
         )
 
     def _ensure_client(self):
-        if self._client is not None:
-            return self._client
-
-        try:
-            client_module = importlib.import_module("py_clob_client.client")
-            ClobClient = getattr(client_module, "ClobClient")
-        except ImportError as exc:  # pragma: no cover - import guard
-            raise RuntimeError(
-                "py-clob-client is not installed. Install it with `pip install -e upstreams/py-clob-client` or `pip install py-clob-client`."
-            ) from exc
-
-        if self.config.private_key:
-            client = ClobClient(
-                self.config.host,
-                key=self.config.private_key,
-                chain_id=self.config.chain_id,
-                signature_type=self.config.signature_type,
-                funder=self.config.funder,
-            )
-            client.set_api_creds(
-                client.create_or_derive_api_creds(self.config.api_creds_nonce)
-            )
-        else:
-            client = ClobClient(self.config.host)
-
-        self._configure_client_timeout()
-        self._client = client
-        return client
+        return clob_client.ensure_client(self)
 
     def health(self) -> AdapterHealth:
         try:
@@ -2722,215 +1827,7 @@ class PolymarketAdapter:
             return AdapterHealth(self.venue, False, str(exc))
 
     def list_markets(self, limit: int = 100) -> list[MarketSummary]:
-        response = self._call_client("list markets", "get_simplified_markets")
-        items = response.get("data") if isinstance(response, dict) else response
-        if items is None and isinstance(response, dict):
-            items = response.get("markets")
-        summaries: list[MarketSummary] = []
-
-        def _coerce_json_list(value: Any) -> list[Any] | None:
-            if value in (None, ""):
-                return None
-            if isinstance(value, list):
-                return value
-            if isinstance(value, str):
-                try:
-                    parsed = json.loads(value)
-                except ValueError:
-                    return None
-                return parsed if isinstance(parsed, list) else None
-            return None
-
-        for item in items or []:
-            title = item.get("question") or item.get("title") or item.get("slug")
-            category = item.get("category")
-            sport = item.get("sport")
-            series = item.get("series")
-            event_key = (
-                item.get("event_key")
-                or item.get("eventKey")
-                or item.get("event_slug")
-                or item.get("eventSlug")
-                or item.get("slug")
-            )
-            game_id = item.get("game_id") or item.get("gameId")
-            sports_market_type = item.get("sports_market_type") or item.get(
-                "sportsMarketType"
-            )
-            raw_tags = item.get("tags")
-            tags: tuple[str, ...] = ()
-            if isinstance(raw_tags, str):
-                tags = tuple(tag.strip() for tag in raw_tags.split(",") if tag.strip())
-            elif isinstance(raw_tags, list):
-                tags = tuple(str(tag).strip() for tag in raw_tags if str(tag).strip())
-            active = bool(item.get("active", True))
-            volume = (
-                item.get("volume") or item.get("volume24hr") or item.get("volume_num")
-            )
-            expires_raw = item.get("end_date_iso") or item.get("endDate")
-            expires_at = None
-            if expires_raw:
-                try:
-                    expires_at = datetime.fromisoformat(
-                        str(expires_raw).replace("Z", "+00:00")
-                    )
-                except ValueError:
-                    expires_at = None
-
-            start_time_raw = item.get("gameStartTime") or item.get("start_time")
-            start_time = None
-            if start_time_raw:
-                try:
-                    start_time = datetime.fromisoformat(
-                        str(start_time_raw).replace("Z", "+00:00")
-                    )
-                except ValueError:
-                    start_time = None
-
-            token_entries = item.get("tokens")
-            if not token_entries:
-                outcome_names = _coerce_json_list(item.get("outcomes"))
-                outcome_prices = _coerce_json_list(
-                    item.get("outcomePrices") or item.get("outcome_prices")
-                )
-                token_ids = _coerce_json_list(
-                    item.get("clobTokenIds") or item.get("clob_token_ids")
-                )
-                if outcome_names and token_ids:
-                    token_entries = []
-                    for index, token_id in enumerate(token_ids):
-                        token_entries.append(
-                            {
-                                "token_id": token_id,
-                                "outcome": (
-                                    outcome_names[index]
-                                    if index < len(outcome_names)
-                                    else None
-                                ),
-                                "midpoint": (
-                                    outcome_prices[index]
-                                    if outcome_prices and index < len(outcome_prices)
-                                    else None
-                                ),
-                            }
-                        )
-
-            if token_entries:
-                for token in token_entries:
-                    if not isinstance(token, dict):
-                        continue
-                    symbol = str(
-                        token.get("token_id")
-                        or token.get("tokenId")
-                        or token.get("asset_id")
-                        or token.get("assetId")
-                        or ""
-                    )
-                    if not symbol:
-                        continue
-                    condition_id = (
-                        token.get("condition_id")
-                        or token.get("conditionId")
-                        or item.get("condition_id")
-                        or item.get("conditionId")
-                        or item.get("market")
-                        or item.get("market_id")
-                        or item.get("marketId")
-                    )
-                    self._cache_condition_mapping(symbol, condition_id)
-                    outcome_text = str(
-                        token.get("outcome") or token.get("name") or ""
-                    ).lower()
-                    outcome = (
-                        OutcomeSide.YES
-                        if outcome_text == "yes"
-                        else OutcomeSide.NO
-                        if outcome_text == "no"
-                        else OutcomeSide.UNKNOWN
-                    )
-                    best_bid = token.get("best_bid") or token.get("bid")
-                    best_ask = token.get("best_ask") or token.get("ask")
-                    midpoint = token.get("midpoint")
-                    summaries.append(
-                        MarketSummary(
-                            contract=Contract(
-                                venue=self.venue,
-                                symbol=symbol,
-                                outcome=outcome,
-                                title=title,
-                            ),
-                            title=title,
-                            best_bid=float(best_bid) if best_bid is not None else None,
-                            best_ask=float(best_ask) if best_ask is not None else None,
-                            midpoint=(float(best_bid) + float(best_ask)) / 2
-                            if best_bid is not None and best_ask is not None
-                            else float(midpoint)
-                            if midpoint is not None
-                            else None,
-                            volume=float(volume) if volume is not None else None,
-                            category=category,
-                            sport=str(sport) if sport not in (None, "") else None,
-                            series=str(series) if series not in (None, "") else None,
-                            event_key=(
-                                str(event_key) if event_key not in (None, "") else None
-                            ),
-                            game_id=str(game_id) if game_id not in (None, "") else None,
-                            sports_market_type=(
-                                str(sports_market_type)
-                                if sports_market_type not in (None, "")
-                                else None
-                            ),
-                            start_time=start_time,
-                            tags=tags,
-                            active=active,
-                            expires_at=expires_at,
-                            raw={"market": item, "token": token},
-                        )
-                    )
-            else:
-                symbol = str(
-                    item.get("token_id")
-                    or item.get("tokenId")
-                    or item.get("asset_id")
-                    or item.get("assetId")
-                    or item.get("condition_id")
-                    or item.get("conditionId")
-                    or ""
-                )
-                if not symbol:
-                    continue
-                best_bid = item.get("best_bid") or item.get("bid")
-                best_ask = item.get("best_ask") or item.get("ask")
-                summaries.append(
-                    MarketSummary(
-                        contract=Contract(venue=self.venue, symbol=symbol, title=title),
-                        title=title,
-                        best_bid=float(best_bid) if best_bid is not None else None,
-                        best_ask=float(best_ask) if best_ask is not None else None,
-                        midpoint=(float(best_bid) + float(best_ask)) / 2
-                        if best_bid is not None and best_ask is not None
-                        else None,
-                        volume=float(volume) if volume is not None else None,
-                        category=category,
-                        sport=str(sport) if sport not in (None, "") else None,
-                        series=str(series) if series not in (None, "") else None,
-                        event_key=(
-                            str(event_key) if event_key not in (None, "") else None
-                        ),
-                        game_id=str(game_id) if game_id not in (None, "") else None,
-                        sports_market_type=(
-                            str(sports_market_type)
-                            if sports_market_type not in (None, "")
-                            else None
-                        ),
-                        start_time=start_time,
-                        tags=tags,
-                        active=active,
-                        expires_at=expires_at,
-                        raw=item,
-                    )
-                )
-        return summaries[:limit]
+        return gamma_client.list_markets(self, limit)
 
     def _extract_levels(self, entries: list[Any] | None) -> list[PriceLevel]:
         levels: list[PriceLevel] = []
@@ -2947,43 +1844,13 @@ class PolymarketAdapter:
         return levels
 
     def _account_address(self) -> str | None:
-        if self.config.account_address:
-            return self.config.account_address
-        if self.config.funder:
-            return self.config.funder
-        try:
-            client = self._ensure_client()
-            return client.get_address()
-        except Exception:
-            return None
+        return clob_client.account_address(self)
 
     def _parse_quantity(self, value: Any) -> float:
-        if value is None:
-            return 0.0
-        if isinstance(value, (int, float)):
-            return float(value)
-        text = str(value)
-        if not text:
-            return 0.0
-        if "." in text:
-            return float(text)
-        return float(text) / 1_000_000.0
+        return normalize.parse_quantity(value)
 
     def _fetch_data_api(self, path: str, params: dict[str, Any]) -> Any:
-        query = urlencode(
-            {key: value for key, value in params.items() if value is not None}
-        )
-        url = (
-            f"{self.config.data_api_host}{path}?{query}"
-            if query
-            else f"{self.config.data_api_host}{path}"
-        )
-
-        def fetch() -> Any:
-            with urlopen(url, timeout=self.config.request_timeout_seconds) as response:
-                return json.loads(response.read().decode("utf-8"))
-
-        return self._call_with_retry(f"data api fetch {path}", fetch)
+        return clob_client.fetch_data_api(self, path, params)
 
     def get_order_book(self, contract: Contract) -> OrderBookSnapshot:
         self._ensure_market_state_asset(contract.symbol)
@@ -3116,90 +1983,17 @@ class PolymarketAdapter:
         ]
 
     def _fill_confirmed(self, trade: dict[str, Any]) -> bool:
-        status = trade.get("status")
-        if status in (None, ""):
-            return True
-        normalized = str(status).strip().lower()
-        return normalized in {
-            "trade_status_confirmed",
-            "confirmed",
-            "filled",
-            "matched",
-            "complete",
-            "completed",
-        }
+        return normalize.fill_confirmed(trade)
 
     def _normalize_fill(
         self, trade: dict[str, Any], contract: Contract | None = None
     ) -> FillSnapshot | None:
-        if not self._fill_confirmed(trade):
-            return None
-        symbol_value = (
-            trade.get("asset_id")
-            or trade.get("assetId")
-            or trade.get("token_id")
-            or trade.get("tokenId")
-            or (contract.symbol if contract else None)
-        )
-        if symbol_value in (None, ""):
-            return None
-        outcome_text = str(trade.get("outcome") or "").lower()
-        fill_id = (
-            str(
-                trade.get("fill_id")
-                or trade.get("fillId")
-                or trade.get("id")
-                or trade.get("trade_id")
-                or trade.get("tradeId")
-                or trade.get("match_id")
-                or trade.get("matchId")
-                or ""
-            )
-            or None
-        )
-        return FillSnapshot(
-            order_id=self._fill_order_id(trade) or str(fill_id or ""),
-            contract=Contract(
-                venue=self.venue,
-                symbol=str(symbol_value),
-                outcome=OutcomeSide.YES
-                if outcome_text == "yes"
-                else OutcomeSide.NO
-                if outcome_text == "no"
-                else OutcomeSide.UNKNOWN,
-            ),
-            action=OrderAction.BUY
-            if str(trade.get("side", "BUY")).upper() == "BUY"
-            else OrderAction.SELL,
-            price=float(trade.get("price", 0.0) or 0.0),
-            quantity=self._parse_quantity(
-                trade.get("size")
-                or trade.get("quantity")
-                or trade.get("filled_size")
-                or trade.get("filledSize")
-                or 0.0
-            ),
-            fee=float(
-                trade.get("fee_rate_bps")
-                or trade.get("feeRateBps")
-                or trade.get("fee")
-                or 0.0
-            ),
-            fill_id=fill_id,
-            raw=trade,
-        )
+        return normalize.normalize_fill(self, trade, contract)
 
     def _normalize_fills(
         self, raw_trades: list[dict[str, Any]], contract: Contract | None = None
     ) -> list[FillSnapshot]:
-        normalized: list[FillSnapshot] = []
-        for trade in raw_trades or []:
-            fill = self._normalize_fill(dict(trade), contract)
-            if fill is not None:
-                normalized.append(fill)
-        if contract is None:
-            return normalized
-        return [fill for fill in normalized if fill.contract.symbol == contract.symbol]
+        return normalize.normalize_fills(self, raw_trades, contract)
 
     def _list_fills_rest_raw(
         self, contract: Contract | None = None

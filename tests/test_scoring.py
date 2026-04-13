@@ -7,7 +7,12 @@ from adapters.types import Contract, OrderBookSnapshot, OutcomeSide, PriceLevel,
 from engine.strategies import FairValueBandStrategy
 from research.paper import PaperBroker
 from research.replay import ReplayRunner, ReplayStep
-from research.scoring import score_binary_forecasts, score_replay_result
+from research.scoring import (
+    bootstrap_mean_confidence_interval,
+    compare_paired_loss_differentials,
+    score_binary_forecasts,
+    score_replay_result,
+)
 from risk.limits import RiskEngine, RiskLimits
 
 
@@ -72,6 +77,80 @@ class ScoringTests(unittest.TestCase):
     def test_score_binary_forecasts_rejects_non_finite_predictions(self):
         with self.assertRaisesRegex(ValueError, "predictions must be finite"):
             score_binary_forecasts({"home": float("nan")}, {"home": 1})
+
+    def test_bootstrap_mean_confidence_interval_is_deterministic(self):
+        first = bootstrap_mean_confidence_interval(
+            [0.1, 0.2, 0.3, 0.4],
+            confidence_level=0.9,
+            resample_count=250,
+            seed=7,
+        )
+        second = bootstrap_mean_confidence_interval(
+            [0.1, 0.2, 0.3, 0.4],
+            confidence_level=0.9,
+            resample_count=250,
+            seed=7,
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first.sample_count, 4)
+        self.assertAlmostEqual(first.sample_mean, 0.25)
+        self.assertEqual(first.interval_method, "percentile_bootstrap")
+        self.assertEqual(first.statistic, "mean")
+        self.assertEqual(first.resample_count, 250)
+        self.assertEqual(first.seed, 7)
+        self.assertLessEqual(first.lower_bound, first.sample_mean)
+        self.assertGreaterEqual(first.upper_bound, first.sample_mean)
+
+    def test_compare_paired_loss_differentials_reports_deterministic_stats(self):
+        loss_differentials = [0.2, -0.1, 0.05, 0.15, -0.05]
+
+        first = compare_paired_loss_differentials(
+            loss_differentials,
+            confidence_level=0.9,
+            bootstrap_resample_count=250,
+            seed=11,
+        )
+        second = compare_paired_loss_differentials(
+            loss_differentials,
+            confidence_level=0.9,
+            bootstrap_resample_count=250,
+            seed=11,
+        )
+
+        mean_loss_differential = sum(loss_differentials) / len(loss_differentials)
+        centered_sum = sum(
+            (value - mean_loss_differential) ** 2 for value in loss_differentials
+        )
+        expected_standard_error = math.sqrt(
+            (centered_sum / (len(loss_differentials) - 1)) / len(loss_differentials)
+        )
+        expected_test_statistic = mean_loss_differential / expected_standard_error
+        expected_p_value = math.erfc(abs(expected_test_statistic) / math.sqrt(2.0))
+
+        self.assertEqual(first, second)
+        self.assertEqual(first.sample_count, 5)
+        self.assertAlmostEqual(first.mean_loss_differential, mean_loss_differential)
+        self.assertAlmostEqual(first.standard_error, expected_standard_error)
+        self.assertIsNotNone(first.test_statistic)
+        self.assertIsNotNone(first.p_value_two_sided)
+        if first.test_statistic is None or first.p_value_two_sided is None:
+            self.fail("expected finite DM-style comparison stats")
+        self.assertAlmostEqual(first.test_statistic, expected_test_statistic)
+        self.assertAlmostEqual(first.p_value_two_sided, expected_p_value)
+        self.assertEqual(
+            first.comparison_method,
+            "diebold_mariano_style_two_sided_normal_approximation",
+        )
+        self.assertEqual(
+            first.variance_estimator,
+            "sample_variance_of_paired_loss_differentials",
+        )
+        self.assertEqual(
+            first.bootstrap_mean_confidence_interval.interval_method,
+            "percentile_bootstrap",
+        )
+        self.assertEqual(first.bootstrap_mean_confidence_interval.seed, 11)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from research.blend import blend_binary_probabilities
+from research.calibration import load_calibration_artifact
 from research.benchmark_runner import run_replay_benchmark
 from research.benchmark_runner import (
     load_and_run_benchmark_case,
@@ -202,6 +204,68 @@ class BenchmarkRunnerTests(unittest.TestCase):
             0.0,
         )
 
+    def test_load_and_run_benchmark_case_surfaces_model_and_blended_fair_values(self):
+        payload = json.loads(FIXTURE_PATH.read_text())
+        payload["fair_value_case"]["model_fair_values"] = {
+            "token-home:yes": 0.65,
+            "token-home:no": 0.35,
+        }
+        payload["fair_value_case"]["model_blend_weight"] = 0.25
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            report = load_and_run_benchmark_case(handle.name)
+
+        fair_value_report = report.fair_value_report
+        self.assertIsNotNone(fair_value_report)
+        if fair_value_report is None:
+            self.fail("expected fair-value report")
+        manifest_values = fair_value_report.manifest["values"]
+        self.assertIsInstance(manifest_values, dict)
+        if not isinstance(manifest_values, dict):
+            self.fail("expected manifest values")
+        yes_manifest = manifest_values["token-home:yes"]
+        no_manifest = manifest_values["token-home:no"]
+        self.assertEqual(yes_manifest["model_fair_value"], 0.65)
+        self.assertEqual(no_manifest["model_fair_value"], 0.35)
+        expected_yes_blend = blend_binary_probabilities(0.575, 0.65, 0.25)
+        expected_no_blend = blend_binary_probabilities(0.425, 0.35, 0.25)
+        self.assertAlmostEqual(
+            float(yes_manifest["blended_fair_value"]),
+            expected_yes_blend,
+        )
+        self.assertAlmostEqual(
+            float(no_manifest["blended_fair_value"]),
+            expected_no_blend,
+        )
+        evaluation_rows = {
+            row.market_key: row for row in fair_value_report.evaluation_rows
+        }
+        yes_row = evaluation_rows["token-home:yes"]
+        no_row = evaluation_rows["token-home:no"]
+        self.assertEqual(yes_row.model_fair_value, 0.65)
+        self.assertEqual(no_row.model_fair_value, 0.35)
+        self.assertAlmostEqual(
+            float(yes_row.blended_fair_value or 0.0),
+            expected_yes_blend,
+        )
+        self.assertAlmostEqual(
+            float(no_row.blended_fair_value or 0.0),
+            expected_no_blend,
+        )
+        self.assertAlmostEqual(yes_row.model_brier_error or -1.0, (0.65 - 1.0) ** 2)
+        self.assertAlmostEqual(no_row.blended_brier_error or -1.0, expected_no_blend**2)
+
+        serialized_report = fair_value_report.to_payload()
+        serialized_rows = serialized_report["evaluation_rows"]
+        self.assertIsInstance(serialized_rows, list)
+        if not isinstance(serialized_rows, list):
+            self.fail("expected serialized evaluation rows")
+        self.assertIn("model_fair_value", serialized_rows[0])
+        self.assertIn("blended_fair_value", serialized_rows[0])
+
     def test_run_replay_benchmark_applies_case_risk_limits(self):
         payload = json.loads(FIXTURE_PATH.read_text())
         replay_case = ReplayBenchmarkCase.from_payload(payload["replay_case"])
@@ -360,6 +424,49 @@ class BenchmarkRunnerTests(unittest.TestCase):
         if calibration is None:
             self.fail("expected calibration payload")
         self.assertEqual(calibration["sample_count"], 4)
+
+    def test_load_and_run_benchmark_case_prefers_prefit_calibration_over_case_samples(
+        self,
+    ):
+        payload = json.loads(FIXTURE_PATH.read_text())
+        payload["fair_value_case"]["calibration_samples"] = [
+            {"prediction": 0.42, "outcome": 1},
+            {"prediction": 0.45, "outcome": 1},
+            {"prediction": 0.55, "outcome": 0},
+            {"prediction": 0.58, "outcome": 0},
+        ]
+        payload["fair_value_case"]["calibration_bin_count"] = 2
+        calibration_rows = [
+            {"fair_value": 0.42, "outcome_label": 0},
+            {"fair_value": 0.45, "outcome_label": 0},
+            {"fair_value": 0.55, "outcome_label": 1},
+            {"fair_value": 0.58, "outcome_label": 1},
+        ]
+        calibrator = load_calibration_artifact(calibration_rows, bin_count=2)
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            report = load_and_run_benchmark_case(
+                handle.name,
+                prefit_calibration=calibrator,
+            )
+
+        fair_value_report = report.fair_value_report
+        self.assertIsNotNone(fair_value_report)
+        if fair_value_report is None:
+            self.fail("expected fair-value report")
+        calibration = fair_value_report.calibration
+        self.assertIsNotNone(calibration)
+        if calibration is None:
+            self.fail("expected calibration payload")
+        self.assertEqual(calibration["sample_count"], 4)
+        self.assertEqual(calibration["source"], "prefit")
+        self.assertEqual(
+            calibration["calibrated_market_probabilities"],
+            {"token-home:no": 0.0, "token-home:yes": 1.0},
+        )
 
 
 def _write_case_to_temp(payload: dict[str, object]) -> str:
