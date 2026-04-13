@@ -4,16 +4,20 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from research.calibration import load_calibration_artifact
 from research.fair_values import (
+    BookAggregation,
+    DevigMethod,
     build_fair_value_manifest,
     load_market_snapshot,
     load_sportsbook_rows,
     resolve_rows_to_markets,
 )
+from scripts.config_loader import load_config_file, nested_config_value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -23,15 +27,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--markets-file", default=None)
+    parser.add_argument("--config-file", default=None)
     parser.add_argument(
         "--devig-method",
         choices=("multiplicative", "power"),
-        default="multiplicative",
+        default=None,
     )
     parser.add_argument(
         "--book-aggregation",
         choices=("independent", "best-line"),
-        default="independent",
+        default=None,
     )
     parser.add_argument("--max-age-seconds", type=float, default=None)
     parser.add_argument("--source", default=None)
@@ -41,6 +46,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    config = load_config_file(args.config_file) if args.config_file else {}
+    devig_method = args.devig_method or nested_config_value(
+        config, "research", "devig_method"
+    )
+    if devig_method not in {"multiplicative", "power"}:
+        devig_method = "multiplicative"
+    resolved_devig_method = cast(DevigMethod, devig_method)
+    book_aggregation = args.book_aggregation or nested_config_value(
+        config, "research", "book_aggregation"
+    )
+    if book_aggregation not in {"independent", "best-line"}:
+        book_aggregation = "independent"
+    resolved_book_aggregation = cast(BookAggregation, book_aggregation)
     rows = load_sportsbook_rows(args.input)
     skipped_rows: list[dict[str, object]] = []
     calibration_artifact = None
@@ -60,10 +78,10 @@ def main() -> None:
         rows, skipped_rows = resolve_rows_to_markets(rows, markets)
     manifest = build_fair_value_manifest(
         rows,
-        method=args.devig_method,
+        method=resolved_devig_method,
         source=args.source,
         max_age_seconds=args.max_age_seconds,
-        aggregation=args.book_aggregation,
+        aggregation=resolved_book_aggregation,
         calibration_artifact=calibration_artifact,
     )
     if skipped_rows:
@@ -80,7 +98,8 @@ def main() -> None:
                 "matched_row_count": len(rows),
                 "source": manifest.source,
                 "generated_at": manifest.generated_at.isoformat(),
-                "book_aggregation": args.book_aggregation,
+                "book_aggregation": resolved_book_aggregation,
+                "devig_method": resolved_devig_method,
                 "calibration_applied": calibration_artifact is not None,
             },
             indent=2,

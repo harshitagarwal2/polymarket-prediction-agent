@@ -33,6 +33,7 @@ from engine.safety_store import SafetyStateStore
 from engine.strategies import FairValueBandStrategy
 from research.storage import EventJournal
 from risk.limits import RiskEngine, RiskLimits
+from scripts.config_loader import load_config_file, nested_config_value
 
 
 def _parse_comma_separated(value: str | None) -> list[str] | None:
@@ -286,6 +287,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run the prediction-market polling loop"
     )
     parser.add_argument("--venue", choices=["polymarket", "kalshi"], required=True)
+    parser.add_argument("--config-file", default=None)
     parser.add_argument(
         "--mode",
         choices=["preview", "run", "pair-preview", "pair-run"],
@@ -330,6 +332,13 @@ def _seed_event_exposure_registry(risk_engine: RiskEngine, provider: object) -> 
 
 def main() -> int:
     args = build_parser().parse_args()
+    config = load_config_file(args.config_file) if args.config_file else {}
+    configured_policy_file = nested_config_value(config, "runtime", "policy_file")
+    if args.policy_file is None and isinstance(configured_policy_file, str):
+        args.policy_file = configured_policy_file
+    configured_preview_only = nested_config_value(config, "runtime", "preview_only")
+    if args.mode == "preview" and isinstance(configured_preview_only, bool):
+        args.mode = "preview" if configured_preview_only else "run"
     validate_runtime(args)
     policy = load_runtime_policy(args.policy_file) if args.policy_file else None
     adapter = build_adapter(args.venue, args, policy=policy)

@@ -14,6 +14,7 @@ from research.benchmark_runner import (
     run_benchmark_case,
     write_benchmark_report,
 )
+from research.data.build_training_set import build_training_set_rows
 from research.datasets import (
     DatasetRegistry,
     WalkForwardSplit,
@@ -22,11 +23,13 @@ from research.datasets import (
 from research.models.bradley_terry import (
     BradleyTerryArtifact,
     fit_bradley_terry_from_cases,
+    fit_bradley_terry_from_rows,
     generate_model_fair_values as generate_bt_model_fair_values,
 )
 from research.models.elo import (
     EloModelArtifact,
     fit_elo_model,
+    fit_elo_model_from_rows,
     generate_model_fair_values,
 )
 from research.scoring import (
@@ -775,10 +778,11 @@ def run_walk_forward_benchmark_suite(
         )
         elo_model_artifact = None
         bt_model_artifact = None
+        train_rows = [row.to_payload() for row in build_training_set_rows(train_cases)]
         if model_generator == "elo":
-            elo_model_artifact = fit_elo_model(train_cases)
+            elo_model_artifact = fit_elo_model_from_rows(train_rows)
         elif model_generator == "bt":
-            bt_model_artifact = fit_bradley_terry_from_cases(train_cases)
+            bt_model_artifact = fit_bradley_terry_from_rows(train_rows)
         test_report = run_benchmark_suite(
             test_case_paths,
             prefit_calibration=calibrator,

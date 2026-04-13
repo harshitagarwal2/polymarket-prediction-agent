@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 
+from research.data.build_training_set import load_training_set_rows
 from research.schemas import load_benchmark_case
 from research.train.train_blend import write_blend_config
-from research.train.train_bt import write_bt_artifact
-from research.train.train_elo import write_elo_artifact
+from research.train.train_bt import write_bt_artifact, write_bt_artifact_from_rows
+from research.train.train_elo import write_elo_artifact, write_elo_artifact_from_rows
 from scripts.config_loader import load_config_file, nested_config_value
 
 
@@ -17,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", choices=("elo", "bt", "blend"), default=None)
     parser.add_argument("--output", required=True)
     parser.add_argument("--cases", nargs="*", default=[])
+    parser.add_argument("--training-data", default=None)
     parser.add_argument("--blend-weight", type=float, default=0.5)
     parser.add_argument("--config-file", default=None)
     return parser
@@ -40,11 +42,18 @@ def main() -> None:
     if model == "blend":
         path = write_blend_config(blend_weight, args.output)
     else:
-        cases = [load_benchmark_case(case_path) for case_path in args.cases]
-        if model == "elo":
-            path = write_elo_artifact(cases, args.output)
+        if args.training_data:
+            rows = load_training_set_rows(args.training_data)
+            if model == "elo":
+                path = write_elo_artifact_from_rows(rows, args.output)
+            else:
+                path = write_bt_artifact_from_rows(rows, args.output)
         else:
-            path = write_bt_artifact(cases, args.output)
+            cases = [load_benchmark_case(case_path) for case_path in args.cases]
+            if model == "elo":
+                path = write_elo_artifact(cases, args.output)
+            else:
+                path = write_bt_artifact(cases, args.output)
     print(json.dumps({"model": model, "output": str(path)}, indent=2, sort_keys=True))
 
 
