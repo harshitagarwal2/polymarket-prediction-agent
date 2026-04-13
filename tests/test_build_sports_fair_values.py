@@ -318,6 +318,77 @@ class BuildSportsFairValuesScriptTests(unittest.TestCase):
             payload["values"]["token-yes:yes"]["source_bookmaker"], "book-b"
         )
 
+    def test_script_can_read_devig_and_aggregation_from_config_file(self):
+        input_payload = [
+            {
+                "market_key": "token-yes:yes",
+                "bookmaker": "book-a",
+                "outcome": "yes",
+                "captured_at": "2026-04-07T12:00:00Z",
+                "decimal_odds": 1.7,
+                "event_key": "event-1",
+                "sports_market_type": "moneyline",
+            },
+            {
+                "market_key": "token-no:no",
+                "bookmaker": "book-a",
+                "outcome": "no",
+                "captured_at": "2026-04-07T12:00:00Z",
+                "decimal_odds": 2.0,
+                "event_key": "event-1",
+                "sports_market_type": "moneyline",
+            },
+            {
+                "market_key": "token-yes:yes",
+                "bookmaker": "book-b",
+                "outcome": "yes",
+                "captured_at": "2026-04-07T12:01:00Z",
+                "decimal_odds": 1.8,
+                "event_key": "event-1",
+                "sports_market_type": "moneyline",
+            },
+            {
+                "market_key": "token-no:no",
+                "bookmaker": "book-b",
+                "outcome": "no",
+                "captured_at": "2026-04-07T12:03:00Z",
+                "decimal_odds": 2.1,
+                "event_key": "event-1",
+                "sports_market_type": "moneyline",
+            },
+        ]
+
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as input_handle,
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle,
+        ):
+            json.dump(input_payload, input_handle)
+            input_handle.flush()
+
+            with patch(
+                "sys.argv",
+                [
+                    "build_sports_fair_values.py",
+                    "--input",
+                    input_handle.name,
+                    "--output",
+                    output_handle.name,
+                    "--config-file",
+                    "configs/sports_nba.yaml",
+                ],
+            ):
+                build_sports_fair_values.main()
+
+            output_handle.seek(0)
+            payload = json.load(output_handle)
+
+        self.assertEqual(payload["source"], "sportsbook-devig:multiplicative:best-line")
+        metadata = payload.get("metadata")
+        self.assertIsInstance(metadata, dict)
+        if not isinstance(metadata, dict):
+            self.fail("expected manifest metadata")
+        self.assertEqual(metadata["provenance"]["book_aggregation"], "best-line")
+
     def test_collector_rows_can_build_without_event_map_for_moneyline_titles(self):
         events = [
             {
