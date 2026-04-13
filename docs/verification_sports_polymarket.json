@@ -16,9 +16,9 @@
       }
     },
     "config_driven_run_agent_loop": {
-      "command": "run-agent-loop --venue polymarket --fair-values-file <fair_values.json> --config-file configs/sports_nba.yaml",
+      "automated_test": "tests.test_run_agent_loop.RunAgentLoopTests.test_main_can_apply_runtime_defaults_from_config_file",
       "observed": {
-        "mode": "preview",
+        "mode": "run",
         "policy_file": "configs/runtime_policy.preview.json",
         "result": 0
       }
@@ -27,7 +27,8 @@
       "command": "ingest-live-data --layer gamma --config-file configs/sports_nba.yaml --output <gamma.json> --limit 2",
       "observed": {
         "layer": "gamma",
-        "market_count": 2
+        "output": ".../gamma.json",
+        "markets_count": 2
       }
     },
     "training_from_captured_rows": {
@@ -38,7 +39,7 @@
       }
     },
     "training_bt_from_captured_rows": {
-      "command": "train-models --model bt --training-data <sports_inputs_labeled.json> --output <bt.json>",
+      "automated_test": "tests.test_research_architecture_scaffolding.ResearchArchitectureScaffoldingTests.test_train_models_can_train_bt_from_training_data_capture",
       "observed": {
         "skill_by_team": {
           "Away Team": -0.6931471805599453,

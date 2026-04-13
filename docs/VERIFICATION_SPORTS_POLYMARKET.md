@@ -87,12 +87,21 @@ ingest-live-data \
   --limit 2
 ```
 
-Observed output excerpt:
+Observed command output excerpt:
 
 ```json
 {
   "layer": "gamma",
-  "market_count": 2
+  "output": ".../gamma.json"
+}
+```
+
+Observed capture artifact excerpt after reading the written file:
+
+```json
+{
+  "layer": "gamma",
+  "markets_count": 2
 }
 ```
 
@@ -135,6 +144,19 @@ Observed BT training artifact excerpt:
   }
 }
 ```
+
+## Automated verification — BT row training path
+
+Committed test path:
+
+```text
+tests.test_research_architecture_scaffolding.ResearchArchitectureScaffoldingTests.test_train_models_can_train_bt_from_training_data_capture
+```
+
+What it verifies:
+
+- `train-models --model bt --training-data ...` can read labeled captured sports-input rows
+- the resulting BT artifact contains `skill_by_team`
 
 ## Manual QA — walk-forward BT generation
 
