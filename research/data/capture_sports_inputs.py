@@ -21,6 +21,12 @@ def _parse_captured_at(value: object) -> datetime:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
+def _parse_optional_datetime(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    return _parse_captured_at(value)
+
+
 @dataclass(frozen=True)
 class SportsInputCaptureEnvelope:
     source: str
@@ -54,12 +60,28 @@ def _coerce_optional_float(value: object) -> float | None:
     return float(value)
 
 
+def _coerce_implied_probability(
+    item: dict[str, object], *, decimal_odds: float | None
+) -> float | None:
+    explicit = _coerce_optional_float(
+        item.get("implied_probability") or item.get("impliedProb")
+    )
+    if explicit is not None:
+        return explicit
+    if decimal_odds is None or decimal_odds <= 1.0:
+        return None
+    return 1.0 / decimal_odds
+
+
 def _row_from_payload(
     item: dict[str, object],
     *,
     source: str,
     captured_at: datetime,
 ) -> SportsInputRow:
+    decimal_odds = _coerce_optional_float(
+        item.get("decimal_odds") or item.get("price_decimal")
+    )
     return SportsInputRow(
         source=source,
         captured_at=captured_at,
@@ -78,7 +100,7 @@ def _row_from_payload(
             if item.get("bookmaker") not in (None, "")
             else None
         ),
-        decimal_odds=_coerce_optional_float(item.get("decimal_odds")),
+        decimal_odds=decimal_odds,
         event_key=(
             str(item.get("event_key"))
             if item.get("event_key") not in (None, "")
@@ -113,6 +135,15 @@ def _row_from_payload(
             str(item.get("away_team"))
             if item.get("away_team") not in (None, "")
             else None
+        ),
+        start_time=_parse_optional_datetime(
+            item.get("start_time")
+            or item.get("commence_time")
+            or item.get("gameStartTime")
+        ),
+        implied_probability=_coerce_implied_probability(
+            item,
+            decimal_odds=decimal_odds,
         ),
         label=_coerce_label(item),
         raw=dict(item),

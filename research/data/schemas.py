@@ -8,6 +8,13 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _serialize_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    resolved = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return resolved.isoformat()
+
+
 @dataclass(frozen=True)
 class SportsInputRow:
     source: str
@@ -25,6 +32,8 @@ class SportsInputRow:
     outcome: str | None = None
     home_team: str | None = None
     away_team: str | None = None
+    start_time: datetime | None = None
+    implied_probability: float | None = None
     label: int | None = None
     raw: dict[str, object] = field(default_factory=dict)
 
@@ -45,6 +54,8 @@ class SportsInputRow:
             "outcome": self.outcome,
             "home_team": self.home_team,
             "away_team": self.away_team,
+            "start_time": _serialize_datetime(self.start_time),
+            "implied_probability": self.implied_probability,
             "label": self.label,
             "raw": self.raw,
         }
@@ -65,8 +76,11 @@ class PolymarketMarketRecord:
     title: str | None = None
     best_bid: float | None = None
     best_ask: float | None = None
+    best_bid_size: float | None = None
+    best_ask_size: float | None = None
     midpoint: float | None = None
     volume: float | None = None
+    start_time: datetime | None = None
     raw: dict[str, object] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, object]:
@@ -84,8 +98,11 @@ class PolymarketMarketRecord:
             "title": self.title,
             "best_bid": self.best_bid,
             "best_ask": self.best_ask,
+            "best_bid_size": self.best_bid_size,
+            "best_ask_size": self.best_ask_size,
             "midpoint": self.midpoint,
             "volume": self.volume,
+            "start_time": _serialize_datetime(self.start_time),
             "raw": self.raw,
         }
 

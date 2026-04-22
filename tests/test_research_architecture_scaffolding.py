@@ -11,6 +11,7 @@ from unittest.mock import patch
 from engine.config_loader import load_config_file, nested_config_value
 from engine.runtime_policy import load_runtime_policy
 from research.data.build_training_set import build_training_set_rows
+from research.data.build_training_set import build_training_set_rows_from_sports_inputs
 from research.data.build_training_set import load_training_set_rows
 from research.data.capture_polymarket import (
     build_polymarket_capture,
@@ -63,6 +64,9 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
                             "market_key": "token-a:yes",
                             "condition_id": "abc",
                             "event_key": "event-1",
+                            "best_bid_size": 12,
+                            "best_ask_size": 8,
+                            "gameStartTime": "2026-04-07T15:00:00Z",
                         }
                     ],
                     layer="gamma",
@@ -77,6 +81,9 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
                             "sport": "nba",
                             "home_team": "Home Team",
                             "away_team": "Away Team",
+                            "selection_name": "Home Team",
+                            "decimal_odds": 1.80,
+                            "start_time": "2026-04-07T15:00:00Z",
                             "label": 1,
                         }
                     ],
@@ -98,6 +105,20 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
             loaded_sports = load_sports_input_capture(sports_path)
             self.assertEqual(loaded_poly.captured_at, captured_at)
             self.assertEqual(loaded_sports.captured_at, captured_at)
+            self.assertEqual(loaded_poly.markets[0].best_bid_size, 12.0)
+            self.assertEqual(loaded_poly.markets[0].best_ask_size, 8.0)
+            self.assertEqual(
+                loaded_poly.markets[0].start_time,
+                datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc),
+            )
+            self.assertAlmostEqual(
+                loaded_sports.rows[0].implied_probability,
+                1 / 1.80,
+            )
+            self.assertEqual(
+                loaded_sports.rows[0].start_time,
+                datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc),
+            )
 
             markets = load_market_snapshot(poly_path)
             self.assertEqual(len(markets), 1)
@@ -105,15 +126,87 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
 
     def test_feature_helpers_and_research_exports_work(self):
         market_features = build_market_microstructure_features(
-            best_bid=0.42, best_ask=0.48, volume=100
+            best_bid=0.42,
+            best_ask=0.48,
+            volume=100,
+            best_bid_size=20,
+            best_ask_size=10,
+            captured_at=datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc),
+            start_time=datetime(2026, 4, 7, 14, 0, tzinfo=timezone.utc),
         )
         sports_features = build_team_strength_features(
-            home_team="A", away_team="B", home_rating=1520, away_rating=1480
+            home_team="A",
+            away_team="B",
+            home_rating=1520,
+            away_rating=1480,
+            selection_name="A",
+            decimal_odds=1.8,
+            captured_at=datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc),
+            start_time=datetime(2026, 4, 7, 14, 0, tzinfo=timezone.utc),
         )
         merged = merge_feature_sets(market_features, sports_features)
         self.assertAlmostEqual(market_features["midpoint"], 0.45)
+        self.assertEqual(market_features["quoted_liquidity"], 30.0)
+        self.assertAlmostEqual(market_features["book_imbalance"], 1 / 3)
+        self.assertEqual(market_features["time_to_start_minutes"], 120.0)
         self.assertEqual(merged["home_team"], "A")
+        self.assertEqual(sports_features["selection_is_home"], 1.0)
+        self.assertAlmostEqual(
+            sports_features["selection_implied_probability"],
+            1 / 1.8,
+        )
+        self.assertEqual(sports_features["time_to_start_minutes"], 120.0)
         self.assertGreater(blend_probability(0.6, 0.7, model_weight=0.5), 0.6)
+
+    def test_training_rows_from_inputs_can_join_polymarket_market_features(self):
+        captured_at = datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc)
+        start_time = datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc)
+        sports_capture = build_sports_input_capture(
+            [
+                {
+                    "event_key": "event-1",
+                    "sport": "nba",
+                    "sports_market_type": "moneyline",
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "selection_name": "Home Team",
+                    "decimal_odds": 1.80,
+                    "start_time": start_time.isoformat(),
+                    "label": 1,
+                }
+            ],
+            source="sports-inputs",
+            captured_at=captured_at,
+        )
+        market_capture = build_polymarket_capture(
+            [
+                {
+                    "market_key": "token-home:yes",
+                    "event_key": "event-1",
+                    "sports_market_type": "moneyline",
+                    "best_bid": 0.42,
+                    "best_ask": 0.48,
+                    "best_bid_size": 20,
+                    "best_ask_size": 10,
+                    "volume": 100,
+                    "start_time": start_time.isoformat(),
+                }
+            ],
+            layer="gamma",
+            captured_at=captured_at,
+        )
+
+        rows = build_training_set_rows_from_sports_inputs(
+            sports_capture.rows,
+            polymarket_markets=market_capture.markets,
+        )
+
+        self.assertEqual(len(rows), 1)
+        metadata = rows[0].metadata
+        self.assertAlmostEqual(metadata["selection_implied_probability"], 1 / 1.8)
+        self.assertEqual(metadata["market_quoted_liquidity"], 30.0)
+        self.assertEqual(metadata["market_market_count"], 1.0)
+        self.assertEqual(metadata["market_time_to_start_minutes"], 180.0)
 
     def test_training_and_eval_scaffolding_works(self):
         case = SportsBenchmarkCase.from_payload(
@@ -144,11 +237,35 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             training_path = Path(temp_dir) / "training.json"
+            market_path = Path(temp_dir) / "market.json"
             output_path = Path(temp_dir) / "elo.json"
             registry_root = Path(temp_dir) / "registry"
             training_path.write_text(json.dumps(training_payload))
-            rows = load_training_set_rows(str(training_path))
+            market_path.write_text(
+                json.dumps(
+                    {
+                        "layer": "gamma",
+                        "markets": [
+                            {
+                                "market_key": "token-home:yes",
+                                "event_key": "event-1",
+                                "sports_market_type": "moneyline",
+                                "best_bid": 0.42,
+                                "best_ask": 0.48,
+                                "best_bid_size": 20,
+                                "best_ask_size": 10,
+                                "volume": 100,
+                            }
+                        ],
+                    }
+                )
+            )
+            rows = load_training_set_rows(
+                str(training_path),
+                polymarket_capture_path=str(market_path),
+            )
             self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].metadata["market_quoted_liquidity"], 30.0)
 
             with patch(
                 "sys.argv",
