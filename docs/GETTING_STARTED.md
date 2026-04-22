@@ -16,6 +16,8 @@ It currently provides:
 
 The main supported venue path is Polymarket. Kalshi support exists behind the same interface, but it is thinner and should be treated as scaffolding, not parity.
 
+There is also a reusable `forecasting/` package for domain-agnostic calibration, scoring, model-vs-market dashboard generation, and non-sports pipeline scaffolding. See `docs/FORECASTING_PLATFORM.md` for that surface.
+
 ## Install
 
 The canonical local setup is a locked `uv` environment, verified on Python 3.10.
@@ -60,6 +62,8 @@ Common entrypoints:
 - `build-fair-values`
 - `build-sports-fair-values`
 - `refresh-sports-fair-values`
+- `render-model-vs-market-dashboard`
+- `scaffold-forecasting-pipeline`
 - `prediction-market-sports-benchmark`
 - `prediction-market-sports-benchmark-suite`
 

@@ -5,6 +5,7 @@ import re
 from typing import Iterable
 
 from adapters.types import MarketSummary, NormalizedOrder, OrderIntent, PositionSnapshot
+from engine.interfaces import LinkedMarketRiskGraphSnapshot
 
 
 @dataclass
@@ -47,6 +48,7 @@ class RiskEngine:
         self.limits = limits
         self.state = state or RiskState()
         self.market_key_to_event_exposure_key: dict[str, str] = {}
+        self.market_key_to_mutually_exclusive_group_key: dict[str, str] = {}
 
     def _normalize_event_component(self, value: str | None) -> str | None:
         if value in (None, ""):
@@ -84,6 +86,7 @@ class RiskEngine:
         sport: str | None = None,
         series: str | None = None,
         game_id: str | None = None,
+        mutually_exclusive_group_key: str | None = None,
     ) -> str | None:
         exposure_key = self._event_exposure_key(
             event_key=event_key,
@@ -91,10 +94,39 @@ class RiskEngine:
             series=series,
             game_id=game_id,
         )
+        if mutually_exclusive_group_key not in (None, ""):
+            self.market_key_to_mutually_exclusive_group_key[str(market_key)] = str(
+                mutually_exclusive_group_key
+            )
         if exposure_key is None:
             return None
         self.market_key_to_event_exposure_key[str(market_key)] = exposure_key
         return exposure_key
+
+    def _market_group_key_from_market(self, market: MarketSummary) -> str:
+        raw = market.raw
+        payload = raw
+        if isinstance(raw, dict) and isinstance(raw.get("market"), dict):
+            payload = raw["market"]
+        if isinstance(payload, dict):
+            for key in (
+                "condition_id",
+                "conditionId",
+                "market_id",
+                "marketId",
+                "market",
+                "slug",
+                "question",
+                "title",
+            ):
+                value = payload.get(key)
+                if value not in (None, ""):
+                    return str(value)
+        if market.title not in (None, ""):
+            return str(market.title)
+        if market.contract.title not in (None, ""):
+            return str(market.contract.title)
+        return market.contract.symbol
 
     def register_markets(self, markets: Iterable[MarketSummary]) -> None:
         for market in markets:
@@ -104,7 +136,28 @@ class RiskEngine:
                 sport=market.sport,
                 series=market.series,
                 game_id=market.game_id,
+                mutually_exclusive_group_key=self._market_group_key_from_market(market),
             )
+
+    def _mutually_exclusive_group_key_for_market_key(self, market_key: str) -> str:
+        return self.market_key_to_mutually_exclusive_group_key.get(
+            market_key, f"market:{market_key}"
+        )
+
+    def graph_snapshot_for(
+        self, market_key: str
+    ) -> LinkedMarketRiskGraphSnapshot | None:
+        linked_event_key = self.market_key_to_event_exposure_key.get(market_key)
+        mutually_exclusive_group_key = (
+            self.market_key_to_mutually_exclusive_group_key.get(market_key)
+        )
+        if linked_event_key is None and mutually_exclusive_group_key is None:
+            return None
+        return LinkedMarketRiskGraphSnapshot(
+            market_key=market_key,
+            linked_event_key=linked_event_key,
+            mutually_exclusive_group_key=mutually_exclusive_group_key,
+        )
 
     def _order_exposure(self, order: NormalizedOrder) -> float:
         if order.action.value == "sell" and order.reduce_only:
@@ -144,19 +197,27 @@ class RiskEngine:
         positions: list[PositionSnapshot],
         open_orders: list[NormalizedOrder],
     ) -> float:
-        position_quantity = sum(
-            abs(position.quantity)
+        market_keys = {
+            position.contract.market_key
             for position in positions
             if self.market_key_to_event_exposure_key.get(position.contract.market_key)
             == event_exposure_key
+        }.union(
+            {
+                order.contract.market_key
+                for order in open_orders
+                if self.market_key_to_event_exposure_key.get(order.contract.market_key)
+                == event_exposure_key
+            }
         )
-        resting = sum(
-            self._order_exposure(order)
-            for order in open_orders
-            if self.market_key_to_event_exposure_key.get(order.contract.market_key)
-            == event_exposure_key
-        )
-        return position_quantity + resting
+        grouped_exposure: dict[str, float] = {}
+        for market_key in market_keys:
+            group_key = self._mutually_exclusive_group_key_for_market_key(market_key)
+            grouped_exposure[group_key] = max(
+                grouped_exposure.get(group_key, 0.0),
+                self._current_market_exposure(market_key, positions, open_orders),
+            )
+        return sum(grouped_exposure.values())
 
     def _resolve_positions(
         self,
@@ -227,24 +288,28 @@ class RiskEngine:
         running_global_exposure = self._current_global_exposure(
             current_positions, open_orders
         )
-        running_event_exposure = {
-            event_exposure_key: self._current_event_exposure(
-                event_exposure_key,
+        for order in open_orders:
+            market_key = order.contract.market_key
+            if market_key in running_market_exposure:
+                continue
+            running_market_exposure[market_key] = self._current_market_exposure(
+                market_key,
                 current_positions,
                 open_orders,
             )
-            for event_exposure_key in {
-                self.market_key_to_event_exposure_key.get(
-                    current_position.contract.market_key
-                )
-                for current_position in current_positions
-            }.union(
-                {
-                    self.market_key_to_event_exposure_key.get(order.contract.market_key)
-                    for order in open_orders
-                }
+        running_event_group_exposure: dict[str, dict[str, float]] = {}
+        for market_key, exposure in running_market_exposure.items():
+            event_exposure_key = self.market_key_to_event_exposure_key.get(market_key)
+            if event_exposure_key is None:
+                continue
+            group_key = self._mutually_exclusive_group_key_for_market_key(market_key)
+            event_groups = running_event_group_exposure.setdefault(
+                event_exposure_key, {}
             )
-            if event_exposure_key is not None
+            event_groups[group_key] = max(event_groups.get(group_key, 0.0), exposure)
+        running_event_exposure = {
+            event_exposure_key: sum(grouped.values())
+            for event_exposure_key, grouped in running_event_group_exposure.items()
         }
         remaining_reduce_only_capacity = {
             current_position.contract.market_key: max(current_position.quantity, 0.0)
@@ -273,12 +338,14 @@ class RiskEngine:
                 continue
 
             market_key = intent.contract.market_key
-            market_exposure = running_market_exposure.get(
-                market_key,
-                self._current_market_exposure(
-                    market_key, current_positions, open_orders
-                ),
-            )
+            market_exposure = running_market_exposure.get(market_key)
+            if market_exposure is None:
+                market_exposure = self._current_market_exposure(
+                    market_key,
+                    current_positions,
+                    open_orders,
+                )
+                running_market_exposure[market_key] = market_exposure
             exposure_increase = intent.quantity
             if intent.action.value == "sell" and intent.reduce_only:
                 reduce_only_capacity = remaining_reduce_only_capacity.get(
@@ -298,15 +365,22 @@ class RiskEngine:
                 self.limits.max_contracts_per_event is not None
                 and event_exposure_key is not None
             ):
-                current_event_exposure = running_event_exposure.get(
-                    event_exposure_key,
-                    self._current_event_exposure(
-                        event_exposure_key,
-                        current_positions,
-                        open_orders,
-                    ),
+                event_groups = running_event_group_exposure.setdefault(
+                    event_exposure_key, {}
                 )
-                projected_event = current_event_exposure + exposure_increase
+                group_key = self._mutually_exclusive_group_key_for_market_key(
+                    market_key
+                )
+                current_group_exposure = event_groups.get(group_key, 0.0)
+                current_event_exposure = running_event_exposure.get(
+                    event_exposure_key, 0.0
+                )
+                projected_group_exposure = max(current_group_exposure, projected_market)
+                projected_event = (
+                    current_event_exposure
+                    - current_group_exposure
+                    + projected_group_exposure
+                )
                 if projected_event > self.limits.max_contracts_per_event:
                     decision.rejected.append(
                         Rejection(intent, "per-event exposure cap exceeded")
@@ -326,6 +400,16 @@ class RiskEngine:
 
             running_market_exposure[market_key] = projected_market
             if projected_event is not None and event_exposure_key is not None:
+                event_groups = running_event_group_exposure.setdefault(
+                    event_exposure_key, {}
+                )
+                group_key = self._mutually_exclusive_group_key_for_market_key(
+                    market_key
+                )
+                event_groups[group_key] = max(
+                    event_groups.get(group_key, 0.0),
+                    projected_market,
+                )
                 running_event_exposure[event_exposure_key] = projected_event
             running_global_exposure = projected_global
             if intent.action.value == "buy":

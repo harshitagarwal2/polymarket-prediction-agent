@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from adapters.types import (
     BalanceSnapshot,
-    Contract,
-    NormalizedOrder,
     OrderBookSnapshot,
     OrderIntent,
 )
 from engine.interfaces import Strategy, StrategyContext
 from research.paper import PaperBroker, PaperTrade
-from risk.limits import RiskDecision, RiskEngine
+from risk.limits import RiskEngine
 
 
 @dataclass(frozen=True)
@@ -77,6 +75,7 @@ class ReplayRunner:
                 open_orders=self.broker.open_orders_for(contract),
                 fair_value=step.fair_value,
                 metadata=step.metadata,
+                risk_graph=self.risk_engine.graph_snapshot_for(contract.market_key),
             )
             proposed = self.strategy.generate_intents(context)
             risk = self.risk_engine.evaluate(

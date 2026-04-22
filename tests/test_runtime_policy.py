@@ -28,10 +28,17 @@ class RuntimePolicyTests(unittest.TestCase):
                         "allowed_categories": ["sports", "nba"],
                         "taker_fee_rate": 0.02,
                         "min_volume": 5000,
+                        "contract_rules": {
+                            "freeze_before_expiry_seconds": 1800,
+                            "freeze_when_not_accepting_orders": False,
+                        },
                     },
                     "pair_opportunity_ranker": {
                         "edge_threshold": 0.03,
                         "allowed_categories": ["sports"],
+                        "contract_rules": {
+                            "freeze_when_closed": False,
+                        },
                     },
                     "execution_policy_gate": {
                         "max_open_orders_global": 3,
@@ -66,7 +73,15 @@ class RuntimePolicyTests(unittest.TestCase):
             policy.opportunity_ranker.allowed_categories,
             ("sports", "nba"),
         )
+        self.assertEqual(
+            policy.opportunity_ranker.contract_rule_freeze.freeze_before_expiry_seconds,
+            1800,
+        )
+        self.assertFalse(
+            policy.opportunity_ranker.contract_rule_freeze.freeze_when_not_accepting_orders
+        )
         self.assertEqual(policy.pair_opportunity_ranker.edge_threshold, 0.03)
+        self.assertFalse(policy.pair_opportunity_ranker.contract_rule_freeze.freeze_when_closed)
         self.assertEqual(policy.execution_policy_gate.max_open_orders_global, 3)
         self.assertEqual(policy.trading_engine.overlay_max_age_seconds, 12.0)
         self.assertEqual(policy.order_lifecycle_policy.max_order_age_seconds, 45.0)
@@ -75,6 +90,7 @@ class RuntimePolicyTests(unittest.TestCase):
         sizer = policy.strategy.build_sizer()
         limits = policy.risk_limits.build()
         gate = policy.execution_policy_gate.build()
+        ranker = policy.opportunity_ranker.build()
         venue_config = policy.venues.polymarket.apply(PolymarketConfig())
 
         self.assertEqual(strategy.quantity, 2.5)
@@ -83,6 +99,10 @@ class RuntimePolicyTests(unittest.TestCase):
         self.assertEqual(sizer.edge_unit, 0.07)
         self.assertEqual(limits.max_contracts_per_event, 12)
         self.assertEqual(gate.max_open_orders_global, 3)
+        self.assertEqual(
+            ranker.contract_rule_freeze.freeze_before_expiry_seconds,
+            1800,
+        )
         self.assertEqual(venue_config.depth_admission_levels, 4)
         self.assertEqual(venue_config.depth_admission_liquidity_fraction, 0.6)
         self.assertEqual(

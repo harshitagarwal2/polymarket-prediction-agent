@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
 
 from adapters.base import AdapterHealth
@@ -28,6 +29,7 @@ from engine.discovery import (
 )
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
+from research.storage import EventJournal, read_jsonl_events
 from risk.limits import RiskEngine, RiskLimits
 
 
@@ -448,6 +450,41 @@ class OrchestratorTests(unittest.TestCase):
         if execution is None:
             self.fail("expected execution result")
         self.assertTrue(execution.placements)
+
+    def test_run_top_logs_structured_runtime_summary_and_cycle_metrics(self):
+        adapter = OrchestratorAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            journal = EventJournal(f"{temp_dir}/events.jsonl")
+            orchestrator = AgentOrchestrator(
+                adapter=adapter,
+                engine=engine,
+                fair_value_provider=StaticFairValueProvider(
+                    {adapter.contract.market_key: 0.60}
+                ),
+                ranker=OpportunityRanker(edge_threshold=0.03),
+                journal=journal,
+            )
+
+            orchestrator.run_top(cycle_id="cycle-1")
+            events = read_jsonl_events(journal.path)
+
+        self.assertEqual(len(events), 1)
+        payload = events[0]["payload"]
+        self.assertEqual(payload["cycle_id"], "cycle-1")
+        self.assertEqual(payload["runtime_summary"]["state"], "recovering")
+        self.assertEqual(payload["cycle_metrics"]["candidate_count"], 1)
+        self.assertEqual(payload["cycle_metrics"]["placement_count"], 1)
+        self.assertEqual(
+            payload["cycle_metrics"]["selected_market_key"],
+            adapter.contract.market_key,
+        )
 
     def test_run_top_reuses_precomputed_engine_preview(self):
         adapter = CountingOrchestratorAdapter()

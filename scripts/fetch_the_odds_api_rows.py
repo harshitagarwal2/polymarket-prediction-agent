@@ -3,12 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any
 from urllib.request import urlopen
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine.cli_output import add_quiet_flag, emit_json
 from research.data.odds_api import fetch_odds_payload as _fetch_odds_payload
@@ -97,4 +94,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

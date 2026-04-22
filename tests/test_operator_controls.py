@@ -590,6 +590,60 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(payload["runtime_health"]["open_recovery_count"], 1)
             self.assertTrue(payload["recovery_items"])
 
+    def test_status_with_journal_surfaces_runtime_summary_and_cycle_metrics(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            journal_path = Path(temp_dir) / "events.jsonl"
+            journal = operator_cli.EventJournal(journal_path)
+            journal.append(
+                "scan_cycle",
+                {
+                    "mode": "run",
+                    "selected": {"contract": {"symbol": "token-1", "outcome": "yes"}},
+                    "selected_market_key": "token-1:yes",
+                    "policy_allowed": False,
+                    "policy_reasons": ["thin liquidity"],
+                    "gate_trace": [
+                        {
+                            "market_key": "token-1:yes",
+                            "action": "buy",
+                            "stage": "policy_gate",
+                            "allowed": False,
+                            "reasons": ["thin liquidity"],
+                        }
+                    ],
+                    "runtime_summary": {"state": "recovering"},
+                    "cycle_metrics": {
+                        "candidate_count": 1,
+                        "skipped_candidate_count": 1,
+                        "gate_trace_count": 1,
+                        "selected_market_key": "token-1:yes",
+                    },
+                },
+            )
+            args = argparse.Namespace(
+                state_file=str(state_path),
+                journal=str(journal_path),
+                venue=None,
+                symbol=None,
+                outcome="unknown",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                result = operator_cli.cmd_status(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(payload["journal_summary"]["runtime_state_counts"], {"recovering": 1})
+            self.assertEqual(
+                payload["recent_runtime"]["last_runtime_summary"]["state"], "recovering"
+            )
+            self.assertEqual(
+                payload["recent_runtime"]["last_cycle_metrics"]["selected_market_key"],
+                "token-1:yes",
+            )
+
     def test_running_engine_syncs_hold_new_orders_from_store(self):
         adapter = PlaceableAdapter()
         with tempfile.TemporaryDirectory() as temp_dir:

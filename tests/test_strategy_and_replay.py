@@ -130,6 +130,52 @@ class StrategyAndReplayTests(unittest.TestCase):
             ],
         )
 
+    def test_replay_runner_passes_registered_risk_graph_to_strategy(self):
+        contract = make_contract()
+
+        class RecordingStrategy:
+            def __init__(self):
+                self.seen_contexts = []
+
+            def generate_intents(self, context):
+                self.seen_contexts.append(context)
+                return []
+
+        strategy = RecordingStrategy()
+        risk_engine = RiskEngine(
+            RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+        )
+        risk_engine.register_market_event(
+            contract.market_key,
+            event_key="event-1",
+            mutually_exclusive_group_key="winner",
+        )
+        runner = ReplayRunner(
+            strategy=strategy,
+            risk_engine=risk_engine,
+            broker=PaperBroker(cash=100),
+        )
+
+        runner.run(
+            [
+                ReplayStep(
+                    book=OrderBookSnapshot(
+                        contract=contract,
+                        bids=[PriceLevel(price=0.45, quantity=10)],
+                        asks=[PriceLevel(price=0.50, quantity=5)],
+                    ),
+                    fair_value=0.60,
+                )
+            ]
+        )
+
+        self.assertEqual(len(strategy.seen_contexts), 1)
+        self.assertIsNotNone(strategy.seen_contexts[0].risk_graph)
+        self.assertEqual(
+            strategy.seen_contexts[0].risk_graph.linked_event_key,
+            "event:event-1",
+        )
+
     def test_replay_runner_uses_global_positions_across_contracts_for_risk(self):
         first_contract = Contract(
             venue=Venue.POLYMARKET,

@@ -3,14 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import uuid
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from adapters.base import AdapterHealth
 from adapters.types import (
@@ -45,7 +42,7 @@ from engine.safety_state import (
     RecoveryItemState,
 )
 from engine.safety_store import SafetyStateStore
-from research.storage import (
+from storage.journal import (
     EventJournal,
     read_jsonl_events,
     summarize_recent_runtime,

@@ -230,8 +230,9 @@ Status can show:
 
 - persisted safety state
 - pending cancels, pending submissions, pending refresh requests, and recovery items
-- recent journal summaries
+- recent journal summaries, including runtime-state counts, gate-stage totals, and lifecycle action counts
 - last persisted truth summary
+- latest runtime summary for the most recent cycle, skip, truth block, or lifecycle batch
 - venue snapshot and truth drift when `--venue` is supplied
 - Polymarket live-state and market-state overlay health
 

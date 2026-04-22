@@ -12,12 +12,24 @@ from adapters.types import (
     Contract,
     OrderAction,
     OrderIntent,
-    OrderStatus,
     PlacementResult,
 )
+from forecasting.fair_value_engine import (
+    FairValueField as ForecastFairValueField,
+    FairValueManifestEntry as ForecastFairValueManifestEntry,
+    FairValueProvider as ForecastFairValueProvider,
+    ManifestFairValueProvider as ForecastManifestFairValueProvider,
+    StaticFairValueProvider as ForecastStaticFairValueProvider,
+)
+from opportunity.ranker import (
+    OpportunityRanker as RoutedOpportunityRanker,
+    PairOpportunityCandidate as RoutedPairOpportunityCandidate,
+    PairOpportunityRanker as RoutedPairOpportunityRanker,
+)
+from engine.contract_rules import ContractRuleFreezePolicy, contract_freeze_reasons
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.runner import EngineRunResult, TradingEngine
-from research.storage import EventJournal
+from storage.journal import EventJournal
 from risk.limits import RiskDecision
 
 
@@ -155,6 +167,9 @@ class PairOpportunityRanker:
     max_spread: float | None = None
     min_hours_to_expiry: float | None = None
     max_hours_to_expiry: float | None = None
+    contract_rule_freeze: ContractRuleFreezePolicy = field(
+        default_factory=ContractRuleFreezePolicy
+    )
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -201,6 +216,12 @@ class PairOpportunityRanker:
         allowed_categories: set[str] | None,
         now: datetime,
     ) -> bool:
+        if contract_freeze_reasons(
+            market,
+            policy=self.contract_rule_freeze,
+            now=now,
+        ):
+            return False
         if allowed_categories is not None:
             if not self._market_labels(market).intersection(allowed_categories):
                 return False
@@ -336,6 +357,9 @@ class OpportunityRanker:
     complement_discount_bonus_cap: float = 0.005
     spread_penalty_weight: float = 0.25
     taker_fee_rate: float = 0.0
+    contract_rule_freeze: ContractRuleFreezePolicy = field(
+        default_factory=ContractRuleFreezePolicy
+    )
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -436,6 +460,12 @@ class OpportunityRanker:
         allowed_categories: set[str] | None,
         now: datetime,
     ) -> bool:
+        if contract_freeze_reasons(
+            market,
+            policy=self.contract_rule_freeze,
+            now=now,
+        ):
+            return False
         if allowed_categories is not None:
             if not self._market_labels(market).intersection(allowed_categories):
                 return False
@@ -606,6 +636,18 @@ class OpportunityRanker:
         return sorted(candidates, key=lambda candidate: candidate.score, reverse=True)[
             : self.limit
         ]
+
+
+# Compatibility bridge while engine/ consumers migrate to the first-class
+# forecasting/ and opportunity/ packages.
+FairValueProvider = ForecastFairValueProvider
+FairValueField = ForecastFairValueField
+FairValueManifestEntry = ForecastFairValueManifestEntry
+StaticFairValueProvider = ForecastStaticFairValueProvider
+ManifestFairValueProvider = ForecastManifestFairValueProvider
+PairOpportunityCandidate = RoutedPairOpportunityCandidate
+PairOpportunityRanker = RoutedPairOpportunityRanker
+OpportunityRanker = RoutedOpportunityRanker
 
 
 @dataclass
@@ -896,6 +938,67 @@ class AgentOrchestrator:
     sizer: Sizer = field(default_factory=DeterministicSizer)
     journal: EventJournal | None = None
 
+    def _runtime_summary(self) -> dict[str, object]:
+        status = self.engine.status_snapshot()
+        pending_cancels = list(status.pending_cancels)
+        pending_submissions = list(status.pending_submissions)
+        pending_refresh_requests = list(status.pending_refresh_requests)
+        recovery_items = list(status.recovery_items)
+        reasons: list[str] = []
+        if status.halted and status.halt_reason:
+            reasons.append(status.halt_reason)
+        if status.paused and status.pause_reason:
+            reasons.append(status.pause_reason)
+        if status.hold_new_orders and status.hold_reason:
+            reasons.append(status.hold_reason)
+        if status.overlay_degraded and status.overlay_degraded_reason:
+            reasons.append(status.overlay_degraded_reason)
+        if pending_submissions:
+            reasons.append("pending submissions unresolved")
+        if pending_cancels:
+            reasons.append("pending cancels unresolved")
+        if pending_refresh_requests:
+            reasons.append("authoritative refresh queued")
+        for item in recovery_items:
+            reasons.append(f"{item.item_type}: {item.reason}")
+
+        if status.halted:
+            runtime_state = "halted"
+        elif status.paused:
+            runtime_state = "paused"
+        elif status.hold_new_orders:
+            runtime_state = "hold_new_orders"
+        elif status.overlay_degraded:
+            runtime_state = "degraded"
+        elif (
+            recovery_items
+            or pending_submissions
+            or pending_cancels
+            or pending_refresh_requests
+            or status.overlay_delta_suppressed
+        ):
+            runtime_state = "recovering"
+        else:
+            runtime_state = "healthy"
+
+        return {
+            "state": runtime_state,
+            "reasons": reasons,
+            "resume_trading_eligible": status.resume_trading_eligible,
+            "last_truth_complete": status.last_truth_complete,
+            "last_truth_observed_at": status.last_truth_observed_at,
+            "pending_cancel_count": len(pending_cancels),
+            "pending_submission_count": len(pending_submissions),
+            "pending_refresh_count": len(pending_refresh_requests),
+            "open_recovery_count": len(recovery_items),
+            "overlay_degraded": status.overlay_degraded,
+            "overlay_delta_suppressed": status.overlay_delta_suppressed,
+            "heartbeat_active": status.heartbeat_active,
+            "heartbeat_unhealthy": status.heartbeat_unhealthy,
+            "last_action_gate_action": status.last_action_gate_action,
+            "last_action_gate_reason": status.last_action_gate_reason,
+        }
+
     def _status_payload(self) -> dict[str, object]:
         status = self.engine.status_snapshot()
         pending_cancels = list(status.pending_cancels)
@@ -920,6 +1023,13 @@ class AgentOrchestrator:
             "pending_cancel_post_fill_seen": any(
                 item.post_cancel_fill_seen for item in pending_cancels
             ),
+            "pending_submission_count": len(status.pending_submissions),
+            "pending_refresh_count": len(status.pending_refresh_requests),
+            "open_recovery_count": len(status.recovery_items),
+            "resume_trading_eligible": status.resume_trading_eligible,
+            "last_truth_complete": status.last_truth_complete,
+            "last_truth_observed_at": status.last_truth_observed_at,
+            "runtime_summary": self._runtime_summary(),
         }
 
     def _log_cycle(
@@ -935,12 +1045,18 @@ class AgentOrchestrator:
                 "market_count": len(cycle.markets),
                 "candidate_count": len(cycle.candidates),
                 "selected": cycle.selected,
+                "selected_market_key": (
+                    cycle.selected.contract.market_key
+                    if cycle.selected is not None
+                    else None
+                ),
                 "execution": cycle.execution,
                 "policy_allowed": cycle.policy_allowed,
                 "policy_reasons": cycle.policy_reasons,
                 "skipped_candidates": cycle.skipped_candidates,
                 "gate_trace": cycle.gate_trace,
                 "blocking_gate": self._last_blocking_gate(cycle),
+                "cycle_metrics": self._cycle_metrics(cycle),
                 **self._status_payload(),
             },
         )
@@ -954,6 +1070,7 @@ class AgentOrchestrator:
                 "cycle_id": cycle_id,
                 "mode": mode,
                 "reason": reason,
+                "reason_category": self._skip_reason_category(reason),
                 **self._status_payload(),
             },
         )
@@ -970,6 +1087,7 @@ class AgentOrchestrator:
                 "mode": mode,
                 "reason": "incomplete account truth",
                 "issues": issues,
+                "truth_issue_count": len(issues),
                 **self._status_payload(),
             },
         )
@@ -983,9 +1101,70 @@ class AgentOrchestrator:
                 "cycle_id": cycle_id,
                 "count": len(decisions),
                 "decisions": decisions,
+                "action_counts": self._lifecycle_action_counts(decisions),
+                "affected_contract_keys": sorted(
+                    {
+                        decision.contract_key
+                        for decision in decisions
+                        if getattr(decision, "contract_key", None) is not None
+                    }
+                ),
                 **self._status_payload(),
             },
         )
+
+    def _skip_reason_category(self, reason: str) -> str:
+        lowered = reason.lower()
+        if "pause" in lowered:
+            return "pause"
+        if "heartbeat" in lowered:
+            return "heartbeat"
+        if "halt" in lowered:
+            return "halt"
+        if "truth" in lowered:
+            return "truth"
+        return "other"
+
+    def _lifecycle_action_counts(self, decisions) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for decision in decisions:
+            action = getattr(decision, "action", None)
+            if action is None:
+                continue
+            key = str(action)
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    def _cycle_metrics(self, cycle: ScanCycleResult) -> dict[str, object]:
+        placements = (
+            list(cycle.execution.placements) if cycle.execution is not None else []
+        )
+        accepted_count = sum(1 for placement in placements if placement.accepted)
+        rejected_gate_count = sum(
+            1 for entry in cycle.gate_trace if entry.get("allowed") is False
+        )
+        allowed_gate_count = sum(
+            1 for entry in cycle.gate_trace if entry.get("allowed") is True
+        )
+        return {
+            "market_count": len(cycle.markets),
+            "candidate_count": len(cycle.candidates),
+            "skipped_candidate_count": len(cycle.skipped_candidates),
+            "gate_trace_count": len(cycle.gate_trace),
+            "allowed_gate_count": allowed_gate_count,
+            "rejected_gate_count": rejected_gate_count,
+            "selected_market_key": (
+                cycle.selected.contract.market_key
+                if cycle.selected is not None
+                else None
+            ),
+            "selected_action": (
+                cycle.selected.action.value if cycle.selected is not None else None
+            ),
+            "placement_count": len(placements),
+            "accepted_placement_count": accepted_count,
+            "rejected_placement_count": len(placements) - accepted_count,
+        }
 
     def scan(self, market_limit: int = 100) -> ScanCycleResult:
         markets = self.adapter.list_markets(limit=market_limit)

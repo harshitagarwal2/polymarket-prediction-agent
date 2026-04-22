@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import importlib
-import json
 import socket
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+
+from . import http_client
 
 
 def configure_client_timeout(adapter: Any) -> None:
@@ -121,18 +121,15 @@ def account_address(adapter: Any) -> str | None:
         return None
 
 
-def fetch_data_api(adapter: Any, path: str, params: dict[str, Any]) -> Any:
-    query = urlencode(
-        {key: value for key, value in params.items() if value is not None}
-    )
-    url = (
-        f"{adapter.config.data_api_host}{path}?{query}"
-        if query
-        else f"{adapter.config.data_api_host}{path}"
-    )
-
+def fetch_data_api(adapter: Any, path: str, params: dict[str, Any], *, client=None) -> Any:
+    clean_params = {key: value for key, value in params.items() if value is not None}
+    url = f"{adapter.config.data_api_host}{path}"
     def fetch() -> Any:
-        with urlopen(url, timeout=adapter.config.request_timeout_seconds) as response:
-            return json.loads(response.read().decode("utf-8"))
+        return http_client.get_json(
+            url,
+            params=clean_params,
+            timeout_seconds=adapter.config.request_timeout_seconds,
+            client=client,
+        )
 
     return call_with_retry(adapter, f"data api fetch {path}", fetch)

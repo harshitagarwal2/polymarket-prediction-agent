@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+from research.benchmark_suite_cli import main as _main
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from research.benchmark_suite_cli import main
+def main() -> int:
+    return _main()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

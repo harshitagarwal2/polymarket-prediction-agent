@@ -4,10 +4,14 @@ This document describes the current verified shape of the repo, not an aspiratio
 
 ## System summary
 
-The repo has two main layers:
+The repo now has first-class product-facing layers on top of the original runtime/research split:
 
-1. a supervised Polymarket runtime for discovery, preview, live order handling, reconciliation, and operator recovery
-2. an offline research and benchmark layer for fair-value generation, calibration, replay, and dataset snapshots
+1. `contracts/` for deterministic contract identity, mapping confidence, and resolution-rule parsing
+2. `forecasting/` for fair-value, calibration, consensus, dashboard, pipeline, and model-registry surfaces
+3. `opportunity/` for executable edge, fillability, and ranking
+4. `storage/` for raw capture envelopes, normalized row builders, parquet writers, and runtime journaling
+5. a supervised Polymarket runtime for discovery, preview, live order handling, reconciliation, and operator recovery
+6. an offline research and benchmark layer for replay, benchmarking, and dataset snapshots
 
 Polymarket is the main supported venue path. Kalshi remains present behind the same adapter interface, but the runtime, docs, and tests are much more complete on the Polymarket side.
 
@@ -23,7 +27,10 @@ external sportsbook rows or model output
    ManifestFairValueProvider or StaticFairValueProvider
                 |
                 v
-  market discovery and ranking in engine.discovery
+  market discovery orchestration in engine.discovery
+                |
+                v
+ executable edge and ranking in opportunity/
                 |
                 v
  deterministic execution policy gate and sizing
@@ -67,12 +74,49 @@ This is the runtime orchestration layer.
 Important components:
 
 - `engine/runner.py` - trading engine, reconciliation flow, safety state updates, pending cancel and pending submission recovery
-- `engine/discovery.py` - opportunity ranking, pair ranking, deterministic execution gate, polling loop orchestration
+- `engine/discovery.py` - polling loop orchestration, scan-cycle logging, pair-preview/live orchestration, and compatibility exports while ranking migrates into `opportunity/`
 - `engine/runtime_policy.py` - schema-validated runtime policy loader
 - `engine/order_state.py` and `engine/reconciliation.py` - order lifecycle and truth comparison helpers
 - `engine/safety_state.py` and `engine/safety_store.py` - persisted operator and recovery state
 
 The engine is designed to fail closed when truth is incomplete or recovery work is still open.
+
+### `contracts/`
+
+This layer owns contract meaning.
+
+- `contracts/ontology.py` builds normalized contract identities and grouping keys
+- `contracts/confidence.py` scores deterministic contract-match confidence
+- `contracts/resolution_rules.py` parses resolution metadata and freeze conditions
+- `contracts/mapper.py` assembles normalized contract objects for downstream forecasting and risk work
+
+### `forecasting/`
+
+This layer owns fair value and forecast evaluation.
+
+- `forecasting/fair_value_engine.py` holds fair-value providers plus deterministic consensus fair-value combination
+- `forecasting/calibrator.py` and `forecasting/calibration.py` hold calibration loaders and adapters
+- `forecasting/model_registry.py` provides registry surfaces for reusable model loaders
+- `forecasting/dashboards.py`, `forecasting/contracts.py`, and `forecasting/pipeline.py` cover model-vs-market review, optional LLM evidence, and non-sports pipeline scaffolding
+
+`research/calibration.py` and forecast-scoring pieces of `research/scoring.py` remain compatibility facades for the older sports benchmark path.
+
+### `opportunity/`
+
+This layer sits between fair value and execution.
+
+- `opportunity/executable_edge.py` computes net edge from executable quotes, fees, and slippage assumptions
+- `opportunity/fillability.py` estimates visible fillability from market snapshots and books
+- `opportunity/ranker.py` owns single-market and paired ranking
+
+### `storage/`
+
+This layer makes runtime and capture storage explicit.
+
+- `storage/raw/` writes immutable capture envelopes
+- `storage/postgres/` builds normalized market/order-book row payloads for relational persistence
+- `storage/parquet/` owns local parquet writers and partition helpers
+- `storage/journal.py` holds runtime JSONL journaling and operator summary helpers
 
 ### `risk/`
 
@@ -90,7 +134,7 @@ In the default `run-agent-loop` path, event identity is seeded from fair-value m
 This layer supports offline work.
 
 - `research/fair_values.py` builds fair-value manifests from sportsbook-style rows
-- `research/calibration.py` fits and loads histogram calibration artifacts
+- `research/calibration.py` is the sports-facing compatibility facade for histogram calibration artifacts that now live in `forecasting/calibration.py`
 - `research/paper.py` and `research/replay.py` drive replay and paper execution
 - `research/benchmark_runner.py` and `research/benchmark_suite.py` run single-case and suite benchmarks
 - `research/datasets.py` stores local dataset snapshots and walk-forward splits

@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import unittest
 
 from adapters.types import (
     Contract,
+    MarketSummary,
     NormalizedOrder,
     OrderAction,
     OrderIntent,
@@ -43,6 +46,21 @@ def make_reduce_only_sell_order(
         remaining_quantity=quantity,
         status=OrderStatus.RESTING,
         reduce_only=True,
+    )
+
+
+def make_market_summary(
+    contract: Contract,
+    *,
+    title: str | None = None,
+    event_key: str | None = None,
+    raw: dict | None = None,
+) -> MarketSummary:
+    return MarketSummary(
+        contract=contract,
+        title=title,
+        event_key=event_key,
+        raw=raw,
     )
 
 
@@ -382,6 +400,154 @@ class RiskLimitsTests(unittest.TestCase):
 
         self.assertFalse(decision.approved)
         self.assertEqual(decision.rejected[0].reason, "per-event exposure cap exceeded")
+
+    def test_event_exposure_graph_nets_mutually_exclusive_outcomes(self):
+        yes_contract = make_contract(symbol="TOKEN-YES", outcome=OutcomeSide.YES)
+        no_contract = make_contract(symbol="TOKEN-NO", outcome=OutcomeSide.NO)
+        engine = RiskEngine(
+            RiskLimits(
+                max_contracts_per_market=10,
+                max_global_contracts=10,
+                max_contracts_per_event=1,
+            )
+        )
+        engine.register_market_event(
+            yes_contract.market_key,
+            event_key="event-1",
+            mutually_exclusive_group_key="winner",
+        )
+        engine.register_market_event(
+            no_contract.market_key,
+            event_key="event-1",
+            mutually_exclusive_group_key="winner",
+        )
+
+        yes_intent = OrderIntent(
+            contract=yes_contract,
+            action=OrderAction.BUY,
+            price=0.45,
+            quantity=1,
+        )
+        no_intent = OrderIntent(
+            contract=no_contract,
+            action=OrderAction.BUY,
+            price=0.45,
+            quantity=1,
+        )
+
+        decision = engine.evaluate(
+            [yes_intent, no_intent],
+            position=PositionSnapshot(contract=yes_contract, quantity=0),
+            positions=[
+                PositionSnapshot(contract=yes_contract, quantity=0),
+                PositionSnapshot(contract=no_contract, quantity=0),
+            ],
+            open_orders=[],
+        )
+
+        self.assertEqual(decision.approved, [yes_intent, no_intent])
+        self.assertFalse(decision.rejected)
+
+    def test_event_exposure_graph_still_sums_distinct_linked_markets(self):
+        yes_contract = make_contract(symbol="TOKEN-YES", outcome=OutcomeSide.YES)
+        no_contract = make_contract(symbol="TOKEN-NO", outcome=OutcomeSide.NO)
+        spread_contract = make_contract(symbol="TOKEN-SPREAD", outcome=OutcomeSide.YES)
+        engine = RiskEngine(
+            RiskLimits(
+                max_contracts_per_market=10,
+                max_global_contracts=10,
+                max_contracts_per_event=1,
+            )
+        )
+        engine.register_market_event(
+            yes_contract.market_key,
+            event_key="event-1",
+            mutually_exclusive_group_key="winner",
+        )
+        engine.register_market_event(
+            no_contract.market_key,
+            event_key="event-1",
+            mutually_exclusive_group_key="winner",
+        )
+        engine.register_market_event(
+            spread_contract.market_key,
+            event_key="event-1",
+            mutually_exclusive_group_key="spread",
+        )
+
+        decision = engine.evaluate(
+            [
+                OrderIntent(
+                    contract=yes_contract,
+                    action=OrderAction.BUY,
+                    price=0.45,
+                    quantity=1,
+                )
+            ],
+            position=PositionSnapshot(contract=yes_contract, quantity=0),
+            positions=[
+                PositionSnapshot(contract=yes_contract, quantity=0),
+                PositionSnapshot(contract=no_contract, quantity=0),
+                PositionSnapshot(contract=spread_contract, quantity=1),
+            ],
+            open_orders=[],
+        )
+
+        self.assertFalse(decision.approved)
+        self.assertEqual(decision.rejected[0].reason, "per-event exposure cap exceeded")
+
+    def test_register_markets_infers_mutually_exclusive_groups_from_market_identity(self):
+        yes_contract = make_contract(symbol="TOKEN-YES", outcome=OutcomeSide.YES)
+        no_contract = make_contract(symbol="TOKEN-NO", outcome=OutcomeSide.NO)
+        engine = RiskEngine(
+            RiskLimits(
+                max_contracts_per_market=10,
+                max_global_contracts=10,
+                max_contracts_per_event=1,
+            )
+        )
+        engine.register_markets(
+            [
+                make_market_summary(
+                    yes_contract,
+                    title="Will home team win?",
+                    event_key="event-1",
+                    raw={"condition_id": "winner-market"},
+                ),
+                make_market_summary(
+                    no_contract,
+                    title="Will home team win?",
+                    event_key="event-1",
+                    raw={"condition_id": "winner-market"},
+                ),
+            ]
+        )
+
+        decision = engine.evaluate(
+            [
+                OrderIntent(
+                    contract=yes_contract,
+                    action=OrderAction.BUY,
+                    price=0.45,
+                    quantity=1,
+                ),
+                OrderIntent(
+                    contract=no_contract,
+                    action=OrderAction.BUY,
+                    price=0.45,
+                    quantity=1,
+                ),
+            ],
+            position=PositionSnapshot(contract=yes_contract, quantity=0),
+            positions=[
+                PositionSnapshot(contract=yes_contract, quantity=0),
+                PositionSnapshot(contract=no_contract, quantity=0),
+            ],
+            open_orders=[],
+        )
+
+        self.assertEqual(len(decision.approved), 2)
+        self.assertFalse(decision.rejected)
 
 
 if __name__ == "__main__":

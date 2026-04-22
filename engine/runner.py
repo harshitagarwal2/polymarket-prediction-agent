@@ -1729,6 +1729,7 @@ class TradingEngine:
             open_orders=open_orders,
             fair_value=fair_value,
             metadata=merged_metadata,
+            risk_graph=self.risk_engine.graph_snapshot_for(contract.market_key),
         )
 
     def _block_for_incomplete_snapshot(

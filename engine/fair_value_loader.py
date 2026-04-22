@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol
 
-from engine.discovery import (
+from forecasting.fair_value_engine import (
     FairValueField,
     FairValueManifestEntry,
     ManifestFairValueProvider,

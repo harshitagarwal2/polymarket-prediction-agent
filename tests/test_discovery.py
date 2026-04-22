@@ -6,10 +6,16 @@ from datetime import datetime, timedelta, timezone
 from adapters import MarketSummary
 from adapters.polymarket import PolymarketAdapter, PolymarketConfig
 from adapters.types import Contract, OrderAction, OutcomeSide, Venue
+from engine.contract_rules import (
+    ContractRuleFreezePolicy,
+    contract_freeze_reasons,
+    parse_contract_rules,
+)
 from engine.discovery import (
     FairValueManifestEntry,
     ManifestFairValueProvider,
     OpportunityRanker,
+    PairOpportunityRanker,
     StaticFairValueProvider,
 )
 
@@ -204,6 +210,120 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(
             [candidate.contract.symbol for candidate in candidates], ["sports-1"]
         )
+
+    def test_contract_rules_parser_reads_resolution_and_trading_flags(self):
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=4)
+        market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="token-a", outcome=OutcomeSide.YES
+            ),
+            active=True,
+            expires_at=expires_at,
+            raw={
+                "market": {
+                    "active": True,
+                    "closed": False,
+                    "acceptingOrders": False,
+                    "enableOrderBook": False,
+                    "description": "Resolve according to the official league report.",
+                    "resolutionSource": "league office",
+                    "resolvedBy": "oracle-address",
+                }
+            },
+        )
+
+        rules = parse_contract_rules(market)
+
+        self.assertTrue(rules.active)
+        self.assertFalse(rules.closed)
+        self.assertFalse(rules.accepting_orders)
+        self.assertFalse(rules.order_book_enabled)
+        self.assertEqual(rules.expires_at, expires_at)
+        self.assertEqual(
+            rules.description,
+            "Resolve according to the official league report.",
+        )
+        self.assertEqual(rules.resolution_source, "league office")
+        self.assertEqual(rules.resolved_by, "oracle-address")
+
+    def test_contract_rules_freeze_reasons_cover_resolution_state_and_expiry(self):
+        now = datetime.now(timezone.utc)
+        market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="token-a", outcome=OutcomeSide.YES
+            ),
+            active=True,
+            expires_at=now + timedelta(minutes=10),
+            raw={"market": {"acceptingOrders": False}},
+        )
+
+        reasons = contract_freeze_reasons(
+            market,
+            policy=ContractRuleFreezePolicy(freeze_before_expiry_seconds=900),
+            now=now,
+        )
+
+        self.assertTrue(
+            any("not accepting orders" in reason for reason in reasons),
+            msg=reasons,
+        )
+        self.assertTrue(
+            any("expiry freeze window" in reason for reason in reasons),
+            msg=reasons,
+        )
+
+    def test_opportunity_ranker_skips_market_frozen_by_contract_rules(self):
+        frozen_market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="frozen-1", outcome=OutcomeSide.YES
+            ),
+            title="Frozen market",
+            best_bid=0.45,
+            best_ask=0.50,
+            active=True,
+            raw={"market": {"acceptingOrders": False}},
+        )
+        provider = StaticFairValueProvider({frozen_market.contract.market_key: 0.60})
+
+        candidates = OpportunityRanker(edge_threshold=0.03).rank(
+            [frozen_market], provider
+        )
+
+        self.assertEqual(candidates, [])
+
+    def test_pair_ranker_skips_pairs_frozen_by_contract_rules(self):
+        now = datetime.now(timezone.utc)
+        yes_market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="pair-yes", outcome=OutcomeSide.YES
+            ),
+            title="Frozen pair",
+            best_bid=0.44,
+            best_ask=0.47,
+            active=True,
+            expires_at=now + timedelta(minutes=20),
+            raw={"market": {"condition_id": "pair-1"}},
+        )
+        no_market = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="pair-no", outcome=OutcomeSide.NO
+            ),
+            title="Frozen pair",
+            best_bid=0.44,
+            best_ask=0.48,
+            active=True,
+            expires_at=now + timedelta(minutes=20),
+            raw={"market": {"condition_id": "pair-1"}},
+        )
+
+        candidates = PairOpportunityRanker(
+            edge_threshold=0.01,
+            contract_rule_freeze=ContractRuleFreezePolicy(
+                freeze_before_expiry_seconds=1800
+            ),
+        ).rank([yes_market, no_market])
+
+        self.assertEqual(candidates, [])
 
     def test_opportunity_ranker_matches_allowed_categories_against_series_and_tags(
         self,

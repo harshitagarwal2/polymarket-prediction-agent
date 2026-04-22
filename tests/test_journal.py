@@ -83,6 +83,17 @@ class JournalTests(unittest.TestCase):
                     "policy_allowed": True,
                     "engine_halted": False,
                     "engine_paused": False,
+                    "selected_market_key": "token-1:yes",
+                    "gate_trace": [
+                        {"stage": "sizer", "allowed": True},
+                        {"stage": "policy_gate", "allowed": True},
+                    ],
+                    "runtime_summary": {"state": "healthy"},
+                    "cycle_metrics": {
+                        "candidate_count": 2,
+                        "skipped_candidate_count": 0,
+                        "gate_trace_count": 2,
+                    },
                 },
             },
             {
@@ -92,18 +103,59 @@ class JournalTests(unittest.TestCase):
                     "policy_allowed": False,
                     "engine_halted": True,
                     "engine_paused": False,
+                    "gate_trace": [
+                        {"stage": "policy_gate", "allowed": False},
+                    ],
+                    "runtime_summary": {"state": "halted"},
+                    "cycle_metrics": {
+                        "candidate_count": 1,
+                        "skipped_candidate_count": 1,
+                        "gate_trace_count": 1,
+                    },
                 },
             },
-            {"event_type": "scan_cycle_skipped", "payload": {"reason": "paused"}},
+            {
+                "event_type": "scan_cycle_skipped",
+                "payload": {
+                    "reason": "paused",
+                    "reason_category": "pause",
+                    "runtime_summary": {"state": "paused"},
+                },
+            },
+            {
+                "event_type": "scan_cycle_blocked",
+                "payload": {
+                    "issues": ["truth incomplete"],
+                    "truth_issue_count": 1,
+                    "runtime_summary": {"state": "recovering"},
+                },
+            },
+            {
+                "event_type": "lifecycle_actions",
+                "payload": {
+                    "count": 2,
+                    "action_counts": {"cancel": 2},
+                    "runtime_summary": {"state": "recovering"},
+                },
+            },
         ]
 
         summary = summarize_scan_cycle_events(events)
 
         self.assertEqual(summary["scan_cycles"], 2)
         self.assertEqual(summary["skipped_cycles"], 1)
+        self.assertEqual(summary["truth_blocked_cycles"], 1)
         self.assertEqual(summary["policy_allowed_cycles"], 1)
         self.assertEqual(summary["policy_rejected_cycles"], 1)
         self.assertEqual(summary["total_candidates_seen"], 3)
+        self.assertEqual(summary["total_skipped_candidates"], 1)
+        self.assertEqual(summary["total_gate_trace_entries"], 3)
+        self.assertEqual(summary["cycles_with_selection"], 1)
+        self.assertEqual(summary["lifecycle_action_batches"], 1)
+        self.assertEqual(summary["lifecycle_action_counts"]["cancel"], 2)
+        self.assertEqual(summary["gate_stage_counts"]["policy_gate"]["rejected"], 1)
+        self.assertEqual(summary["runtime_state_counts"]["recovering"], 2)
+        self.assertEqual(summary["skip_reason_categories"]["pause"], 1)
 
     def test_compare_truth_summaries_reports_drift(self):
         previous = AccountTruthSummary(
@@ -181,6 +233,19 @@ class JournalTests(unittest.TestCase):
                             {"accepted": False, "order_id": None},
                         ]
                     },
+                    "runtime_summary": {
+                        "state": "recovering",
+                        "pending_cancel_count": 1,
+                    },
+                    "cycle_metrics": {
+                        "candidate_count": 1,
+                        "skipped_candidate_count": 0,
+                        "gate_trace_count": 2,
+                        "selected_market_key": "token-1:yes",
+                        "placement_count": 2,
+                        "accepted_placement_count": 1,
+                        "rejected_placement_count": 1,
+                    },
                 },
             },
             {
@@ -189,9 +254,26 @@ class JournalTests(unittest.TestCase):
                 "payload": {"reason": "manual maintenance"},
             },
             {
+                "ts": "2026-04-06T00:01:30+00:00",
+                "event_type": "lifecycle_actions",
+                "payload": {
+                    "count": 1,
+                    "action_counts": {"cancel": 1},
+                    "decisions": [
+                        {"order_id": "cancel-1", "action": "cancel"},
+                    ],
+                    "runtime_summary": {"state": "recovering"},
+                },
+            },
+            {
                 "ts": "2026-04-06T00:02:00+00:00",
                 "event_type": "scan_cycle_blocked",
-                "payload": {"mode": "run", "issues": ["truth incomplete"]},
+                "payload": {
+                    "mode": "run",
+                    "issues": ["truth incomplete"],
+                    "truth_issue_count": 1,
+                    "runtime_summary": {"state": "recovering"},
+                },
             },
         ]
 
@@ -207,6 +289,11 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(summary["last_execution_placement_count"], 2)
         self.assertEqual(summary["last_execution_accepted_placement_count"], 1)
         self.assertEqual(summary["last_execution_order_ids"], ["abc-123"])
+        self.assertEqual(summary["last_runtime_summary"]["state"], "recovering")
+        self.assertEqual(summary["last_cycle_metrics"]["placement_count"], 2)
+        self.assertEqual(summary["last_lifecycle_action_counts"]["cancel"], 1)
+        self.assertEqual(summary["last_lifecycle_order_ids"], ["cancel-1"])
+        self.assertEqual(summary["last_truth_issue_count"], 1)
         self.assertEqual(len(summary["last_gate_trace"]), 2)
         self.assertEqual(summary["last_gate_trace"][-1]["stage"], "policy_gate")
         self.assertEqual(summary["last_blocking_gate"]["stage"], "policy_gate")

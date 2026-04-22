@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.cli_output import add_quiet_flag, emit_json
@@ -14,9 +11,6 @@ from engine.discovery import (
     AgentOrchestrator,
     DeterministicSizer,
     ExecutionPolicyGate,
-    ManifestFairValueProvider,
-    OpportunityRanker,
-    PairOpportunityRanker,
     PollingAgentLoop,
     PollingLoopConfig,
 )
@@ -29,8 +23,10 @@ from engine.runtime_bootstrap import parse_comma_separated as _parse_comma_separ
 from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
-from research.storage import EventJournal
+from forecasting.fair_value_engine import ManifestFairValueProvider
+from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
 from risk.limits import RiskEngine, RiskLimits
+from storage.journal import EventJournal
 
 
 def _required_env_vars(venue_name: str) -> list[str]:

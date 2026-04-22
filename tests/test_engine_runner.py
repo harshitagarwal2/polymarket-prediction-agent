@@ -695,6 +695,32 @@ class EngineRunnerTests(unittest.TestCase):
         self.assertFalse(engine.account_state.open_orders)
         self.assertFalse(engine.account_state.fills)
 
+    def test_build_context_exposes_registered_linked_market_graph(self):
+        adapter = SequencedAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+        )
+        engine.risk_engine.register_market_event(
+            adapter.contract.market_key,
+            event_key="event-1",
+            mutually_exclusive_group_key="winner",
+        )
+
+        context = engine.build_context(adapter.contract, fair_value=0.60)
+
+        self.assertIsNotNone(context.risk_graph)
+        if context.risk_graph is None:
+            self.fail("expected linked market risk graph snapshot")
+        self.assertEqual(context.risk_graph.market_key, adapter.contract.market_key)
+        self.assertEqual(context.risk_graph.linked_event_key, "event:event-1")
+        self.assertEqual(
+            context.risk_graph.mutually_exclusive_group_key, "winner"
+        )
+
     def test_live_terminal_marker_removes_order_until_snapshot_confirms(self):
         adapter = TerminalDeltaAdapter()
         engine = TradingEngine(

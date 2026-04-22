@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import urlencode
-from urllib.request import Request
-from urllib.request import urlopen
 
 from adapters import MarketSummary
 from adapters.types import Contract
 from adapters.types import OutcomeSide
 
+from . import http_client
 from . import normalize
 
 
@@ -20,18 +18,15 @@ def fetch_markets(
     *,
     limit: int = 100,
     host: str = GAMMA_API_HOST,
+    timeout_seconds: float = 30.0,
+    client=None,
 ) -> list[dict[str, Any]]:
-    query = urlencode({"limit": max(1, int(limit))})
-    url = f"{host.rstrip('/')}/markets?{query}"
-    request = Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "prediction-market-agent/0.1.0",
-        },
+    payload = http_client.get_json(
+        f"{host.rstrip('/')}/markets",
+        params={"limit": max(1, int(limit))},
+        timeout_seconds=timeout_seconds,
+        client=client,
     )
-    with urlopen(request, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, list):
         raise RuntimeError("Gamma returned a non-list payload")
     return [item for item in payload if isinstance(item, dict)]
@@ -59,7 +54,8 @@ def list_markets(adapter: Any, limit: int = 100) -> list[MarketSummary]:
         if items is None and isinstance(response, dict):
             items = response.get("markets")
     if items is None:
-        items = fetch_markets(limit=limit)
+        timeout_seconds = getattr(getattr(adapter, "config", None), "request_timeout_seconds", 30.0)
+        items = fetch_markets(limit=limit, timeout_seconds=timeout_seconds)
     summaries: list[MarketSummary] = []
 
     for item in items or []:

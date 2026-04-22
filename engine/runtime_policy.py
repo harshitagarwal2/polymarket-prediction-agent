@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable, cast
 
 from adapters.polymarket import PolymarketConfig
+from contracts.resolution_rules import ContractRuleFreezePolicy
 from engine.discovery import (
     DeterministicSizer,
     ExecutionPolicyGate,
     FairValueField,
-    OpportunityRanker,
-    PairOpportunityRanker,
 )
 from engine.order_state import OrderLifecyclePolicy
 from engine.strategies import FairValueBandStrategy
+from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
 from risk.limits import RiskLimits
 
 SCHEMA_VERSION = 1
@@ -224,6 +224,9 @@ class OpportunityRankerPolicy:
     complement_discount_bonus_cap: float = 0.005
     spread_penalty_weight: float = 0.25
     taker_fee_rate: float = 0.0
+    contract_rule_freeze: ContractRuleFreezePolicy = field(
+        default_factory=ContractRuleFreezePolicy
+    )
 
     def build(self) -> OpportunityRanker:
         return OpportunityRanker(
@@ -240,6 +243,7 @@ class OpportunityRankerPolicy:
             complement_discount_bonus_cap=self.complement_discount_bonus_cap,
             spread_penalty_weight=self.spread_penalty_weight,
             taker_fee_rate=self.taker_fee_rate,
+            contract_rule_freeze=self.contract_rule_freeze,
         )
 
 
@@ -253,6 +257,9 @@ class PairOpportunityRankerPolicy:
     max_spread: float | None = None
     min_hours_to_expiry: float | None = None
     max_hours_to_expiry: float | None = None
+    contract_rule_freeze: ContractRuleFreezePolicy = field(
+        default_factory=ContractRuleFreezePolicy
+    )
 
     def build(self) -> PairOpportunityRanker:
         return PairOpportunityRanker(
@@ -264,6 +271,7 @@ class PairOpportunityRankerPolicy:
             max_spread=self.max_spread,
             min_hours_to_expiry=self.min_hours_to_expiry,
             max_hours_to_expiry=self.max_hours_to_expiry,
+            contract_rule_freeze=self.contract_rule_freeze,
         )
 
 
@@ -489,6 +497,7 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             "complement_discount_bonus_cap",
             "spread_penalty_weight",
             "taker_fee_rate",
+            "contract_rules",
         },
     )
     defaults = OpportunityRankerPolicy()
@@ -566,6 +575,11 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             defaults.taker_fee_rate,
             context=key,
         ),
+        contract_rule_freeze=_load_contract_rule_freeze_policy(
+            payload,
+            key=key,
+            defaults=defaults.contract_rule_freeze,
+        ),
     )
 
 
@@ -585,6 +599,7 @@ def _load_pair_opportunity_ranker_policy(
             "max_spread",
             "min_hours_to_expiry",
             "max_hours_to_expiry",
+            "contract_rules",
         },
     )
     defaults = PairOpportunityRankerPolicy()
@@ -631,6 +646,68 @@ def _load_pair_opportunity_ranker_policy(
             "max_hours_to_expiry",
             defaults.max_hours_to_expiry,
             context=key,
+        ),
+        contract_rule_freeze=_load_contract_rule_freeze_policy(
+            payload,
+            key=key,
+            defaults=defaults.contract_rule_freeze,
+        ),
+    )
+
+
+def _load_contract_rule_freeze_policy(
+    payload: dict[str, Any],
+    *,
+    key: str,
+    defaults: ContractRuleFreezePolicy,
+) -> ContractRuleFreezePolicy:
+    raw = payload.get("contract_rules")
+    if raw is None:
+        return defaults
+
+    context = f"{key}.contract_rules"
+    contract_payload = _ensure_object(raw, context=context)
+    _ensure_known_keys(
+        contract_payload,
+        context=context,
+        allowed_keys={
+            "freeze_before_expiry_seconds",
+            "freeze_when_closed",
+            "freeze_when_inactive",
+            "freeze_when_not_accepting_orders",
+            "freeze_when_order_book_disabled",
+        },
+    )
+    return ContractRuleFreezePolicy(
+        freeze_before_expiry_seconds=_read_optional_float(
+            contract_payload,
+            "freeze_before_expiry_seconds",
+            defaults.freeze_before_expiry_seconds,
+            context=context,
+        ),
+        freeze_when_closed=_read_bool(
+            contract_payload,
+            "freeze_when_closed",
+            defaults.freeze_when_closed,
+            context=context,
+        ),
+        freeze_when_inactive=_read_bool(
+            contract_payload,
+            "freeze_when_inactive",
+            defaults.freeze_when_inactive,
+            context=context,
+        ),
+        freeze_when_not_accepting_orders=_read_bool(
+            contract_payload,
+            "freeze_when_not_accepting_orders",
+            defaults.freeze_when_not_accepting_orders,
+            context=context,
+        ),
+        freeze_when_order_book_disabled=_read_bool(
+            contract_payload,
+            "freeze_when_order_book_disabled",
+            defaults.freeze_when_order_book_disabled,
+            context=context,
         ),
     )
 
