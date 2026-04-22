@@ -551,6 +551,77 @@ class IngestLiveDataTests(unittest.TestCase):
 
         self.assertAlmostEqual(fair_values["pm-1"]["fair_yes_prob"], 0.666667, places=5)
 
+    def test_build_fair_values_prefers_current_sportsbook_odds_over_history(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "pm-1|sb-1": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "mismatch_reason": None,
+                        "is_active": True,
+                    }
+                },
+            )
+            self._write_json(
+                root / "postgres" / "sportsbook_odds.json",
+                {
+                    "0": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 5.0,
+                        "implied_prob": 0.20,
+                        "overround": 0.20,
+                        "quote_ts": "2026-04-21T17:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    },
+                    "1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.111111,
+                        "implied_prob": 0.90,
+                        "overround": 0.90,
+                        "quote_ts": "2026-04-21T17:05:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    },
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_odds.json",
+                {
+                    "sb-1|theoddsapi|h2h|Home Team": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.5,
+                        "implied_prob": 0.6666666667,
+                        "overround": 0.6666666667,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    }
+                },
+            )
+
+            ingest_live_data.main(["build-fair-values", "--root", str(root), "--quiet"])
+
+            fair_values = json.loads((root / "current" / "fair_values.json").read_text())
+
+        self.assertAlmostEqual(fair_values["pm-1"]["fair_yes_prob"], 0.666667, places=5)
+
     def test_build_opportunities_uses_current_fair_values_over_history_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"

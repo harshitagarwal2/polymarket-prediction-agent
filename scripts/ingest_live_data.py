@@ -415,6 +415,18 @@ def _run_sportsbook_odds(args) -> int:
             raw_json=row["raw_json"],
         )
         stores["sb_odds"].append(record)
+        stores["current"].upsert(
+            "sportsbook_odds",
+            "|".join(
+                [
+                    record.sportsbook_event_id,
+                    record.source,
+                    record.market_type,
+                    record.selection,
+                ]
+            ),
+            record.__dict__.copy(),
+        )
     stores["parquet"].append_records("odds_snapshots", _utc_now(), normalized_rows)
     stores["health"].upsert("sportsbook_odds", stale_after_ms=60_000, status="ok")
     structured_log(
@@ -504,7 +516,12 @@ def _run_build_fair_values(args) -> int:
         model_name=args.model_name,
         model_version=args.model_version,
     )
-    odds_rows = _sorted_rows(stores["sb_odds"].read_all())
+    current_odds_rows = stores["current"].read_table("sportsbook_odds")
+    odds_rows = (
+        _sorted_rows(current_odds_rows)
+        if current_odds_rows
+        else _sorted_rows(stores["sb_odds"].read_all())
+    )
     odds_by_event_market: dict[tuple[str, str], list[dict]] = {}
     for row in odds_rows:
         event_id = str(row.get("sportsbook_event_id") or "")
