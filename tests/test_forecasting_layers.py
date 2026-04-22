@@ -20,6 +20,7 @@ from forecasting.fair_value_engine import (
 from research.models.book_consensus import (
     consensus_probability_from_rows,
     fit_book_consensus_artifact,
+    load_book_consensus_artifact,
 )
 from research.train.train_consensus import write_consensus_artifact
 
@@ -54,7 +55,15 @@ class ForecastingLayerTests(unittest.TestCase):
         calibrated = calibrator.apply(0.75)
         self.assertGreaterEqual(calibrated, 0.0)
         self.assertLessEqual(calibrated, 1.0)
-        self.assertGreater(dispersion_score([ConsensusComponent(probability=0.3), ConsensusComponent(probability=0.7)]), 0.0)
+        self.assertGreater(
+            dispersion_score(
+                [
+                    ConsensusComponent(probability=0.3),
+                    ConsensusComponent(probability=0.7),
+                ]
+            ),
+            0.0,
+        )
 
     def test_remove_overround_normalizes_two_book_probs(self):
         normalized = remove_overround({"yes": 0.55, "no": 0.50})
@@ -94,6 +103,44 @@ class ForecastingLayerTests(unittest.TestCase):
         self.assertEqual(artifact.row_count, 2)
         self.assertEqual(artifact.half_life_seconds, 1800.0)
 
+    def test_consensus_artifact_half_life_changes_fair_value_snapshot(self):
+        odds_rows = [
+            {"source": "book-a", "implied_prob": 0.2, "source_age_ms": 0},
+            {"source": "book-b", "implied_prob": 0.8, "source_age_ms": 3_600_000},
+        ]
+
+        slow_decay = FairValueEngine(half_life_seconds=3600.0).build(
+            ContractMatch(
+                polymarket_market_id="pm-1",
+                sportsbook_event_id="sb-1",
+                sportsbook_market_type="moneyline",
+                normalized_market_type="moneyline_full_game",
+                match_confidence=0.97,
+                resolution_risk=0.03,
+            ),
+            odds_rows,
+        )
+        fast_decay = FairValueEngine(half_life_seconds=60.0).build(
+            ContractMatch(
+                polymarket_market_id="pm-1",
+                sportsbook_event_id="sb-1",
+                sportsbook_market_type="moneyline",
+                normalized_market_type="moneyline_full_game",
+                match_confidence=0.97,
+                resolution_risk=0.03,
+            ),
+            odds_rows,
+        )
+
+        self.assertLess(fast_decay.fair_yes_prob, slow_decay.fair_yes_prob)
+        self.assertLess(fast_decay.fair_yes_prob, 0.25)
+        self.assertGreater(slow_decay.fair_yes_prob, 0.35)
+        self.assertLess(fast_decay.book_dispersion, slow_decay.book_dispersion)
+        self.assertLess(
+            fast_decay.upper_prob - fast_decay.lower_prob,
+            slow_decay.upper_prob - slow_decay.lower_prob,
+        )
+
     def test_write_consensus_artifact_serializes_expected_payload(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = write_consensus_artifact(
@@ -105,6 +152,14 @@ class ForecastingLayerTests(unittest.TestCase):
         self.assertEqual(payload["model"], "consensus")
         self.assertEqual(payload["half_life_seconds"], 900.0)
         self.assertEqual(payload["model_version"], "v1")
+
+    def test_load_book_consensus_artifact_rejects_invalid_payloads(self):
+        with self.assertRaises(ValueError):
+            load_book_consensus_artifact({"half_life_seconds": "NaN"})
+        with self.assertRaises(ValueError):
+            load_book_consensus_artifact({"bookmaker_count": 1.5})
+        with self.assertRaises(ValueError):
+            load_book_consensus_artifact({"model": ["consensus"]})
 
 
 if __name__ == "__main__":
