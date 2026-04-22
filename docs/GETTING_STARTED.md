@@ -173,6 +173,22 @@ python -m scripts.ingest_live_data build-fair-values \
 
 The `--event-map-file` input enriches live sportsbook events with stable identity fields such as `event_key` and `game_id`. `build-mappings` now fails closed if that upstream identity is missing, and `build-fair-values --consensus-artifact ...` uses the consensus artifact as deterministic inference configuration for the current-state fair-value snapshot builder.
 
+The checked-in sample configs now include `capture.sport_key`, `runtime.sportsbook_market`, `runtime.event_map_file`, and `runtime.consensus_artifact`, so the live/current-state flow can also be driven from config defaults:
+
+```bash
+python -m scripts.ingest_live_data sportsbook-odds \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+```
+
 ### 4. Run a preview cycle
 
 ```bash

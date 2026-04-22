@@ -1,6 +1,7 @@
 league: nba
 venue: polymarket
 capture:
+  sport_key: basketball_nba
   market_source: gamma
   book_source: clob
   trade_source: data-api
@@ -12,3 +13,6 @@ research:
 runtime:
   policy_file: configs/runtime_policy.preview.json
   preview_only: true
+  sportsbook_market: h2h
+  event_map_file: runtime/odds_event_map.json
+  consensus_artifact: runtime/consensus_artifact.json

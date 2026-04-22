@@ -168,6 +168,22 @@ python -m scripts.ingest_live_data build-fair-values \
 
 That live path keeps sportsbook event identity (`event_key` / `game_id`) in the current-state mapping flow and lets the consensus artifact configure the deterministic fair-value snapshot builder. The standalone `build-fair-values` entrypoint above remains the research/manifest builder.
 
+The checked-in sample league configs now carry those live defaults too, so the same flow can be driven with fewer flags:
+
+```bash
+python -m scripts.ingest_live_data sportsbook-odds \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+```
+
 The sample league configs can drive the new helper entrypoints directly:
 
 ```bash
