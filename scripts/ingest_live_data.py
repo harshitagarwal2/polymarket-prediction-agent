@@ -46,6 +46,7 @@ from storage import (
 from forecasting import FairValueEngine
 from opportunity import opportunity_from_prices, rank_opportunities
 from risk.freeze_windows import FreezeWindowPolicy, freeze_reasons_for_state
+from research.fair_value_manifest import FairValueManifestBuild
 from research.data.capture_polymarket import (
     build_polymarket_capture,
     write_polymarket_capture,
@@ -60,6 +61,7 @@ from research.data.odds_api import (
     normalize_odds_events,
 )
 from research.features import map_contract_candidate, semantics_from_market_type
+from research.manifest_validation import validate_manifest_payload
 from research.models.book_consensus import load_book_consensus_artifact
 
 
@@ -327,6 +329,57 @@ def _resolve_consensus_artifact(
         return value
     configured = nested_config_value(config, "runtime", "consensus_artifact")
     return configured if isinstance(configured, str) and configured else None
+
+
+def _runtime_manifest_path(root: str | Path) -> Path:
+    return Path(root) / "current" / "fair_value_manifest.json"
+
+
+def _build_runtime_manifest_payload(
+    *,
+    snapshots: list[dict],
+    mappings: dict[str, dict],
+    polymarket_markets: dict[str, dict[str, object]],
+    generated_at: datetime,
+) -> dict[str, object]:
+    values: dict[str, dict[str, object]] = {}
+    for snapshot in snapshots:
+        market_id = str(snapshot.get("market_id") or "")
+        if not market_id:
+            continue
+        mapping = mappings.get(market_id, {})
+        market_row = polymarket_markets.get(market_id, {})
+        raw_market = market_row.get("raw_json") if isinstance(market_row, dict) else {}
+        condition_id = None
+        if isinstance(raw_market, dict):
+            raw_condition = raw_market.get("conditionId") or raw_market.get(
+                "condition_id"
+            )
+            if raw_condition not in (None, ""):
+                condition_id = str(raw_condition)
+        values[market_id] = {
+            "fair_value": float(snapshot["fair_yes_prob"]),
+            "generated_at": str(snapshot["as_of"]),
+            "source": "live-current-state",
+            "condition_id": condition_id,
+            "event_key": mapping.get("event_key"),
+            "sport": mapping.get("sport"),
+            "series": mapping.get("series"),
+            "game_id": mapping.get("game_id"),
+            "sports_market_type": mapping.get("normalized_market_type"),
+        }
+    manifest = FairValueManifestBuild(
+        generated_at=generated_at,
+        source="live-current-state",
+        values=values,
+        metadata={
+            "coverage": {"value_count": len(values)},
+            "provenance": {"source_table": "runtime/data/current/fair_values.json"},
+        },
+    )
+    payload = manifest.to_payload()
+    validate_manifest_payload(payload)
+    return payload
 
 
 def _has_upstream_event_identity(payload: dict[str, object]) -> bool:
@@ -802,6 +855,27 @@ def _run_build_fair_values(args) -> int:
         stores["current"].write_table(
             "fair_values",
             pending_current_updates,
+        )
+        runtime_manifest_payload = _build_runtime_manifest_payload(
+            snapshots=snapshots,
+            mappings={
+                str(row.get("polymarket_market_id") or ""): row
+                for row in best_mapping_rows(
+                    stores["current"].read_table("market_mappings")
+                )
+            },
+            polymarket_markets={
+                str(market_id): row
+                for market_id, row in stores["current"]
+                .read_table("polymarket_markets")
+                .items()
+                if isinstance(row, dict)
+            },
+            generated_at=_utc_now(),
+        )
+        _runtime_manifest_path(args.root).write_text(
+            json.dumps(runtime_manifest_payload, indent=2, sort_keys=True),
+            encoding="utf-8",
         )
         _best_effort(
             lambda: stores["health"].upsert(

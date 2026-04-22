@@ -1121,6 +1121,73 @@ class IngestLiveDataTests(unittest.TestCase):
 
         self.assertEqual(list(fair_values.keys()), ["pm-1"])
 
+    def test_build_fair_values_writes_runtime_manifest_projection(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "pm-1|sb-1": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "mismatch_reason": None,
+                        "event_key": "event-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                        "game_id": "game-1",
+                        "is_active": True,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_markets.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "condition_id": "condition-1",
+                        "raw_json": {
+                            "id": "pm-1",
+                            "conditionId": "condition-1",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_odds.json",
+                {
+                    "sb-1|book-a|h2h|Home Team": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "book-a",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.5,
+                        "implied_prob": 0.6666666667,
+                        "overround": 0.6666666667,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    }
+                },
+            )
+
+            ingest_live_data.main(["build-fair-values", "--root", str(root), "--quiet"])
+
+            manifest_payload = json.loads(
+                (root / "current" / "fair_value_manifest.json").read_text()
+            )
+
+        self.assertEqual(manifest_payload["schema_version"], 1)
+        self.assertIn("pm-1", manifest_payload["values"])
+        self.assertEqual(
+            manifest_payload["values"]["pm-1"]["condition_id"], "condition-1"
+        )
+        self.assertEqual(manifest_payload["values"]["pm-1"]["event_key"], "event-1")
+        self.assertEqual(manifest_payload["source"], "live-current-state")
+
     def test_build_mappings_blocks_missing_upstream_event_identity(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
