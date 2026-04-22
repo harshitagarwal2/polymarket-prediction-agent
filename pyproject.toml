@@ -15,11 +15,11 @@ authors = [
 ]
 dependencies = [
   "pandas>=2.0",
+  "pyarrow>=14",
 ]
 
 [project.optional-dependencies]
 research = [
-  "pyarrow>=14",
   "duckdb>=0.10",
 ]
 polymarket = [

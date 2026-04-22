@@ -1207,6 +1207,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pyarrow" },
 ]
 
 [package.optional-dependencies]
@@ -1220,7 +1221,6 @@ polymarket = [
 ]
 research = [
     { name = "duckdb" },
-    { name = "pyarrow" },
 ]
 
 [package.metadata]
@@ -1229,7 +1229,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'polymarket'", specifier = ">=0.27" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "py-clob-client", marker = "extra == 'polymarket'" },
-    { name = "pyarrow", marker = "extra == 'research'", specifier = ">=14" },
+    { name = "pyarrow", specifier = ">=14" },
     { name = "pykalshi", marker = "extra == 'kalshi'" },
     { name = "websockets", marker = "extra == 'polymarket'", specifier = ">=12" },
 ]

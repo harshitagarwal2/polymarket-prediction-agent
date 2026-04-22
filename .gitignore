@@ -20,6 +20,7 @@ upstreams/
 runtime/state/
 runtime/cache/
 runtime/journals/
+runtime/data/
 runtime/fair_values/*.json
 runtime/*.json
 runtime/*.jsonl
