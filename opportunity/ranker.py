@@ -15,6 +15,7 @@ from forecasting.fair_value_engine import FairValueProvider
 from opportunity.models import Opportunity
 from opportunity.executable_edge import assess_executable_edge
 from opportunity.fillability import estimate_fillability_from_market, market_spread
+from risk.freeze_windows import FreezeWindowPolicy, freeze_reason_for_market
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,9 @@ class PairOpportunityRanker:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -66,6 +70,12 @@ class PairOpportunityRanker:
         if contract_freeze_reasons(
             market,
             policy=self.contract_rule_freeze,
+            now=now,
+        ):
+            return False
+        if freeze_reason_for_market(
+            market,
+            policy=self.freeze_window_policy,
             now=now,
         ):
             return False
@@ -165,6 +175,9 @@ class OpportunityRanker:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -214,6 +227,12 @@ class OpportunityRanker:
         if contract_freeze_reasons(
             market,
             policy=self.contract_rule_freeze,
+            now=now,
+        ):
+            return False
+        if freeze_reason_for_market(
+            market,
+            policy=self.freeze_window_policy,
             now=now,
         ):
             return False
