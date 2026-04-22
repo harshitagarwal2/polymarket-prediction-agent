@@ -149,6 +149,34 @@ def _metrics_collector(args) -> RuntimeMetricsCollector:
     return RuntimeMetricsCollector(root / "runtime_metrics.json")
 
 
+def _mapping_priority(row: dict[str, object]) -> tuple[int, int, float, float, str]:
+    is_active = bool(row.get("is_active", True))
+    mismatch_reason = row.get("mismatch_reason")
+    return (
+        1 if is_active else 0,
+        1 if mismatch_reason in (None, "") else 0,
+        float(row.get("match_confidence") or 0.0),
+        -float(row.get("resolution_risk") or 0.0),
+        str(row.get("sportsbook_event_id") or ""),
+    )
+
+
+def _best_mapping_by_market(
+    mappings: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    best_by_market: dict[str, dict[str, object]] = {}
+    for row in mappings.values():
+        if not isinstance(row, dict):
+            continue
+        market_id = str(row.get("polymarket_market_id") or "")
+        if not market_id:
+            continue
+        existing = best_by_market.get(market_id)
+        if existing is None or _mapping_priority(row) > _mapping_priority(existing):
+            best_by_market[market_id] = row
+    return best_by_market
+
+
 def _build_preview_order_proposals(
     args,
     policy,
@@ -168,10 +196,7 @@ def _build_preview_order_proposals(
     planner = ExecutionPlanner(
         None if policy is None else policy.proposal_planner.build()
     )
-    mapping_by_market: dict[str, dict[str, object]] = {}
-    for row in mappings.values():
-        if isinstance(row, dict):
-            mapping_by_market[str(row.get("polymarket_market_id") or "")] = row
+    mapping_by_market = _best_mapping_by_market(mappings)
 
     proposals: list[dict[str, object]] = []
     blocked: list[dict[str, object]] = []
