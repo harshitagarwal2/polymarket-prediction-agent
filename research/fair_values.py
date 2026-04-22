@@ -14,6 +14,7 @@ from research.calibration import HistogramCalibrator, load_calibration_artifact
 
 DevigMethod = Literal["multiplicative", "power"]
 BookAggregation = Literal["independent", "best-line"]
+FAIR_VALUE_MANIFEST_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class SportsbookFairValueRow:
 
 @dataclass(frozen=True)
 class FairValueManifestBuild:
+    schema_version: int
     generated_at: datetime
     source: str
     max_age_seconds: float | None
@@ -61,6 +63,7 @@ class FairValueManifestBuild:
 
     def to_payload(self) -> dict[str, object]:
         payload: dict[str, object] = {
+            "schema_version": self.schema_version,
             "generated_at": self.generated_at.isoformat().replace("+00:00", "Z"),
             "source": self.source,
             "values": self.values,
@@ -715,6 +718,7 @@ def build_fair_value_manifest(
             "applied_field": "fair_value",
         }
     return FairValueManifestBuild(
+        schema_version=FAIR_VALUE_MANIFEST_SCHEMA_VERSION,
         generated_at=generated_at,
         source=source,
         max_age_seconds=max_age_seconds,

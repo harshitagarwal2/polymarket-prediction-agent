@@ -58,6 +58,7 @@ class FairValueLoaderTests(unittest.TestCase):
         with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
             json.dump(
                 {
+                    "schema_version": 1,
                     "generated_at": "2026-04-07T12:00:00Z",
                     "source": "sports-model-v1",
                     "max_age_seconds": 900,
@@ -81,6 +82,53 @@ class FairValueLoaderTests(unittest.TestCase):
         self.assertEqual(provider.source, "sports-model-v1")
         self.assertEqual(provider.records["token-1:yes"].fair_value, 0.61)
         self.assertEqual(provider.records["token-1:yes"].condition_id, "condition-1")
+
+    def test_build_fair_value_provider_rejects_unknown_manifest_schema_version(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(
+                {
+                    "schema_version": 2,
+                    "generated_at": "2026-04-07T12:00:00Z",
+                    "values": {
+                        "token-1:yes": {
+                            "fair_value": 0.61,
+                            "condition_id": "condition-1",
+                        }
+                    },
+                },
+                handle,
+            )
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "unsupported fair-value manifest schema_version",
+            ):
+                build_fair_value_provider(handle.name)
+
+    def test_build_fair_value_provider_requires_identity_for_versioned_manifest_records(
+        self,
+    ):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(
+                {
+                    "schema_version": 1,
+                    "generated_at": "2026-04-07T12:00:00Z",
+                    "values": {
+                        "token-1:yes": {
+                            "fair_value": 0.61,
+                        }
+                    },
+                },
+                handle,
+            )
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "manifest record must include event identity",
+            ):
+                build_fair_value_provider(handle.name)
 
     def test_build_fair_value_provider_supports_calibrated_field_selection(self):
         with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
