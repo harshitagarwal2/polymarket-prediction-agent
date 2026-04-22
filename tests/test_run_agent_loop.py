@@ -230,6 +230,89 @@ class RunAgentLoopTests(unittest.TestCase):
         )
         self.assertEqual(polling_loop.call_args.kwargs["config"].mode, "run")
 
+    def test_main_can_apply_fair_values_and_opportunity_root_from_config_file(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as fair_values,
+            tempfile.NamedTemporaryFile("w+", suffix=".yaml") as config_file,
+            tempfile.TemporaryDirectory() as temp_dir,
+        ):
+            json.dump(
+                {
+                    "schema_version": 1,
+                    "generated_at": "2026-04-07T12:00:00Z",
+                    "values": {
+                        "token-1:yes": {
+                            "fair_value": 0.6,
+                            "event_key": "event-1",
+                        }
+                    },
+                },
+                fair_values,
+            )
+            fair_values.flush()
+            config_file.write(
+                "runtime:\n"
+                f"  fair_values_file: {fair_values.name}\n"
+                f"  opportunity_root: {Path(temp_dir) / 'data'}\n"
+            )
+            config_file.flush()
+
+            with patch.dict(
+                "os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=False
+            ):
+                with (
+                    patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+                    patch.object(
+                        run_agent_loop, "validate_runtime"
+                    ) as validate_runtime,
+                    patch.object(
+                        run_agent_loop,
+                        "build_fair_value_provider",
+                        return_value=SimpleNamespace(),
+                    ) as build_provider,
+                    patch.object(
+                        run_agent_loop,
+                        "TradingEngine",
+                        return_value=fake_engine,
+                    ),
+                    patch.object(run_agent_loop, "AgentOrchestrator"),
+                    patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+                ):
+                    polling_loop.return_value.run.return_value = [fake_cycle]
+
+                    with patch(
+                        "sys.argv",
+                        [
+                            "run_agent_loop.py",
+                            "--venue",
+                            "polymarket",
+                            "--config-file",
+                            config_file.name,
+                            "--quiet",
+                        ],
+                    ):
+                        result = run_agent_loop.main()
+
+        self.assertEqual(result, 0)
+        validated_args = validate_runtime.call_args.args[0]
+        self.assertEqual(validated_args.fair_values_file, fair_values.name)
+        self.assertEqual(
+            validated_args.opportunity_root,
+            str(Path(temp_dir) / "data"),
+        )
+        self.assertEqual(build_provider.call_args.args[0], fair_values.name)
+
     def test_build_adapter_parses_polymarket_live_user_markets(self):
         args = SimpleNamespace(
             polymarket_live_user_markets="cond-1, cond-2",
@@ -240,7 +323,8 @@ class RunAgentLoopTests(unittest.TestCase):
             adapter = run_agent_loop.build_adapter("polymarket", args)
 
         self.assertIsInstance(adapter, PolymarketAdapter)
-        config = cast(PolymarketConfig, adapter.config)
+        polymarket_adapter = cast(PolymarketAdapter, adapter)
+        config = cast(PolymarketConfig, polymarket_adapter.config)
         self.assertEqual(config.live_user_markets, ["cond-1", "cond-2"])
         self.assertEqual(
             config.user_ws_host,
@@ -273,7 +357,8 @@ class RunAgentLoopTests(unittest.TestCase):
             adapter = run_agent_loop.build_adapter("polymarket", args, policy=policy)
 
         self.assertIsInstance(adapter, PolymarketAdapter)
-        config = cast(PolymarketConfig, adapter.config)
+        polymarket_adapter = cast(PolymarketAdapter, adapter)
+        config = cast(PolymarketConfig, polymarket_adapter.config)
         self.assertEqual(config.depth_admission_levels, 4)
         self.assertEqual(config.depth_admission_liquidity_fraction, 0.65)
         self.assertEqual(config.depth_admission_max_expected_slippage_bps, 20.0)
@@ -846,7 +931,9 @@ class RunAgentLoopTests(unittest.TestCase):
 
         rendered = "".join(call.args[0] for call in stdout.write.call_args_list)
         self.assertIn('"preview_order_proposal_count": 1', rendered)
-        self.assertNotIn('"blocked_reason": "market within pre-start freeze window"', rendered)
+        self.assertNotIn(
+            '"blocked_reason": "market within pre-start freeze window"', rendered
+        )
 
     def test_main_preview_uses_current_bbo_depth_for_proposal_size(self):
         adapter = FakeAdapter()

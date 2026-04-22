@@ -13,6 +13,8 @@ research:
 runtime:
   policy_file: configs/runtime_policy.preview.json
   preview_only: true
+  fair_values_file: runtime/data/current/fair_value_manifest.json
+  opportunity_root: runtime/data
   sportsbook_market: h2h
   event_map_file: runtime/odds_event_map.json
   consensus_artifact: runtime/consensus_artifact.json
