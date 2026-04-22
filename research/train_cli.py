@@ -11,6 +11,10 @@ from research.data.build_training_set import load_training_set_rows
 from research.schemas import load_benchmark_case
 from research.train.train_blend import write_blend_config
 from research.train.train_bt import write_bt_artifact, write_bt_artifact_from_rows
+from research.train.train_consensus import (
+    write_consensus_artifact,
+    write_consensus_artifact_from_rows,
+)
 from research.train.train_elo import write_elo_artifact, write_elo_artifact_from_rows
 from storage.postgres import ModelRegistryRepository
 
@@ -19,11 +23,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Train lightweight research model artifacts."
     )
-    parser.add_argument("--model", choices=("elo", "bt", "blend"), default=None)
+    parser.add_argument(
+        "--model",
+        choices=("elo", "bt", "blend", "consensus"),
+        default=None,
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--cases", nargs="*", default=[])
     parser.add_argument("--training-data", default=None)
     parser.add_argument("--blend-weight", type=float, default=0.5)
+    parser.add_argument("--half-life-seconds", type=float, default=3600.0)
     parser.add_argument("--config-file", default=None)
     parser.add_argument("--model-version", default="v1")
     parser.add_argument("--registry-root", default=None)
@@ -48,6 +57,21 @@ def main() -> None:
         blend_weight = float(configured_weight)
     if model == "blend":
         path = write_blend_config(blend_weight, args.output)
+    elif model == "consensus":
+        if args.training_data:
+            rows = load_training_set_rows(args.training_data)
+            path = write_consensus_artifact_from_rows(
+                [row.to_payload() for row in rows],
+                args.output,
+                half_life_seconds=args.half_life_seconds,
+                model_version=args.model_version,
+            )
+        else:
+            path = write_consensus_artifact(
+                args.output,
+                half_life_seconds=args.half_life_seconds,
+                model_version=args.model_version,
+            )
     else:
         if args.training_data:
             rows = load_training_set_rows(args.training_data)

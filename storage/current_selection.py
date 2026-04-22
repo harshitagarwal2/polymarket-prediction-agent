@@ -3,7 +3,7 @@ from __future__ import annotations
 
 def mapping_priority(row: dict[str, object]) -> tuple[int, int, float, float, str]:
     is_active = bool(row.get("is_active", True))
-    mismatch_reason = row.get("mismatch_reason")
+    mismatch_reason = row.get("blocked_reason") or row.get("mismatch_reason")
     return (
         1 if is_active else 0,
         1 if mismatch_reason in (None, "") else 0,

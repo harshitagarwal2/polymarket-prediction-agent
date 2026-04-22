@@ -16,6 +16,67 @@ class IngestLiveDataTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
 
+    def _seed_mapping_build_inputs(
+        self,
+        root: Path,
+        *,
+        sportsbook_event_key: str = "event-1",
+    ) -> None:
+        start_time = "2026-04-21T19:00:00Z"
+        self._write_json(
+            root / "postgres" / "polymarket_markets.json",
+            {
+                "pm-1": {
+                    "market_id": "pm-1",
+                    "condition_id": "condition-1",
+                    "token_id_yes": None,
+                    "token_id_no": None,
+                    "title": "Will Home Team beat Away Team?",
+                    "description": None,
+                    "event_slug": None,
+                    "market_slug": None,
+                    "category": "sports",
+                    "end_time": "2026-04-21T22:00:00Z",
+                    "status": "open",
+                    "raw_json": {
+                        "id": "pm-1",
+                        "conditionId": "condition-1",
+                        "eventKey": "event-1",
+                        "gameId": "game-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                        "sportsMarketType": "moneyline",
+                        "question": "Will Home Team beat Away Team?",
+                        "gameStartTime": start_time,
+                    },
+                }
+            },
+        )
+        self._write_json(
+            root / "postgres" / "sportsbook_events.json",
+            {
+                "sb-1": {
+                    "sportsbook_event_id": "sb-1",
+                    "source": "theoddsapi",
+                    "sport": "basketball_nba",
+                    "league": "playoffs",
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "start_time": start_time,
+                    "raw_json": {
+                        "id": "sb-1",
+                        "event_key": sportsbook_event_key,
+                        "game_id": "game-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": start_time,
+                    },
+                }
+            },
+        )
+
     def _seed_opportunity_build_inputs(
         self,
         root: Path,
@@ -364,6 +425,44 @@ class IngestLiveDataTests(unittest.TestCase):
 
         self.assertIn("pm-1", fair_values)
         self.assertTrue(any(key.startswith("pm-1|") for key in opportunities))
+
+    def test_build_mappings_persists_research_identity_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_mapping_build_inputs(root)
+
+            ingest_live_data.main(
+                ["build-mappings", "--market", "h2h", "--root", str(root), "--quiet"]
+            )
+
+            mappings = json.loads((root / "current" / "market_mappings.json").read_text())
+
+        persisted = next(iter(mappings.values()))
+        self.assertEqual(persisted["event_key"], "event-1")
+        self.assertEqual(persisted["sport"], "nba")
+        self.assertEqual(persisted["series"], "playoffs")
+        self.assertEqual(persisted["game_id"], "game-1")
+        self.assertIsNone(persisted["blocked_reason"])
+        self.assertIsNone(persisted["mismatch_reason"])
+        self.assertTrue(persisted["is_active"])
+
+    def test_build_mappings_uses_research_block_reason_for_event_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_mapping_build_inputs(root, sportsbook_event_key="event-2")
+
+            ingest_live_data.main(
+                ["build-mappings", "--market", "h2h", "--root", str(root), "--quiet"]
+            )
+
+            mappings = json.loads((root / "current" / "market_mappings.json").read_text())
+
+        persisted = next(iter(mappings.values()))
+        self.assertEqual(persisted["event_key"], "event-1")
+        self.assertEqual(persisted["blocked_reason"], "event key mismatch")
+        self.assertEqual(persisted["mismatch_reason"], "event key mismatch")
+        self.assertEqual(persisted["match_confidence"], 0.0)
+        self.assertFalse(persisted["is_active"])
 
     def test_build_opportunities_persists_pre_start_freeze_reason(self):
         with tempfile.TemporaryDirectory() as temp_dir:

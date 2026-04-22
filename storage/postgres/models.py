@@ -68,6 +68,11 @@ class MarketMappingRecord:
     match_confidence: float
     resolution_risk: float
     mismatch_reason: str | None
+    event_key: str | None = None
+    sport: str | None = None
+    series: str | None = None
+    game_id: str | None = None
+    blocked_reason: str | None = None
     is_active: bool = True
 
 

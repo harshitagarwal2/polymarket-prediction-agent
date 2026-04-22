@@ -40,8 +40,8 @@ from storage import (
     SportsbookOddsRecord,
     SportsbookOddsRepository,
     best_mapping_rows,
+    mapping_priority,
 )
-from contracts import ResolutionRules, map_market
 from forecasting import FairValueEngine
 from opportunity import opportunity_from_prices, rank_opportunities
 from risk.freeze_windows import FreezeWindowPolicy, freeze_reasons_for_state
@@ -58,6 +58,7 @@ from research.data.odds_api import (
     load_event_map,
     normalize_odds_events,
 )
+from research.features import map_contract_candidate, semantics_from_market_type
 
 
 SPORT_KEY_BY_LEAGUE = {
@@ -225,6 +226,41 @@ def _sorted_rows(mapping: dict[str, object]) -> list[dict]:
     rows = [row for row in mapping.values() if isinstance(row, dict)]
     rows.sort(key=lambda row: json.dumps(row, sort_keys=True))
     return rows
+
+
+def _merged_mapping_payload(
+    row: dict[str, object],
+    **defaults: object,
+) -> dict[str, object]:
+    raw = row.get("raw_json")
+    payload = dict(raw) if isinstance(raw, dict) else {}
+    for key, value in defaults.items():
+        payload.setdefault(key, value)
+    return payload
+
+
+def _mapping_market_payload(market: dict[str, object]) -> dict[str, object]:
+    return _merged_mapping_payload(
+        market,
+        market_id=market.get("market_id"),
+        condition_id=market.get("condition_id"),
+        title=market.get("title"),
+        question=market.get("title"),
+        endDate=market.get("end_time"),
+    )
+
+
+def _mapping_event_payload(event: dict[str, object]) -> dict[str, object]:
+    return _merged_mapping_payload(
+        event,
+        sportsbook_event_id=event.get("sportsbook_event_id"),
+        sport=event.get("sport"),
+        league=event.get("league"),
+        series=event.get("league"),
+        home_team=event.get("home_team"),
+        away_team=event.get("away_team"),
+        start_time=event.get("start_time"),
+    )
 
 
 def _required_sources(
@@ -458,25 +494,45 @@ def _run_build_mappings(args) -> int:
     mappings: list[dict] = []
     for market in markets:
         best_match: MarketMappingRecord | None = None
+        market_payload = _mapping_market_payload(market)
+        pm_market_type = str(
+            market_payload.get("sportsMarketType")
+            or market_payload.get("sports_market_type")
+            or args.market
+        )
         for event in events.values():
-            match = map_market(
-                market,
-                event,
-                args.market,
-                ResolutionRules(True, True, None, "polymarket"),
-                ResolutionRules("regulation" not in args.market.lower(), True, None, "sportsbook"),
+            event_payload = _mapping_event_payload(event)
+            decision = map_contract_candidate(
+                market_payload,
+                event_payload,
+                sportsbook_market_type=args.market,
+                pm_semantics=semantics_from_market_type(
+                    pm_market_type,
+                    source="polymarket",
+                ),
+                sb_semantics=semantics_from_market_type(
+                    args.market,
+                    source="sportsbook",
+                ),
             )
             candidate = MarketMappingRecord(
-                polymarket_market_id=match.polymarket_market_id,
-                sportsbook_event_id=match.sportsbook_event_id,
-                sportsbook_market_type=match.sportsbook_market_type,
-                normalized_market_type=match.normalized_market_type,
-                match_confidence=match.match_confidence,
-                resolution_risk=match.resolution_risk,
-                mismatch_reason=match.mismatch_reason,
-                is_active=match.mismatch_reason is None,
+                polymarket_market_id=decision.polymarket_market_id,
+                sportsbook_event_id=decision.sportsbook_event_id,
+                sportsbook_market_type=decision.sportsbook_market_type,
+                normalized_market_type=decision.normalized_market_type,
+                match_confidence=decision.match_confidence,
+                resolution_risk=decision.resolution_risk,
+                mismatch_reason=decision.blocked_reason,
+                event_key=decision.event_key,
+                sport=decision.sport,
+                series=decision.series,
+                game_id=decision.game_id,
+                blocked_reason=decision.blocked_reason,
+                is_active=decision.blocked_reason is None,
             )
-            if best_match is None or candidate.match_confidence > best_match.match_confidence:
+            if best_match is None or mapping_priority(candidate.__dict__) > mapping_priority(
+                best_match.__dict__
+            ):
                 best_match = candidate
         if best_match is None:
             continue
@@ -619,7 +675,7 @@ def _run_build_opportunities(args) -> int:
         market_id = str(mapping.get("polymarket_market_id") or "")
         fair_value = fair_values.get(market_id)
         bbo = bbo_rows.get(market_id)
-        blocked_reason = mapping.get("mismatch_reason")
+        blocked_reason = mapping.get("blocked_reason") or mapping.get("mismatch_reason")
         sportsbook_event = sportsbook_events.get(
             str(mapping.get("sportsbook_event_id") or "")
         )

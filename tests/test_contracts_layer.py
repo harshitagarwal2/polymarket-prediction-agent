@@ -15,6 +15,16 @@ from contracts import (
     ResolutionRules,
 )
 from contracts.resolution_rules import ContractRuleFreezePolicy
+from research.features.contract_identity import (
+    polymarket_contract_identity,
+    sportsbook_contract_identity,
+)
+from research.features.contract_mapping import map_contract_candidate
+from research.features.rules_semantics import (
+    RuleSemantics,
+    compare_rule_semantics,
+    semantics_from_market_type,
+)
 
 
 class ContractsLayerTests(unittest.TestCase):
@@ -101,6 +111,133 @@ class ContractsLayerTests(unittest.TestCase):
         )
         self.assertEqual(match.match_confidence, 0.0)
         self.assertEqual(match.mismatch_reason, "overtime/regulation mismatch")
+
+    def test_rule_semantics_detect_postponement_mismatch(self):
+        compatible, reason = compare_rule_semantics(
+            RuleSemantics(
+                includes_overtime=True,
+                void_on_postponement=True,
+                requires_player_to_start=None,
+                resolution_source="league",
+            ),
+            RuleSemantics(
+                includes_overtime=True,
+                void_on_postponement=False,
+                requires_player_to_start=None,
+                resolution_source="book",
+            ),
+        )
+
+        self.assertFalse(compatible)
+        self.assertEqual(reason, "postponement/void mismatch")
+
+    def test_research_mapping_uses_explicit_identity_and_semantics(self):
+        decision = map_contract_candidate(
+            {
+                "market_id": "pm-1",
+                "condition_id": "condition-1",
+                "eventKey": "event-1",
+                "gameId": "game-1",
+                "sport": "nba",
+                "series": "playoffs",
+                "sportsMarketType": "moneyline",
+                "question": "Will Home Team beat Away Team?",
+                "gameStartTime": "2026-04-21T19:00:00Z",
+            },
+            {
+                "sportsbook_event_id": "sb-1",
+                "event_key": "event-1",
+                "game_id": "game-1",
+                "sport": "nba",
+                "series": "playoffs",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "start_time": "2026-04-21T19:00:00Z",
+            },
+            sportsbook_market_type="moneyline",
+            pm_semantics=semantics_from_market_type("moneyline", source="league"),
+            sb_semantics=semantics_from_market_type("moneyline", source="book"),
+        )
+
+        self.assertIsNone(decision.blocked_reason)
+        self.assertGreaterEqual(decision.match_confidence, 0.9)
+        self.assertEqual(decision.event_key, "event-1")
+        self.assertEqual(decision.game_id, "game-1")
+
+    def test_research_mapping_blocks_explicit_event_identity_mismatch(self):
+        pm_identity = polymarket_contract_identity(
+            {
+                "market_id": "pm-1",
+                "eventKey": "event-1",
+                "gameId": "game-1",
+                "sportsMarketType": "moneyline",
+                "question": "Will Home Team beat Away Team?",
+                "gameStartTime": "2026-04-21T19:00:00Z",
+            }
+        )
+        sb_identity = sportsbook_contract_identity(
+            {
+                "sportsbook_event_id": "sb-1",
+                "event_key": "event-2",
+                "game_id": "game-1",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "start_time": "2026-04-21T19:00:00Z",
+            },
+            sportsbook_market_type="moneyline",
+        )
+
+        self.assertEqual(pm_identity.event_key, "event-1")
+        self.assertEqual(sb_identity.event_key, "event-2")
+
+        decision = map_contract_candidate(
+            {
+                "market_id": "pm-1",
+                "eventKey": "event-1",
+                "gameId": "game-1",
+                "sportsMarketType": "moneyline",
+                "question": "Will Home Team beat Away Team?",
+                "gameStartTime": "2026-04-21T19:00:00Z",
+            },
+            {
+                "sportsbook_event_id": "sb-1",
+                "event_key": "event-2",
+                "game_id": "game-1",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "start_time": "2026-04-21T19:00:00Z",
+            },
+            sportsbook_market_type="moneyline",
+            pm_semantics=semantics_from_market_type("moneyline", source="league"),
+            sb_semantics=semantics_from_market_type("moneyline", source="book"),
+        )
+
+        self.assertEqual(decision.match_confidence, 0.0)
+        self.assertEqual(decision.blocked_reason, "event key mismatch")
+
+    def test_research_mapping_allows_strong_team_and_time_alignment_without_ids(self):
+        decision = map_contract_candidate(
+            {
+                "market_id": "pm-1",
+                "sportsMarketType": "moneyline",
+                "sport": "nba",
+                "question": "Will Home Team beat Away Team?",
+                "gameStartTime": "2026-04-21T19:00:00Z",
+            },
+            {
+                "sportsbook_event_id": "sb-1",
+                "sport": "basketball_nba",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "start_time": "2026-04-21T19:00:00Z",
+            },
+            sportsbook_market_type="h2h",
+            pm_semantics=semantics_from_market_type("moneyline", source="league"),
+            sb_semantics=semantics_from_market_type("h2h", source="book"),
+        )
+
+        self.assertIsNone(decision.blocked_reason)
+        self.assertGreaterEqual(decision.match_confidence, 0.75)
 
 
 if __name__ == "__main__":

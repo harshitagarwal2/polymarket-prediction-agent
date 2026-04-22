@@ -63,6 +63,11 @@ CREATE TABLE market_mappings (
   match_confidence NUMERIC(5,4) NOT NULL,
   resolution_risk NUMERIC(5,4) NOT NULL,
   mismatch_reason TEXT,
+  event_key TEXT,
+  sport TEXT,
+  series TEXT,
+  game_id TEXT,
+  blocked_reason TEXT,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

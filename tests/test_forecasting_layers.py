@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
 
 from forecasting import ForecastCalibrator
@@ -15,6 +17,11 @@ from forecasting.fair_value_engine import (
     ConsensusFairValueInput,
     FairValueEngine,
 )
+from research.models.book_consensus import (
+    consensus_probability_from_rows,
+    fit_book_consensus_artifact,
+)
+from research.train.train_consensus import write_consensus_artifact
 
 
 class ForecastingLayerTests(unittest.TestCase):
@@ -72,6 +79,32 @@ class ForecastingLayerTests(unittest.TestCase):
         self.assertEqual(snapshot.market_id, "pm-1")
         self.assertGreater(snapshot.fair_yes_prob, 0.0)
         self.assertEqual(snapshot.source_count, 2)
+
+    def test_book_consensus_artifact_tracks_sources(self):
+        rows = [
+            {"source": "book-a", "price_decimal": 1.80, "source_age_ms": 1000},
+            {"source": "book-b", "price_decimal": 1.95, "source_age_ms": 3000},
+        ]
+
+        probability = consensus_probability_from_rows(rows, half_life_seconds=1800.0)
+        artifact = fit_book_consensus_artifact(rows, half_life_seconds=1800.0)
+
+        self.assertGreater(probability, 0.0)
+        self.assertEqual(artifact.bookmaker_count, 2)
+        self.assertEqual(artifact.row_count, 2)
+        self.assertEqual(artifact.half_life_seconds, 1800.0)
+
+    def test_write_consensus_artifact_serializes_expected_payload(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = write_consensus_artifact(
+                output_path=f"{temp_dir}/consensus.json",
+                half_life_seconds=900.0,
+            )
+            payload = json.loads(path.read_text())
+
+        self.assertEqual(payload["model"], "consensus")
+        self.assertEqual(payload["half_life_seconds"], 900.0)
+        self.assertEqual(payload["model_version"], "v1")
 
 
 if __name__ == "__main__":
