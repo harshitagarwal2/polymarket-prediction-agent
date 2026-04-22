@@ -9,6 +9,7 @@ from storage.journal import (
     write_jsonl_records,
 )
 from storage.current_state import FileBackedCurrentStateStore
+from storage.current_selection import best_mapping_by_market, best_mapping_rows, mapping_priority
 from storage.parquet_store import ParquetStore
 from storage.parquet import ParquetStorage, PartitionedParquetStorage
 from storage.postgres import (
@@ -41,6 +42,8 @@ from storage.source_health import SourceHealthRecord, SourceHealthStore
 
 __all__ = [
     "BBORepository",
+    "best_mapping_by_market",
+    "best_mapping_rows",
     "EventJournal",
     "FairValueRecord",
     "FairValueRepository",
@@ -72,6 +75,7 @@ __all__ = [
     "TradeAttributionRepository",
     "build_raw_capture",
     "market_row_from_summary",
+    "mapping_priority",
     "normalize_for_json",
     "order_book_row_from_snapshot",
     "read_jsonl_events",

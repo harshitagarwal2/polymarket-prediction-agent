@@ -39,6 +39,7 @@ from storage import (
     SportsbookEventRepository,
     SportsbookOddsRecord,
     SportsbookOddsRepository,
+    best_mapping_rows,
 )
 from contracts import ResolutionRules, map_market
 from forecasting import FairValueEngine
@@ -223,34 +224,6 @@ def _parse_datetime(value: object) -> datetime | None:
 def _sorted_rows(mapping: dict[str, object]) -> list[dict]:
     rows = [row for row in mapping.values() if isinstance(row, dict)]
     rows.sort(key=lambda row: json.dumps(row, sort_keys=True))
-    return rows
-
-
-def _mapping_priority(row: dict[str, object]) -> tuple[int, int, float, float, str]:
-    is_active = bool(row.get("is_active", True))
-    mismatch_reason = row.get("mismatch_reason")
-    return (
-        1 if is_active else 0,
-        1 if mismatch_reason in (None, "") else 0,
-        float(row.get("match_confidence") or 0.0),
-        -float(row.get("resolution_risk") or 0.0),
-        str(row.get("sportsbook_event_id") or ""),
-    )
-
-
-def _best_mapping_rows(mapping: dict[str, object]) -> list[dict]:
-    best_by_market: dict[str, dict] = {}
-    for row in mapping.values():
-        if not isinstance(row, dict):
-            continue
-        market_id = str(row.get("polymarket_market_id") or "")
-        if not market_id:
-            continue
-        existing = best_by_market.get(market_id)
-        if existing is None or _mapping_priority(row) > _mapping_priority(existing):
-            best_by_market[market_id] = row
-    rows = list(best_by_market.values())
-    rows.sort(key=lambda row: str(row.get("polymarket_market_id") or ""))
     return rows
 
 
@@ -540,7 +513,7 @@ def _run_build_fair_values(args) -> int:
 
     snapshots: list[dict] = []
     active_mapping_count = 0
-    for row in _best_mapping_rows(stores["current"].read_table("market_mappings")):
+    for row in best_mapping_rows(stores["current"].read_table("market_mappings")):
         if not bool(row.get("is_active", True)):
             continue
         active_mapping_count += 1
@@ -617,7 +590,7 @@ def _run_build_opportunities(args) -> int:
         if isinstance(row, dict)
     }
     bbo_rows = stores["bbo"].read_all()
-    mapping_rows = _best_mapping_rows(stores["current"].read_table("market_mappings"))
+    mapping_rows = best_mapping_rows(stores["current"].read_table("market_mappings"))
     source_health = stores["current"].read_table("source_health")
     sportsbook_events = stores["current"].read_table("sportsbook_events")
     polymarket_markets = stores["current"].read_table("polymarket_markets")

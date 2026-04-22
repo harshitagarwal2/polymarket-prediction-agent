@@ -13,8 +13,11 @@ from storage import (
     EventJournal,
     ParquetStore,
     RawStore,
+    best_mapping_by_market,
+    best_mapping_rows,
     build_raw_capture,
     market_row_from_summary,
+    mapping_priority,
     order_book_row_from_snapshot,
     write_raw_capture,
 )
@@ -90,6 +93,51 @@ class StorageLayerTests(unittest.TestCase):
             paths = list(Path(temp_dir).rglob("*.parquet"))
         self.assertEqual(len(paths), 1)
         self.assertIn("odds_snapshots/year=2026", paths[0].as_posix())
+
+    def test_current_mapping_selection_prefers_active_high_confidence_rows(self):
+        mappings = {
+            "pm-1|sb-low": {
+                "polymarket_market_id": "pm-1",
+                "sportsbook_event_id": "sb-low",
+                "match_confidence": 0.20,
+                "resolution_risk": 0.40,
+                "mismatch_reason": None,
+                "is_active": True,
+            },
+            "pm-1|sb-high": {
+                "polymarket_market_id": "pm-1",
+                "sportsbook_event_id": "sb-high",
+                "match_confidence": 0.95,
+                "resolution_risk": 0.05,
+                "mismatch_reason": None,
+                "is_active": True,
+            },
+            "pm-2|sb-blocked": {
+                "polymarket_market_id": "pm-2",
+                "sportsbook_event_id": "sb-blocked",
+                "match_confidence": 0.99,
+                "resolution_risk": 0.80,
+                "mismatch_reason": "overtime mismatch",
+                "is_active": False,
+            },
+        }
+
+        selected_rows = best_mapping_rows(mappings)
+        selected_by_market = best_mapping_by_market(mappings)
+
+        self.assertEqual(len(selected_rows), 2)
+        self.assertEqual(
+            selected_by_market["pm-1"]["sportsbook_event_id"],
+            "sb-high",
+        )
+        self.assertEqual(
+            selected_by_market["pm-2"]["sportsbook_event_id"],
+            "sb-blocked",
+        )
+        self.assertGreater(
+            mapping_priority(selected_by_market["pm-1"]),
+            mapping_priority(mappings["pm-1|sb-low"]),
+        )
 
 
 if __name__ == "__main__":
