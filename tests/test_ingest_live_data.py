@@ -84,9 +84,41 @@ class IngestLiveDataTests(unittest.TestCase):
             },
         )
         self._write_json(
+            root / "current" / "market_mappings.json",
+            {
+                "pm-1|sb-1": {
+                    "polymarket_market_id": "pm-1",
+                    "sportsbook_event_id": "sb-1",
+                    "sportsbook_market_type": "h2h",
+                    "normalized_market_type": "moneyline_full_game",
+                    "match_confidence": 0.98,
+                    "resolution_risk": 0.05,
+                    "mismatch_reason": None,
+                    "is_active": True,
+                }
+            },
+        )
+        self._write_json(
             root / "postgres" / "fair_values.json",
             {
                 "pm-1|2026-04-21T18:00:00+00:00|deterministic_consensus|v1": {
+                    "market_id": "pm-1",
+                    "as_of": "2026-04-21T18:00:00+00:00",
+                    "fair_yes_prob": 0.61,
+                    "lower_prob": 0.58,
+                    "upper_prob": 0.64,
+                    "book_dispersion": 0.01,
+                    "data_age_ms": 250,
+                    "source_count": 2,
+                    "model_name": "deterministic_consensus",
+                    "model_version": "v1",
+                }
+            },
+        )
+        self._write_json(
+            root / "current" / "fair_values.json",
+            {
+                "pm-1": {
                     "market_id": "pm-1",
                     "as_of": "2026-04-21T18:00:00+00:00",
                     "fair_yes_prob": 0.61,
@@ -375,6 +407,212 @@ class IngestLiveDataTests(unittest.TestCase):
             persisted["blocked_reason"],
             "source sportsbook_odds unhealthy",
         )
+
+    def test_build_opportunities_uses_policy_file_for_pre_expiry_freeze(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            policy_path = Path(temp_dir) / "runtime-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "proposal_planner": {
+                            "freeze_minutes_before_expiry": 30,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(hours=2),
+                market_end_time=datetime.now(timezone.utc) + timedelta(minutes=10),
+            )
+
+            ingest_live_data.main(
+                [
+                    "build-opportunities",
+                    "--root",
+                    str(root),
+                    "--policy-file",
+                    str(policy_path),
+                    "--quiet",
+                ]
+            )
+
+            opportunities = json.loads((root / "current" / "opportunities.json").read_text())
+
+        persisted = next(iter(opportunities.values()))
+        self.assertEqual(
+            persisted["blocked_reason"],
+            "market within pre-expiry freeze window",
+        )
+
+    def test_build_opportunities_can_disable_source_health_block_via_policy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            policy_path = Path(temp_dir) / "runtime-policy.json"
+            policy_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "proposal_planner": {
+                            "block_on_unhealthy_source": False,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(hours=2),
+                source_health_overrides={
+                    "sportsbook_odds": {"status": "red"},
+                },
+            )
+
+            ingest_live_data.main(
+                [
+                    "build-opportunities",
+                    "--root",
+                    str(root),
+                    "--policy-file",
+                    str(policy_path),
+                    "--quiet",
+                ]
+            )
+
+            opportunities = json.loads((root / "current" / "opportunities.json").read_text())
+
+        persisted = next(iter(opportunities.values()))
+        self.assertIsNone(persisted["blocked_reason"])
+
+    def test_build_fair_values_prefers_best_mapping_per_market(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "pm-1|sb-low": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-low",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.45,
+                        "resolution_risk": 0.30,
+                        "mismatch_reason": None,
+                        "is_active": True,
+                    },
+                    "pm-1|sb-high": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-high",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "mismatch_reason": None,
+                        "is_active": True,
+                    },
+                },
+            )
+            self._write_json(
+                root / "postgres" / "sportsbook_odds.json",
+                {
+                    "0": {
+                        "sportsbook_event_id": "sb-low",
+                        "source": "theoddsapi",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 4.0,
+                        "implied_prob": 0.25,
+                        "overround": 0.25,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    },
+                    "1": {
+                        "sportsbook_event_id": "sb-high",
+                        "source": "theoddsapi",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.5,
+                        "implied_prob": 0.6666666667,
+                        "overround": 0.6666666667,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    },
+                },
+            )
+
+            ingest_live_data.main(["build-fair-values", "--root", str(root), "--quiet"])
+
+            fair_values = json.loads((root / "current" / "fair_values.json").read_text())
+
+        self.assertAlmostEqual(fair_values["pm-1"]["fair_yes_prob"], 0.666667, places=5)
+
+    def test_build_opportunities_uses_current_fair_values_over_history_rows(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(hours=2),
+            )
+            self._write_json(
+                root / "postgres" / "fair_values.json",
+                {
+                    "pm-1|2026-04-21T18:00:00+00:00|aaa|v1": {
+                        "market_id": "pm-1",
+                        "as_of": "2026-04-21T18:00:00+00:00",
+                        "fair_yes_prob": 0.20,
+                        "lower_prob": 0.18,
+                        "upper_prob": 0.22,
+                        "book_dispersion": 0.01,
+                        "data_age_ms": 250,
+                        "source_count": 2,
+                        "model_name": "aaa",
+                        "model_version": "v1",
+                    },
+                    "pm-1|2026-04-21T18:00:00+00:00|zzz|v1": {
+                        "market_id": "pm-1",
+                        "as_of": "2026-04-21T18:00:00+00:00",
+                        "fair_yes_prob": 0.90,
+                        "lower_prob": 0.88,
+                        "upper_prob": 0.92,
+                        "book_dispersion": 0.01,
+                        "data_age_ms": 250,
+                        "source_count": 2,
+                        "model_name": "zzz",
+                        "model_version": "v1",
+                    },
+                },
+            )
+            self._write_json(
+                root / "current" / "fair_values.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "as_of": "2026-04-21T18:00:00+00:00",
+                        "fair_yes_prob": 0.61,
+                        "lower_prob": 0.58,
+                        "upper_prob": 0.64,
+                        "book_dispersion": 0.01,
+                        "data_age_ms": 250,
+                        "source_count": 2,
+                        "model_name": "deterministic_consensus",
+                        "model_version": "v1",
+                    }
+                },
+            )
+
+            ingest_live_data.main(
+                ["build-opportunities", "--root", str(root), "--quiet"]
+            )
+
+            opportunities = json.loads((root / "current" / "opportunities.json").read_text())
+
+        persisted = next(iter(opportunities.values()))
+        self.assertAlmostEqual(persisted["edge_after_costs_bps"], 900.0, places=4)
 
 
 if __name__ == "__main__":
