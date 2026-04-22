@@ -115,20 +115,23 @@ def build_new_parser() -> argparse.ArgumentParser:
     add_quiet_flag(pm_bbo)
 
     sb_odds = subparsers.add_parser("sportsbook-odds")
-    sb_odds.add_argument("--sport", required=True)
-    sb_odds.add_argument("--market", required=True)
+    sb_odds.add_argument("--sport", default=None)
+    sb_odds.add_argument("--market", default=None)
     sb_odds.add_argument("--root", default="runtime/data")
+    sb_odds.add_argument("--config-file", default=None)
     sb_odds.add_argument("--event-map-file", default=None)
     sb_odds.add_argument("--api-key-env", default="THE_ODDS_API_KEY")
     add_quiet_flag(sb_odds)
 
     mappings = subparsers.add_parser("build-mappings")
-    mappings.add_argument("--market", required=True)
+    mappings.add_argument("--market", default=None)
     mappings.add_argument("--root", default="runtime/data")
+    mappings.add_argument("--config-file", default=None)
     add_quiet_flag(mappings)
 
     fair_values = subparsers.add_parser("build-fair-values")
     fair_values.add_argument("--root", default="runtime/data")
+    fair_values.add_argument("--config-file", default=None)
     fair_values.add_argument("--model-name", default="deterministic_consensus")
     fair_values.add_argument("--model-version", default="v1")
     fair_values.add_argument("--consensus-artifact", default=None)
@@ -276,6 +279,56 @@ def _mapping_event_payload(event: dict[str, object]) -> dict[str, object]:
     )
 
 
+def _load_optional_config(config_file: str | None) -> dict[str, object]:
+    return load_config_file(config_file) if config_file else {}
+
+
+def _resolve_sport_key(value: str | None, config: dict[str, object]) -> str:
+    if isinstance(value, str) and value:
+        return value
+    configured_sport = nested_config_value(config, "capture", "sport_key")
+    if isinstance(configured_sport, str) and configured_sport:
+        return configured_sport
+    runtime_sport = nested_config_value(config, "runtime", "sport_key")
+    if isinstance(runtime_sport, str) and runtime_sport:
+        return runtime_sport
+    league = nested_config_value(config, "league")
+    if isinstance(league, str):
+        resolved = SPORT_KEY_BY_LEAGUE.get(league.strip().lower())
+        if resolved:
+            return resolved
+    raise RuntimeError(
+        "sportsbook-odds requires --sport or a config with capture.sport_key/runtime.sport_key/league"
+    )
+
+
+def _resolve_sportsbook_market(value: str | None, config: dict[str, object]) -> str:
+    if isinstance(value, str) and value:
+        return value
+    configured_market = nested_config_value(config, "runtime", "sportsbook_market")
+    if isinstance(configured_market, str) and configured_market:
+        return configured_market
+    raise RuntimeError(
+        "command requires --market or a config with runtime.sportsbook_market"
+    )
+
+
+def _resolve_event_map_file(value: str | None, config: dict[str, object]) -> str | None:
+    if value not in (None, ""):
+        return value
+    configured = nested_config_value(config, "runtime", "event_map_file")
+    return configured if isinstance(configured, str) and configured else None
+
+
+def _resolve_consensus_artifact(
+    value: str | None, config: dict[str, object]
+) -> str | None:
+    if value not in (None, ""):
+        return value
+    configured = nested_config_value(config, "runtime", "consensus_artifact")
+    return configured if isinstance(configured, str) and configured else None
+
+
 def _has_upstream_event_identity(payload: dict[str, object]) -> bool:
     return any(
         payload.get(field) not in (None, "") for field in ("event_key", "game_id")
@@ -283,12 +336,14 @@ def _has_upstream_event_identity(payload: dict[str, object]) -> bool:
 
 
 def _build_fair_value_engine(args) -> FairValueEngine:
-    if args.consensus_artifact in (None, ""):
+    config = _load_optional_config(getattr(args, "config_file", None))
+    consensus_artifact = _resolve_consensus_artifact(args.consensus_artifact, config)
+    if consensus_artifact in (None, ""):
         return FairValueEngine(
             model_name=args.model_name,
             model_version=args.model_version,
         )
-    artifact = load_book_consensus_artifact(args.consensus_artifact)
+    artifact = load_book_consensus_artifact(consensus_artifact)
     return FairValueEngine(
         model_name=artifact.model,
         model_version=artifact.model_version,
@@ -297,7 +352,11 @@ def _build_fair_value_engine(args) -> FairValueEngine:
 
 
 def _artifact_configured(args) -> bool:
-    return args.consensus_artifact not in (None, "")
+    config = _load_optional_config(getattr(args, "config_file", None))
+    return _resolve_consensus_artifact(args.consensus_artifact, config) not in (
+        None,
+        "",
+    )
 
 
 def _safe_error_kind(exc: Exception) -> str:
@@ -464,21 +523,24 @@ def _run_sportsbook_odds(args) -> int:
     logger = build_structured_logger("ingest.sportsbook.odds")
     metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
+    config = _load_optional_config(args.config_file)
     api_key = os.getenv(args.api_key_env)
     if not api_key:
         raise RuntimeError(f"missing required environment variable: {args.api_key_env}")
     client = TheOddsApiClient(api_key=api_key)
-    events = client.fetch_upcoming(args.sport, args.market)
-    event_map = load_event_map(args.event_map_file)
+    sport = _resolve_sport_key(args.sport, config)
+    market = _resolve_sportsbook_market(args.market, config)
+    events = client.fetch_upcoming(sport, market)
+    event_map = load_event_map(_resolve_event_map_file(args.event_map_file, config))
     normalized_rows: list[dict] = []
     for event in events:
-        event["sport_key"] = args.sport
+        event["sport_key"] = sport
         event_identity = event_map.get(str(event.get("id") or ""), {})
         normalized_rows.extend(
             normalize_odds_event(
                 event,
                 source="theoddsapi",
-                market_type=args.market,
+                market_type=market,
                 captured_at=_utc_now(),
             )
         )
@@ -490,7 +552,7 @@ def _run_sportsbook_odds(args) -> int:
         event_record = SportsbookEventRecord(
             sportsbook_event_id=str(event.get("id") or ""),
             source="theoddsapi",
-            sport=args.sport,
+            sport=sport,
             league=event.get("sport_title"),
             home_team=event.get("home_team"),
             away_team=event.get("away_team"),
@@ -560,6 +622,8 @@ def _run_build_mappings(args) -> int:
     logger = build_structured_logger("ingest.mappings")
     metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
+    config = _load_optional_config(args.config_file)
+    sportsbook_market = _resolve_sportsbook_market(args.market, config)
     markets = _sorted_rows(stores["markets"].read_all())
     events = stores["sb_events"].read_all()
     mappings: list[dict] = []
@@ -570,20 +634,20 @@ def _run_build_mappings(args) -> int:
         pm_market_type = str(
             market_payload.get("sportsMarketType")
             or market_payload.get("sports_market_type")
-            or args.market
+            or sportsbook_market
         )
         for event in events.values():
             event_payload = _mapping_event_payload(event)
             decision = map_contract_candidate(
                 market_payload,
                 event_payload,
-                sportsbook_market_type=args.market,
+                sportsbook_market_type=sportsbook_market,
                 pm_semantics=semantics_from_market_type(
                     pm_market_type,
                     source="polymarket",
                 ),
                 sb_semantics=semantics_from_market_type(
-                    args.market,
+                    sportsbook_market,
                     source="sportsbook",
                 ),
             )
