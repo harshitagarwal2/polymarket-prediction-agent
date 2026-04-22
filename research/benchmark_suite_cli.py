@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+
+from engine.cli_output import add_quiet_flag, emit_lines
 from research.benchmark_suite import (
     packaged_benchmark_case_paths,
     run_benchmark_suite,
@@ -82,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Directory where suite summary artifacts should be written.",
     )
+    add_quiet_flag(parser)
     return parser
 
 
@@ -132,7 +135,7 @@ def main() -> None:
             model_generator=args.model_generator,
         )
         summary_path = write_walk_forward_suite_report(report, args.output_dir)
-        print(summary_path)
+        emit_lines(summary_path, quiet=args.quiet)
         return
     case_paths = _resolve_case_paths(
         fixtures_dir=args.fixtures_dir,
@@ -142,8 +145,7 @@ def main() -> None:
     )
     report = run_benchmark_suite(case_paths)
     summary_path, markdown_path = write_suite_report(report, args.output_dir)
-    print(summary_path)
-    print(markdown_path)
+    emit_lines(summary_path, markdown_path, quiet=args.quiet)
 
 
 if __name__ == "__main__":

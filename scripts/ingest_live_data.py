@@ -8,6 +8,9 @@ from pathlib import Path
 from adapters.polymarket import PolymarketAdapter
 from adapters.polymarket.gamma_client import fetch_markets
 from adapters.types import serialize_market_summary
+from engine.cli_output import add_quiet_flag, emit_json
+from engine.config_loader import load_config_file, nested_config_value
+from engine.runtime_bootstrap import build_adapter
 from research.data.capture_polymarket import (
     build_polymarket_capture,
     write_polymarket_capture,
@@ -16,13 +19,11 @@ from research.data.capture_sports_inputs import (
     build_sports_input_capture,
     write_sports_input_capture,
 )
-from scripts.config_loader import load_config_file, nested_config_value
-from scripts.fetch_the_odds_api_rows import (
+from research.data.odds_api import (
     fetch_odds_payload,
     load_event_map,
     normalize_odds_events,
 )
-from scripts.run_agent_loop import build_adapter
 
 
 SPORT_KEY_BY_LEAGUE = {
@@ -54,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bookmakers", default=None)
     parser.add_argument("--api-key-env", default="THE_ODDS_API_KEY")
     parser.add_argument("--data-api-path", default="/trades")
+    add_quiet_flag(parser)
     return parser
 
 
@@ -115,9 +117,7 @@ def main() -> None:
     else:
         envelope = build_polymarket_capture(payload, layer=args.layer)
         path = write_polymarket_capture(envelope, args.output)
-    print(
-        json.dumps({"output": str(path), "layer": args.layer}, indent=2, sort_keys=True)
-    )
+    emit_json({"output": str(path), "layer": args.layer}, quiet=args.quiet)
 
 
 if __name__ == "__main__":

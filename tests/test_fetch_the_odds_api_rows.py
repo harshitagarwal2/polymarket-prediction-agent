@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -9,6 +10,53 @@ from scripts import fetch_the_odds_api_rows
 
 
 class FetchTheOddsApiRowsTests(unittest.TestCase):
+    def test_main_quiet_suppresses_stdout(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+            def read(self):
+                return json.dumps(
+                    [
+                        {
+                            "id": "event-1",
+                            "home_team": "Home",
+                            "away_team": "Away",
+                            "bookmakers": [],
+                        }
+                    ]
+                ).encode("utf-8")
+
+        stdout = io.StringIO()
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle:
+            with (
+                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
+                patch.object(
+                    fetch_the_odds_api_rows, "urlopen", return_value=FakeResponse()
+                ),
+                patch(
+                    "sys.argv",
+                    [
+                        "fetch_the_odds_api_rows.py",
+                        "--sport-key",
+                        "basketball_nba",
+                        "--output",
+                        output_handle.name,
+                        "--quiet",
+                    ],
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                fetch_the_odds_api_rows.main()
+
+            payload = json.loads(output_handle.read())
+
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(payload, [])
+
     def test_normalize_odds_events_uses_event_map_for_yes_no_outcomes(self):
         events = [
             {

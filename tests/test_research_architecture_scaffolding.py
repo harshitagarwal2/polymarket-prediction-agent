@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from engine.config_loader import load_config_file, nested_config_value
 from engine.runtime_policy import load_runtime_policy
 from research.data.build_training_set import build_training_set_rows
 from research.data.build_training_set import load_training_set_rows
@@ -29,7 +31,6 @@ from research.fair_values import load_market_snapshot
 from research.models.bradley_terry import fit_bradley_terry_from_rows
 from research.models.blend import blend_probability
 from research.schemas import SportsBenchmarkCase
-from scripts.config_loader import load_config_file, nested_config_value
 from scripts import train_models
 
 
@@ -240,6 +241,49 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
             artifact_payload = json.loads(output_path.read_text())
 
         self.assertIn("skill_by_team", artifact_payload)
+
+    def test_train_models_quiet_suppresses_stdout(self):
+        training_payload = {
+            "source": "sports-inputs",
+            "rows": [
+                {
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "label": 1,
+                    "event_key": "event-1",
+                    "sport": "nba",
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            training_path = Path(temp_dir) / "training.json"
+            output_path = Path(temp_dir) / "elo.json"
+            training_path.write_text(json.dumps(training_payload))
+            stdout = io.StringIO()
+
+            with (
+                patch(
+                    "sys.argv",
+                    [
+                        "train_models.py",
+                        "--model",
+                        "elo",
+                        "--training-data",
+                        str(training_path),
+                        "--output",
+                        str(output_path),
+                        "--quiet",
+                    ],
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                train_models.main()
+
+            artifact_payload = json.loads(output_path.read_text())
+
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(artifact_payload["model_generator"], "elo")
 
 
 if __name__ == "__main__":

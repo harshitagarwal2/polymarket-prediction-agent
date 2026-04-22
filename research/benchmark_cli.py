@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from engine.cli_output import add_quiet_flag, emit_json
 from research.benchmark_runner import run_benchmark_case, write_benchmark_report
 from research.schemas import (
     load_benchmark_case,
@@ -31,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional output path for the benchmark manifest payload",
     )
+    add_quiet_flag(parser)
     return parser
 
 
@@ -57,10 +59,7 @@ def main() -> None:
                 allow_nan=False,
             )
         )
-    rendered = json.dumps(
-        report.to_payload(), indent=2, sort_keys=True, allow_nan=False
-    )
-    print(rendered)
+    emit_json(report.to_payload(), quiet=args.quiet, allow_nan=False)
 
 
 if __name__ == "__main__":

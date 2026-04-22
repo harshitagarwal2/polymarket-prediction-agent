@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from adapters.base import AdapterHealth
+from adapters.polymarket import PolymarketAdapter
 from adapters.types import (
     AccountSnapshot,
     BalanceSnapshot,
@@ -183,6 +185,22 @@ class PlaceableAdapter(PauseAdapter):
 
 
 class OperatorControlTests(unittest.TestCase):
+    def test_build_adapter_parses_polymarket_live_user_markets(self):
+        with patch.dict(
+            os.environ,
+            {
+                "POLYMARKET_PRIVATE_KEY": "pk",
+                "POLYMARKET_LIVE_USER_MARKETS": "cond-1, cond-2",
+                "POLYMARKET_USER_WS_HOST": "wss://example.invalid/ws/user",
+            },
+            clear=False,
+        ):
+            adapter = operator_cli._build_adapter("polymarket")
+
+        self.assertIsInstance(adapter, PolymarketAdapter)
+        self.assertEqual(adapter.config.live_user_markets, ["cond-1", "cond-2"])
+        self.assertEqual(adapter.config.user_ws_host, "wss://example.invalid/ws/user")
+
     def test_pause_blocks_run_and_persists(self):
         adapter = PauseAdapter()
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -8,7 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from adapters.types import serialize_market_summary
-from scripts.run_agent_loop import build_adapter
+from engine.cli_output import add_quiet_flag, emit_json
+from engine.runtime_bootstrap import build_adapter
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", required=True)
     parser.add_argument("--limit", type=int, default=200)
+    add_quiet_flag(parser)
     return parser
 
 
@@ -29,13 +31,7 @@ def main() -> None:
     output_path.write_text(
         json.dumps([serialize_market_summary(market) for market in markets], indent=2)
     )
-    print(
-        json.dumps(
-            {"output": str(output_path), "market_count": len(markets)},
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    emit_json({"output": str(output_path), "market_count": len(markets)}, quiet=args.quiet)
 
 
 if __name__ == "__main__":

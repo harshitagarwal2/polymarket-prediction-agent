@@ -9,17 +9,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from adapters.types import serialize_market_summary
+from engine.cli_output import add_quiet_flag, emit_json
+from engine.runtime_bootstrap import build_adapter
 from research.fair_values import (
     build_fair_value_manifest,
     parse_sportsbook_rows,
     resolve_rows_to_markets,
 )
-from scripts.fetch_the_odds_api_rows import (
+from research.data.odds_api import (
     fetch_odds_payload,
     load_event_map,
     normalize_odds_events,
 )
-from scripts.run_agent_loop import build_adapter
 
 
 def _atomic_write_json(path: str | Path, payload: object) -> None:
@@ -64,6 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--refresh-interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-cycles", type=int, default=1)
     parser.add_argument("--api-key-env", default="THE_ODDS_API_KEY")
+    add_quiet_flag(parser)
     return parser
 
 
@@ -118,7 +120,7 @@ def main() -> None:
         try:
             status_payload = _run_refresh_cycle_impl(args)
             last_success = status_payload
-            print(json.dumps(status_payload, indent=2, sort_keys=True))
+            emit_json(status_payload, quiet=args.quiet)
         except Exception as exc:
             failure_payload = {
                 "ok": False,
@@ -131,7 +133,7 @@ def main() -> None:
                 "output": str(Path(args.output)),
             }
             _atomic_write_json(args.status_file, failure_payload)
-            print(json.dumps(failure_payload, indent=2, sort_keys=True))
+            emit_json(failure_payload, quiet=args.quiet)
         cycle += 1
         if cycle < args.max_cycles:
             time.sleep(max(0.0, args.refresh_interval_seconds))

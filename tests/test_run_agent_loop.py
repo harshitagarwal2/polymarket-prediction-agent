@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
-from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import cast
 import unittest
 from unittest.mock import patch
 
-from adapters.types import Contract, MarketSummary, OutcomeSide, Venue
+from adapters.polymarket import PolymarketAdapter, PolymarketConfig
+from engine.discovery import ManifestFairValueProvider
 from scripts import run_agent_loop
 
 
@@ -44,33 +45,6 @@ class FakeAdapter:
 
     def close(self):
         self.close_calls += 1
-
-
-def make_manifest_market(
-    *,
-    condition_id: str | None = "condition-1",
-    event_key: str | None = "event-1",
-    sport: str | None = "nba",
-    series: str | None = "nba-finals",
-    game_id: str | None = "game-1",
-    sports_market_type: str | None = "moneyline",
-) -> MarketSummary:
-    raw = None
-    if condition_id is not None:
-        raw = {"market": {"condition_id": condition_id}}
-    return MarketSummary(
-        contract=Contract(
-            venue=Venue.POLYMARKET,
-            symbol="token-1",
-            outcome=OutcomeSide.YES,
-        ),
-        event_key=event_key,
-        sport=sport,
-        series=series,
-        game_id=game_id,
-        sports_market_type=sports_market_type,
-        raw=raw,
-    )
 
 
 class RunAgentLoopTests(unittest.TestCase):
@@ -115,6 +89,7 @@ class RunAgentLoopTests(unittest.TestCase):
                     "polymarket",
                     "--fair-values-file",
                     "runtime/fair-values.json",
+                    "--quiet",
                 ],
             ):
                 result = run_agent_loop.main()
@@ -241,6 +216,7 @@ class RunAgentLoopTests(unittest.TestCase):
                             fair_values.name,
                             "--config-file",
                             config_file.name,
+                            "--quiet",
                         ],
                     ):
                         result = run_agent_loop.main()
@@ -262,8 +238,8 @@ class RunAgentLoopTests(unittest.TestCase):
         with patch.dict("os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=False):
             adapter = run_agent_loop.build_adapter("polymarket", args)
 
-        self.assertIsInstance(adapter, run_agent_loop.PolymarketAdapter)
-        config = cast(run_agent_loop.PolymarketConfig, adapter.config)
+        self.assertIsInstance(adapter, PolymarketAdapter)
+        config = cast(PolymarketConfig, adapter.config)
         self.assertEqual(config.live_user_markets, ["cond-1", "cond-2"])
         self.assertEqual(
             config.user_ws_host,
@@ -295,8 +271,8 @@ class RunAgentLoopTests(unittest.TestCase):
         with patch.dict("os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=False):
             adapter = run_agent_loop.build_adapter("polymarket", args, policy=policy)
 
-        self.assertIsInstance(adapter, run_agent_loop.PolymarketAdapter)
-        config = cast(run_agent_loop.PolymarketConfig, adapter.config)
+        self.assertIsInstance(adapter, PolymarketAdapter)
+        config = cast(PolymarketConfig, adapter.config)
         self.assertEqual(config.depth_admission_levels, 4)
         self.assertEqual(config.depth_admission_liquidity_fraction, 0.65)
         self.assertEqual(config.depth_admission_max_expected_slippage_bps, 20.0)
@@ -391,6 +367,50 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertIn('"snapshot_open_order_overlay_source": "rest_only"', rendered)
         self.assertIn('"snapshot_fill_overlay_source": "rest_only"', rendered)
 
+    def test_main_quiet_suppresses_stdout(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+        stdout = io.StringIO()
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+            patch("sys.stdout", stdout),
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--fair-values-file",
+                    "runtime/fair-values.json",
+                    "--quiet",
+                ],
+            ):
+                run_agent_loop.main()
+
+        self.assertEqual(stdout.getvalue(), "")
+
     def test_main_wires_ranker_filters_from_cli(self):
         adapter = FakeAdapter()
         fake_engine = SimpleNamespace(
@@ -440,6 +460,7 @@ class RunAgentLoopTests(unittest.TestCase):
                     "24",
                     "--max-fair-value-age-seconds",
                     "900",
+                    "--quiet",
                 ],
             ):
                 run_agent_loop.main()
@@ -541,188 +562,13 @@ class RunAgentLoopTests(unittest.TestCase):
                     "pair-run",
                     "--quantity",
                     "2.5",
+                    "--quiet",
                 ],
             ):
                 run_agent_loop.main()
 
         config = polling_loop.call_args.kwargs["config"]
         self.assertEqual(config.quantity, 2.5)
-
-    def test_build_fair_value_provider_supports_manifest_records(self):
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
-            json.dump(
-                {
-                    "generated_at": "2026-04-07T12:00:00Z",
-                    "source": "sports-model-v1",
-                    "max_age_seconds": 900,
-                    "values": {
-                        "token-1:yes": {
-                            "fair_value": 0.61,
-                            "condition_id": "condition-1",
-                        }
-                    },
-                },
-                handle,
-            )
-            handle.flush()
-
-            provider = run_agent_loop.build_fair_value_provider(handle.name)
-
-        self.assertIsInstance(provider, run_agent_loop.ManifestFairValueProvider)
-        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
-            self.fail("expected manifest fair value provider")
-        manifest_provider = provider
-        self.assertEqual(manifest_provider.max_age_seconds, 900.0)
-        self.assertEqual(manifest_provider.source, "sports-model-v1")
-        self.assertEqual(
-            manifest_provider.records["token-1:yes"].fair_value,
-            0.61,
-        )
-        self.assertEqual(
-            manifest_provider.records["token-1:yes"].condition_id,
-            "condition-1",
-        )
-
-    def test_build_fair_value_provider_supports_calibrated_field_selection(self):
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
-            json.dump(
-                {
-                    "generated_at": "2026-04-07T12:00:00Z",
-                    "values": {
-                        "token-1:yes": {
-                            "fair_value": 0.61,
-                            "calibrated_fair_value": 0.67,
-                            "condition_id": "condition-1",
-                            "event_key": "event-1",
-                        }
-                    },
-                },
-                handle,
-            )
-            handle.flush()
-
-            provider = run_agent_loop.build_fair_value_provider(
-                handle.name,
-                fair_value_field="calibrated",
-            )
-
-        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
-            self.fail("expected manifest fair value provider")
-
-        self.assertEqual(provider.fair_value_field, "calibrated")
-        self.assertEqual(provider.records["token-1:yes"].calibrated_fair_value, 0.67)
-        self.assertEqual(provider.fair_value_for(make_manifest_market()), 0.67)
-
-    def test_build_fair_value_provider_uses_manifest_identity_and_generated_at_fallback(
-        self,
-    ):
-        generated_at = datetime.now(timezone.utc).replace(microsecond=0)
-
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
-            json.dump(
-                {
-                    "generated_at": generated_at.isoformat().replace("+00:00", "Z"),
-                    "max_age_seconds": 900,
-                    "values": {
-                        "token-1:yes": {
-                            "fair_value": 0.61,
-                            "condition_id": "condition-1",
-                            "event_key": "event-1",
-                        }
-                    },
-                },
-                handle,
-            )
-            handle.flush()
-
-            provider = run_agent_loop.build_fair_value_provider(handle.name)
-
-        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
-            self.fail("expected manifest fair value provider")
-
-        self.assertEqual(provider.fair_value_for(make_manifest_market()), 0.61)
-        self.assertIsNone(
-            provider.fair_value_for(make_manifest_market(condition_id="condition-2"))
-        )
-        self.assertIsNone(
-            provider.fair_value_for(make_manifest_market(event_key="event-2"))
-        )
-        self.assertIsNone(
-            provider.fair_value_for(make_manifest_market(condition_id=None))
-        )
-
-    def test_build_fair_value_provider_uses_extended_market_identity_fields(self):
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
-            json.dump(
-                {
-                    "generated_at": "2026-04-07T12:00:00Z",
-                    "values": {
-                        "token-1:yes": {
-                            "fair_value": 0.61,
-                            "condition_id": "condition-1",
-                            "event_key": "event-1",
-                            "sport": "nba",
-                            "series": "nba-finals",
-                            "game_id": "game-1",
-                            "sports_market_type": "moneyline",
-                        }
-                    },
-                },
-                handle,
-            )
-            handle.flush()
-
-            provider = run_agent_loop.build_fair_value_provider(handle.name)
-
-        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
-            self.fail("expected manifest fair value provider")
-
-        self.assertEqual(provider.fair_value_for(make_manifest_market()), 0.61)
-        self.assertIsNone(provider.fair_value_for(make_manifest_market(sport="nfl")))
-        self.assertIsNone(
-            provider.fair_value_for(make_manifest_market(series="western-conference"))
-        )
-        self.assertIsNone(
-            provider.fair_value_for(make_manifest_market(game_id="game-2"))
-        )
-        self.assertIsNone(
-            provider.fair_value_for(
-                make_manifest_market(sports_market_type="championship_winner")
-            )
-        )
-
-    def test_build_fair_value_provider_prefers_record_timestamp_for_staleness(self):
-        manifest_generated_at = datetime.now(timezone.utc).replace(microsecond=0)
-        stale_generated_at = manifest_generated_at - timedelta(hours=2)
-
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
-            json.dump(
-                {
-                    "generated_at": manifest_generated_at.isoformat().replace(
-                        "+00:00", "Z"
-                    ),
-                    "max_age_seconds": 60,
-                    "values": {
-                        "token-1:yes": {
-                            "fair_value": 0.61,
-                            "generated_at": stale_generated_at.isoformat().replace(
-                                "+00:00", "Z"
-                            ),
-                            "condition_id": "condition-1",
-                            "event_key": "event-1",
-                        }
-                    },
-                },
-                handle,
-            )
-            handle.flush()
-
-            provider = run_agent_loop.build_fair_value_provider(handle.name)
-
-        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
-            self.fail("expected manifest fair value provider")
-
-        self.assertIsNone(provider.fair_value_for(make_manifest_market()))
 
     def test_main_wraps_provider_with_reloader_when_requested(self):
         adapter = FakeAdapter()
@@ -763,6 +609,7 @@ class RunAgentLoopTests(unittest.TestCase):
                     "runtime/fair-values.json",
                     "--fair-values-reload-seconds",
                     "30",
+                    "--quiet",
                 ],
             ):
                 run_agent_loop.main()
@@ -875,6 +722,7 @@ class RunAgentLoopTests(unittest.TestCase):
                         "0.99",
                         "--min-volume",
                         "1",
+                        "--quiet",
                     ],
                 ):
                     run_agent_loop.main()
@@ -907,34 +755,14 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertEqual(sizer.edge_unit, 0.07)
         self.assertEqual(config.quantity, 2.5)
         self.assertEqual(lifecycle_manager.policy.max_order_age_seconds, 44.0)
-        self.assertIsInstance(provider, run_agent_loop.ManifestFairValueProvider)
-        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
+        self.assertIsInstance(provider, ManifestFairValueProvider)
+        if not isinstance(provider, ManifestFairValueProvider):
             self.fail("expected manifest fair value provider")
         self.assertEqual(provider.fair_value_field, "calibrated")
         self.assertEqual(
             trading_engine_ctor.call_args.kwargs["overlay_max_age_seconds"],
             11.0,
         )
-
-    def test_reloading_fair_value_provider_reloads_after_interval(self):
-        class Provider:
-            def __init__(self, value):
-                self.value = value
-
-            def fair_value_for(self, _market):
-                return self.value
-
-        values = iter([Provider(0.6), Provider(0.7), Provider(0.8)])
-        provider = run_agent_loop.ReloadingFairValueProvider(
-            lambda: next(values),
-            reload_interval_seconds=0.0,
-        )
-
-        first = provider.fair_value_for(SimpleNamespace())
-        second = provider.fair_value_for(SimpleNamespace())
-
-        self.assertEqual(first, 0.7)
-        self.assertEqual(second, 0.8)
 
 
 if __name__ == "__main__":

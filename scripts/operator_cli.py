@@ -13,8 +13,6 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from adapters.base import AdapterHealth
-from adapters.kalshi import KalshiAdapter, KalshiConfig
-from adapters.polymarket import PolymarketAdapter, PolymarketConfig
 from adapters.types import (
     AccountSnapshot,
     BalanceSnapshot,
@@ -39,6 +37,7 @@ from engine import (
     summarize_fill_state,
 )
 from engine.interfaces import NoopStrategy
+from engine.runtime_bootstrap import build_adapter as _build_adapter
 from engine.runner import TradingEngine
 from engine.safety_state import (
     EngineSafetyState,
@@ -362,39 +361,6 @@ def _parse_contract(args, venue: Venue) -> Contract | None:
         else OutcomeSide.UNKNOWN
     )
     return Contract(venue=venue, symbol=symbol, outcome=outcome)
-
-
-def _parse_comma_separated(value: str | None) -> list[str] | None:
-    if value in (None, ""):
-        return None
-    items = [item.strip() for item in value.split(",") if item.strip()]
-    return items or None
-
-
-def _build_adapter(venue_name: str):
-    if venue_name == "polymarket":
-        return PolymarketAdapter(
-            PolymarketConfig(
-                private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
-                funder=os.getenv("POLYMARKET_FUNDER"),
-                account_address=os.getenv("POLYMARKET_ACCOUNT_ADDRESS"),
-                user_ws_host=(
-                    os.getenv("POLYMARKET_USER_WS_HOST")
-                    or PolymarketConfig.user_ws_host
-                ),
-                live_user_markets=_parse_comma_separated(
-                    os.getenv("POLYMARKET_LIVE_USER_MARKETS")
-                ),
-            )
-        )
-    if venue_name == "kalshi":
-        return KalshiAdapter(
-            KalshiConfig(
-                api_key_id=os.getenv("KALSHI_API_KEY_ID"),
-                private_key_path=os.getenv("KALSHI_PRIVATE_KEY_PATH"),
-            )
-        )
-    raise ValueError(f"unsupported venue: {venue_name}")
 
 
 def _require_contract(args, venue: Venue) -> Contract:

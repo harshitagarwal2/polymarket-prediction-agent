@@ -8,6 +8,8 @@ from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from engine.cli_output import add_quiet_flag, emit_json
+from engine.config_loader import load_config_file, nested_config_value
 from research.calibration import load_calibration_artifact
 from research.fair_values import (
     BookAggregation,
@@ -17,7 +19,6 @@ from research.fair_values import (
     load_sportsbook_rows,
     resolve_rows_to_markets,
 )
-from scripts.config_loader import load_config_file, nested_config_value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-age-seconds", type=float, default=None)
     parser.add_argument("--source", default=None)
     parser.add_argument("--calibration-artifact", default=None)
+    add_quiet_flag(parser)
     return parser
 
 
@@ -89,22 +91,19 @@ def main() -> None:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(manifest.to_payload(), indent=2, sort_keys=True))
-    print(
-        json.dumps(
-            {
-                "output": str(output_path),
-                "value_count": len(manifest.values),
-                "skipped_group_count": len(manifest.skipped_groups),
-                "matched_row_count": len(rows),
-                "source": manifest.source,
-                "generated_at": manifest.generated_at.isoformat(),
-                "book_aggregation": resolved_book_aggregation,
-                "devig_method": resolved_devig_method,
-                "calibration_applied": calibration_artifact is not None,
-            },
-            indent=2,
-            sort_keys=True,
-        )
+    emit_json(
+        {
+            "output": str(output_path),
+            "value_count": len(manifest.values),
+            "skipped_group_count": len(manifest.skipped_groups),
+            "matched_row_count": len(rows),
+            "source": manifest.source,
+            "generated_at": manifest.generated_at.isoformat(),
+            "book_aggregation": resolved_book_aggregation,
+            "devig_method": resolved_devig_method,
+            "calibration_applied": calibration_artifact is not None,
+        },
+        quiet=args.quiet,
     )
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -13,10 +14,61 @@ from adapters.types import (
     Venue,
     serialize_market_summary,
 )
-from scripts import build_sports_fair_values, fetch_the_odds_api_rows, run_agent_loop
+from engine.discovery import ManifestFairValueProvider
+from engine.fair_value_loader import build_fair_value_provider
+from scripts import build_sports_fair_values, fetch_the_odds_api_rows
 
 
 class BuildSportsFairValuesScriptTests(unittest.TestCase):
+    def test_script_quiet_suppresses_stdout(self):
+        input_payload = [
+            {
+                "market_key": "token-yes:yes",
+                "bookmaker": "book-a",
+                "outcome": "yes",
+                "captured_at": "2026-04-07T12:00:00Z",
+                "decimal_odds": 1.7,
+                "event_key": "event-1",
+            },
+            {
+                "market_key": "token-no:no",
+                "bookmaker": "book-a",
+                "outcome": "no",
+                "captured_at": "2026-04-07T12:00:00Z",
+                "decimal_odds": 2.3,
+                "event_key": "event-1",
+            },
+        ]
+
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as input_handle,
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle,
+        ):
+            json.dump(input_payload, input_handle)
+            input_handle.flush()
+
+            stdout = io.StringIO()
+            with (
+                patch(
+                    "sys.argv",
+                    [
+                        "build_sports_fair_values.py",
+                        "--input",
+                        input_handle.name,
+                        "--output",
+                        output_handle.name,
+                        "--quiet",
+                    ],
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                build_sports_fair_values.main()
+
+            output_payload = json.loads(Path(output_handle.name).read_text())
+
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(sorted(output_payload["values"].keys()), ["token-no:no", "token-yes:yes"])
+
     def test_script_builds_manifest_consumable_by_runtime(self):
         input_payload = [
             {
@@ -66,11 +118,11 @@ class BuildSportsFairValuesScriptTests(unittest.TestCase):
             ):
                 build_sports_fair_values.main()
 
-            provider = run_agent_loop.build_fair_value_provider(output_handle.name)
+            provider = build_fair_value_provider(output_handle.name)
             output_payload = json.loads(Path(output_handle.name).read_text())
 
-        self.assertIsInstance(provider, run_agent_loop.ManifestFairValueProvider)
-        if not isinstance(provider, run_agent_loop.ManifestFairValueProvider):
+        self.assertIsInstance(provider, ManifestFairValueProvider)
+        if not isinstance(provider, ManifestFairValueProvider):
             self.fail("expected manifest fair value provider")
         self.assertEqual(provider.max_age_seconds, 900.0)
         self.assertIn("token-yes:yes", provider.records)

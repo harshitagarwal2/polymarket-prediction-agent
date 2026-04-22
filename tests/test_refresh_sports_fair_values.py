@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 from types import SimpleNamespace
@@ -30,7 +31,34 @@ class RefreshSportsFairValuesTests(unittest.TestCase):
             refresh_interval_seconds=0.0,
             max_cycles=1,
             api_key_env="THE_ODDS_API_KEY",
+            quiet=False,
         )
+
+    def test_main_quiet_suppresses_stdout(self):
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle,
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as status_handle,
+            patch.object(
+                refresh_sports_fair_values, "_run_refresh_cycle_impl"
+            ) as cycle_mock,
+        ):
+            cycle_mock.return_value = {
+                "ok": True,
+                "last_success_at": "2026-04-07T12:00:00+00:00",
+                "output": output_handle.name,
+            }
+            args = self._args(output_handle.name, status_handle.name)
+            args.quiet = True
+            stdout = io.StringIO()
+
+            with (
+                patch.object(refresh_sports_fair_values, "build_parser") as parser_mock,
+                patch("sys.stdout", stdout),
+            ):
+                parser_mock.return_value.parse_args.return_value = args
+                refresh_sports_fair_values.main()
+
+        self.assertEqual(stdout.getvalue(), "")
 
     def test_run_refresh_cycle_writes_manifest_and_status(self):
         markets = [

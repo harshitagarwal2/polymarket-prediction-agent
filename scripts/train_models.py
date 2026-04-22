@@ -3,12 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 
+from engine.cli_output import add_quiet_flag, emit_json
+from engine.config_loader import load_config_file, nested_config_value
 from research.data.build_training_set import load_training_set_rows
 from research.schemas import load_benchmark_case
 from research.train.train_blend import write_blend_config
 from research.train.train_bt import write_bt_artifact, write_bt_artifact_from_rows
 from research.train.train_elo import write_elo_artifact, write_elo_artifact_from_rows
-from scripts.config_loader import load_config_file, nested_config_value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--training-data", default=None)
     parser.add_argument("--blend-weight", type=float, default=0.5)
     parser.add_argument("--config-file", default=None)
+    add_quiet_flag(parser)
     return parser
 
 
@@ -54,7 +56,7 @@ def main() -> None:
                 path = write_elo_artifact(cases, args.output)
             else:
                 path = write_bt_artifact(cases, args.output)
-    print(json.dumps({"model": model, "output": str(path)}, indent=2, sort_keys=True))
+    emit_json({"model": model, "output": str(path)}, quiet=args.quiet)
 
 
 if __name__ == "__main__":

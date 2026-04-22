@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -14,6 +15,31 @@ FIXTURES_DIR = Path(__file__).resolve().parents[1] / "research" / "fixtures"
 
 
 class BenchmarkSuiteCliTests(unittest.TestCase):
+    def test_suite_cli_quiet_suppresses_stdout(self):
+        with tempfile.TemporaryDirectory() as output_dir:
+            stdout = io.StringIO()
+            with (
+                patch(
+                    "sys.argv",
+                    [
+                        "run_sports_benchmark_suite.py",
+                        "--fixtures-dir",
+                        str(FIXTURES_DIR),
+                        "--output-dir",
+                        output_dir,
+                        "--quiet",
+                    ],
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                run_sports_benchmark_suite.main()
+
+            self.assertTrue(
+                (Path(output_dir) / "benchmark_suite_summary.json").exists()
+            )
+
+        self.assertEqual(stdout.getvalue(), "")
+
     def test_suite_cli_writes_json_and_markdown_summaries(self):
         with tempfile.TemporaryDirectory() as output_dir:
             with patch(

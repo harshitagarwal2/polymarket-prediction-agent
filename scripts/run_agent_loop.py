@@ -1,247 +1,36 @@
 from __future__ import annotations
 
 import argparse
-import json
-import math
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from adapters.kalshi import KalshiAdapter, KalshiConfig
-from adapters.polymarket import PolymarketAdapter, PolymarketConfig
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
+from engine.cli_output import add_quiet_flag, emit_json
+from engine.config_loader import load_config_file, nested_config_value
 from engine.discovery import (
     AgentOrchestrator,
     DeterministicSizer,
-    FairValueField,
     ExecutionPolicyGate,
-    FairValueManifestEntry,
     ManifestFairValueProvider,
     OpportunityRanker,
     PairOpportunityRanker,
     PollingAgentLoop,
     PollingLoopConfig,
-    StaticFairValueProvider,
 )
-from engine.runtime_policy import RuntimePolicy, load_runtime_policy
+from engine.fair_value_loader import (
+    ReloadingFairValueProvider,
+    build_fair_value_provider,
+)
+from engine.runtime_bootstrap import build_adapter
+from engine.runtime_bootstrap import parse_comma_separated as _parse_comma_separated
+from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
-from engine.safety_store import SafetyStateStore
 from engine.strategies import FairValueBandStrategy
 from research.storage import EventJournal
 from risk.limits import RiskEngine, RiskLimits
-from scripts.config_loader import load_config_file, nested_config_value
-
-
-def _parse_comma_separated(value: str | None) -> list[str] | None:
-    if value in (None, ""):
-        return None
-    items = [item.strip() for item in value.split(",") if item.strip()]
-    return items or None
-
-
-def build_adapter(
-    venue_name: str,
-    args=None,
-    *,
-    policy: RuntimePolicy | None = None,
-):
-    if venue_name == "polymarket":
-        markets = _parse_comma_separated(
-            getattr(args, "polymarket_live_user_markets", None)
-            or os.getenv("POLYMARKET_LIVE_USER_MARKETS")
-        )
-        config = PolymarketConfig(
-            private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
-            funder=os.getenv("POLYMARKET_FUNDER"),
-            account_address=os.getenv("POLYMARKET_ACCOUNT_ADDRESS"),
-            user_ws_host=(
-                getattr(args, "polymarket_user_ws_host", None)
-                or os.getenv("POLYMARKET_USER_WS_HOST")
-                or PolymarketConfig.user_ws_host
-            ),
-            live_user_markets=markets,
-        )
-        if policy is not None:
-            config = policy.venues.polymarket.apply(config)
-        return PolymarketAdapter(config)
-    if venue_name == "kalshi":
-        return KalshiAdapter(
-            KalshiConfig(
-                api_key_id=os.getenv("KALSHI_API_KEY_ID"),
-                private_key_path=os.getenv("KALSHI_PRIVATE_KEY_PATH"),
-            )
-        )
-    raise ValueError(f"unsupported venue: {venue_name}")
-
-
-def load_fair_values(path: str) -> dict[str, float]:
-    payload = json.loads(Path(path).read_text())
-    return {str(key): float(value) for key, value in payload.items()}
-
-
-def _parse_fair_value_timestamp(value: object) -> datetime | None:
-    if value in (None, ""):
-        return None
-    if isinstance(value, datetime):
-        parsed = value
-    else:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
-def _parse_manifest_numeric(
-    value: object,
-    *,
-    context: str,
-    required: bool = False,
-) -> float | None:
-    if value in (None, ""):
-        if required:
-            raise RuntimeError(f"{context} is required")
-        return None
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-        if required:
-            raise RuntimeError(f"{context} must be numeric")
-        return None
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError) as exc:
-        if required:
-            raise RuntimeError(f"{context} must be numeric") from exc
-        return None
-    if not math.isfinite(parsed):
-        if required:
-            raise RuntimeError(f"{context} must be finite")
-        return None
-    return parsed
-
-
-def build_fair_value_provider(
-    path: str,
-    *,
-    max_age_seconds: float | None = None,
-    fair_value_field: FairValueField = "raw",
-):
-    payload = json.loads(Path(path).read_text())
-    if not isinstance(payload, dict):
-        raise RuntimeError("fair values file must contain a JSON object")
-
-    manifest_values = payload.get("values")
-    if isinstance(manifest_values, dict):
-        resolved_max_age = max_age_seconds
-        if resolved_max_age is None and payload.get("max_age_seconds") not in (
-            None,
-            "",
-        ):
-            resolved_max_age = float(payload["max_age_seconds"])
-
-        records: dict[str, FairValueManifestEntry] = {}
-        for market_key, item in manifest_values.items():
-            if isinstance(item, dict):
-                records[str(market_key)] = FairValueManifestEntry(
-                    fair_value=(
-                        _parse_manifest_numeric(
-                            item.get("fair_value"),
-                            context=(
-                                f"manifest fair value missing for market key: {market_key}"
-                            ),
-                            required=True,
-                        )
-                        or 0.0
-                    ),
-                    calibrated_fair_value=_parse_manifest_numeric(
-                        item.get("calibrated_fair_value"),
-                        context=(
-                            f"manifest calibrated_fair_value for market key: {market_key}"
-                        ),
-                    ),
-                    generated_at=_parse_fair_value_timestamp(item.get("generated_at")),
-                    source=(
-                        str(item.get("source"))
-                        if item.get("source") not in (None, "")
-                        else None
-                    ),
-                    condition_id=(
-                        str(item.get("condition_id"))
-                        if item.get("condition_id") not in (None, "")
-                        else None
-                    ),
-                    event_key=(
-                        str(item.get("event_key"))
-                        if item.get("event_key") not in (None, "")
-                        else None
-                    ),
-                    sport=(
-                        str(item.get("sport"))
-                        if item.get("sport") not in (None, "")
-                        else None
-                    ),
-                    series=(
-                        str(item.get("series"))
-                        if item.get("series") not in (None, "")
-                        else None
-                    ),
-                    game_id=(
-                        str(item.get("game_id"))
-                        if item.get("game_id") not in (None, "")
-                        else None
-                    ),
-                    sports_market_type=(
-                        str(item.get("sports_market_type"))
-                        if item.get("sports_market_type") not in (None, "")
-                        else None
-                    ),
-                )
-                continue
-            records[str(market_key)] = FairValueManifestEntry(fair_value=float(item))
-
-        return ManifestFairValueProvider(
-            records=records,
-            generated_at=_parse_fair_value_timestamp(payload.get("generated_at")),
-            source=(
-                str(payload.get("source"))
-                if payload.get("source") not in (None, "")
-                else None
-            ),
-            max_age_seconds=resolved_max_age,
-            fair_value_field=fair_value_field,
-        )
-
-    return StaticFairValueProvider(
-        {str(key): float(value) for key, value in payload.items()}
-    )
-
-
-class ReloadingFairValueProvider:
-    def __init__(
-        self,
-        loader: Callable[[], object],
-        *,
-        reload_interval_seconds: float,
-    ):
-        self.loader = loader
-        self.reload_interval_seconds = max(0.0, reload_interval_seconds)
-        self._provider = self.loader()
-        self._loaded_at = datetime.now(timezone.utc)
-
-    def _refresh_if_due(self) -> None:
-        now = datetime.now(timezone.utc)
-        age_seconds = (now - self._loaded_at).total_seconds()
-        if age_seconds < self.reload_interval_seconds:
-            return
-        self._provider = self.loader()
-        self._loaded_at = now
-
-    def fair_value_for(self, market):
-        self._refresh_if_due()
-        fair_value_for = getattr(self._provider, "fair_value_for")
-        return fair_value_for(market)
 
 
 def _required_env_vars(venue_name: str) -> list[str]:
@@ -314,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-hours-to-expiry", type=float, default=None)
     parser.add_argument("--polymarket-live-user-markets", default=None)
     parser.add_argument("--polymarket-user-ws-host", default=None)
+    add_quiet_flag(parser)
     return parser
 
 
@@ -503,9 +293,8 @@ def main() -> int:
                 return getattr(contract, "market_key", None)
             return getattr(selected, "market_key", None)
 
-        print(
-            json.dumps(
-                {
+        emit_json(
+            {
                     "cycles": len(results),
                     "mode": args.mode,
                     "last_selected": _selected_market_key(results[-1])
@@ -717,8 +506,7 @@ def main() -> int:
                         getattr(market_state_status, "subscribed_assets", ()) or ()
                     ),
                 },
-                indent=2,
-            )
+            quiet=args.quiet,
         )
         return 0
     finally:

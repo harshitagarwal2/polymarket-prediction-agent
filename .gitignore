@@ -31,3 +31,4 @@ research/data/warehouse/
 research/data/checkpoints/
 research/data/training/
 research/models/checkpoints/
+.omx/

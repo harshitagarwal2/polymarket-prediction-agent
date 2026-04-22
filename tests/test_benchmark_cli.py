@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -18,6 +19,31 @@ FIXTURE_PATH = (
 
 
 class BenchmarkCliTests(unittest.TestCase):
+    def test_cli_quiet_suppresses_stdout(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle:
+            stdout = io.StringIO()
+            with (
+                patch(
+                    "sys.argv",
+                    [
+                        "run_sports_benchmark.py",
+                        "--fixture",
+                        "sports_benchmark_tiny.json",
+                        "--output",
+                        output_handle.name,
+                        "--quiet",
+                    ],
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                run_sports_benchmark.main()
+
+            output_handle.seek(0)
+            payload = json.load(output_handle)
+
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(payload["case_name"], "sports-benchmark-tiny")
+
     def test_cli_runs_packaged_fixture_and_writes_report(self):
         with tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle:
             with patch(

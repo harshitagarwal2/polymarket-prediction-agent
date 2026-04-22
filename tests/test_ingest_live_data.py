@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import unittest
@@ -10,6 +11,48 @@ from scripts import ingest_live_data
 
 
 class IngestLiveDataTests(unittest.TestCase):
+    def test_gamma_ingest_quiet_suppresses_stdout(self):
+        gamma_payload = [
+            {
+                "conditionId": "condition-1",
+                "eventKey": "event-1",
+                "question": "Will Home Team win?",
+                "tokens": [
+                    {"token_id": "token-yes", "outcome": "Yes", "midpoint": 0.55},
+                    {"token_id": "token-no", "outcome": "No", "midpoint": 0.45},
+                ],
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "gamma.json"
+            stdout = io.StringIO()
+            with (
+                patch.object(
+                    ingest_live_data, "fetch_markets", return_value=gamma_payload
+                ),
+                patch(
+                    "sys.argv",
+                    [
+                        "ingest_live_data.py",
+                        "--layer",
+                        "gamma",
+                        "--config-file",
+                        "configs/sports_nba.yaml",
+                        "--output",
+                        str(output_path),
+                        "--quiet",
+                    ],
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                ingest_live_data.main()
+
+            payload = json.loads(output_path.read_text())
+
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(payload["layer"], "gamma")
+
     def test_gamma_ingest_writes_typed_market_capture(self):
         gamma_payload = [
             {
