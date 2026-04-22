@@ -6,6 +6,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from scripts import build_fair_values, build_sports_fair_values, train_models
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -96,6 +97,14 @@ class ConsoleScriptEntryPointsTests(unittest.TestCase):
             result.returncode,
             0,
             msg=f"stdout:\\n{result.stdout}\\nstderr:\\n{result.stderr}",
+        )
+
+    def test_research_entrypoint_scripts_delegate_to_package_modules(self):
+        self.assertEqual(train_models.main.__module__, "research.train_cli")
+        self.assertEqual(build_fair_values.main.__module__, "research.fair_values_cli")
+        self.assertEqual(
+            build_sports_fair_values.main.__module__,
+            "research.fair_values_cli",
         )
 
 
