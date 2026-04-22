@@ -23,6 +23,12 @@ def _parse_captured_at(value: object) -> datetime:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
+def _parse_optional_datetime(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    return _parse_captured_at(value)
+
+
 @dataclass(frozen=True)
 class PolymarketCaptureEnvelope:
     layer: str
@@ -149,8 +155,17 @@ def _record_from_contract_payload(
         best_ask=_coerce_optional_float(
             market_payload.get("best_ask") or market_payload.get("bestAsk")
         ),
+        best_bid_size=_coerce_optional_float(
+            market_payload.get("best_bid_size") or market_payload.get("bestBidSize")
+        ),
+        best_ask_size=_coerce_optional_float(
+            market_payload.get("best_ask_size") or market_payload.get("bestAskSize")
+        ),
         midpoint=_coerce_optional_float(market_payload.get("midpoint")),
         volume=_coerce_optional_float(market_payload.get("volume")),
+        start_time=_parse_optional_datetime(
+            market_payload.get("start_time") or market_payload.get("gameStartTime")
+        ),
         contract=contract if isinstance(contract, dict) else None,
         raw=raw,
     )
@@ -236,6 +251,10 @@ def _markets_from_payload(
                     )
                 ),
                 "midpoint": token.get("midpoint"),
+                "best_bid_size": token.get("best_bid_size")
+                or token.get("bestBidSize"),
+                "best_ask_size": token.get("best_ask_size")
+                or token.get("bestAskSize"),
             }
             records.append(
                 _record_from_contract_payload(

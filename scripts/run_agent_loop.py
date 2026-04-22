@@ -194,12 +194,42 @@ def _build_preview_order_proposals(
         if not isinstance(bbo, dict):
             continue
         blocked_reason = row.get("blocked_reason")
-        source_age_ms = int(fair_value.get("data_age_ms", 0)) if isinstance(fair_value, dict) else 0
+        fair_value_age_ms = (
+            int(fair_value.get("data_age_ms", 0)) if isinstance(fair_value, dict) else 0
+        )
+        bbo_source_age_ms = (
+            int(bbo.get("source_age_ms", 0))
+            if bbo.get("source_age_ms") not in (None, "")
+            else 0
+        )
+        source_age_ms = max(fair_value_age_ms, bbo_source_age_ms)
         book_dispersion = (
             float(fair_value.get("book_dispersion", 0.0))
             if isinstance(fair_value, dict)
             else 0.0
         )
+        side = str(row.get("side") or "buy_yes")
+        limit_price = (
+            bbo.get("best_ask_yes") if side == "buy_yes" else bbo.get("best_bid_yes")
+        )
+        if limit_price in (None, ""):
+            blocked_reason = blocked_reason or "missing executable bbo"
+        current_fillable_size = (
+            float(bbo.get("best_ask_yes_size"))
+            if side == "buy_yes" and bbo.get("best_ask_yes_size") not in (None, "")
+            else float(bbo.get("best_bid_yes_size"))
+            if side != "buy_yes" and bbo.get("best_bid_yes_size") not in (None, "")
+            else None
+        )
+        fillable_size = float(row.get("fillable_size") or 0.0)
+        if current_fillable_size is not None:
+            fillable_size = (
+                current_fillable_size
+                if fillable_size <= 0.0
+                else min(fillable_size, current_fillable_size)
+            )
+        if fillable_size <= 0.0:
+            blocked_reason = blocked_reason or "insufficient visible depth"
         sportsbook_event = sportsbook_events.get(
             str(mapping.get("sportsbook_event_id") or "")
         )
@@ -220,7 +250,7 @@ def _build_preview_order_proposals(
         )
         opportunity = Opportunity(
             market_id=market_id,
-            side=str(row.get("side") or "buy_yes"),
+            side=side,
             fair_yes_prob=(
                 float(fair_value.get("fair_yes_prob", 0.0))
                 if isinstance(fair_value, dict)
@@ -231,7 +261,7 @@ def _build_preview_order_proposals(
             edge_buy_bps=0.0,
             edge_sell_bps=0.0,
             edge_after_costs_bps=float(row.get("edge_after_costs_bps") or 0.0),
-            fillable_size=float(row.get("fillable_size") or 0.0),
+            fillable_size=fillable_size,
             confidence=float(row.get("confidence") or 0.0),
             blocked_reason=str(blocked_reason) if blocked_reason else None,
         )
