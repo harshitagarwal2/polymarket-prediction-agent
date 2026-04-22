@@ -211,7 +211,7 @@ build-fair-values \
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-cycles 1
 ```
 
@@ -226,7 +226,7 @@ You can also run pair ranking modes:
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --policy-file runtime/policy.json
 ```
 
@@ -246,11 +246,10 @@ The sample sports configs can also set runtime defaults:
 ```bash
 run-agent-loop \
   --venue polymarket \
-  --fair-values-file runtime/fair_values.json \
   --config-file configs/sports_nba.yaml
 ```
 
-With the current sample config, that path supplies `configs/runtime_policy.preview.json` and keeps the loop in preview mode.
+With the current sample config, that path supplies `configs/runtime_policy.preview.json`, keeps the loop in preview mode, points `run-agent-loop` at `runtime/data/current/fair_value_manifest.json`, and sets `opportunity_root` to `runtime/data`.
 
 ### 5. Inspect runtime state
 

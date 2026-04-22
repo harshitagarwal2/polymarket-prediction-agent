@@ -101,7 +101,7 @@ Resume only when venue truth looks healthy again and the clean resume check has 
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-fair-value-age-seconds 900 \
   --max-cycles 1
 ```
@@ -120,7 +120,7 @@ Use this until the following are boring and explainable:
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-fair-value-age-seconds 900 \
   --interval-seconds 15 \
   --max-cycles 100
@@ -134,7 +134,7 @@ Only after stage 2 is stable and well understood:
 run-agent-loop \
   --venue polymarket \
   --mode run \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-fair-value-age-seconds 900 \
   --interval-seconds 15 \
   --max-cycles 10
@@ -150,7 +150,7 @@ If you want repeatable runtime behavior, pass `--policy-file`.
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --policy-file runtime/policy.json
 ```
 
@@ -172,7 +172,7 @@ Before any continuous run:
 - `uv sync --locked`
 - `uv sync --locked --extra polymarket` for Polymarket operation
 - `uv sync --locked --extra kalshi` for Kalshi operation
-- `runtime/fair_values.json` exists
+- `runtime/data/current/fair_value_manifest.json` exists
 - chosen state file path exists or can be created
 - chosen journal path exists or can be created
 - required venue credentials are present

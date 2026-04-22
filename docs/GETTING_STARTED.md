@@ -195,7 +195,7 @@ python -m scripts.ingest_live_data build-fair-values \
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-cycles 1
 ```
 
@@ -211,11 +211,10 @@ If you want the sample runtime defaults from `configs/sports_nba.yaml`, you can 
 ```bash
 run-agent-loop \
   --venue polymarket \
-  --fair-values-file runtime/fair_values.json \
   --config-file configs/sports_nba.yaml
 ```
 
-That path currently provides `configs/runtime_policy.preview.json` and keeps the loop in preview mode.
+That path currently provides `configs/runtime_policy.preview.json`, keeps the loop in preview mode, points `run-agent-loop` at `runtime/data/current/fair_value_manifest.json`, and sets `opportunity_root` to `runtime/data`.
 
 For a long-running supervised preview process, add `--interval-seconds` and a larger `--max-cycles`.
 
@@ -234,7 +233,7 @@ If you want repeatable runtime behavior, use `--policy-file`.
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --policy-file runtime/policy.json
 ```
 
