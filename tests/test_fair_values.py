@@ -103,6 +103,7 @@ class FairValueResearchTests(unittest.TestCase):
         )
 
         payload = manifest.to_payload()
+        self.assertEqual(payload["schema_version"], 1)
         metadata = payload.get("metadata")
         self.assertIsInstance(metadata, dict)
         if not isinstance(metadata, dict):

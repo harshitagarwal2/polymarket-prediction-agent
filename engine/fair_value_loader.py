@@ -13,6 +13,8 @@ from forecasting.fair_value_engine import (
     StaticFairValueProvider,
 )
 
+SUPPORTED_FAIR_VALUE_MANIFEST_SCHEMA_VERSION = 1
+
 
 class FairValueLookup(Protocol):
     def fair_value_for(self, market: object) -> float | None: ...
@@ -61,6 +63,41 @@ def _optional_text(value: object) -> str | None:
     if value in (None, ""):
         return None
     return str(value)
+
+
+def _parse_manifest_schema_version(payload: dict[str, object]) -> int | None:
+    raw_version = payload.get("schema_version")
+    if raw_version in (None, ""):
+        return None
+    if isinstance(raw_version, bool) or not isinstance(raw_version, (int, float, str)):
+        raise RuntimeError("fair-value manifest schema_version must be an integer")
+    try:
+        parsed = int(raw_version)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("fair-value manifest schema_version must be an integer") from exc
+    if str(parsed) != str(raw_version).strip():
+        raise RuntimeError("fair-value manifest schema_version must be an integer")
+    if parsed != SUPPORTED_FAIR_VALUE_MANIFEST_SCHEMA_VERSION:
+        raise RuntimeError(
+            "unsupported fair-value manifest schema_version: "
+            f"{parsed} (expected {SUPPORTED_FAIR_VALUE_MANIFEST_SCHEMA_VERSION})"
+        )
+    return parsed
+
+
+def _validate_manifest_record_identity(
+    market_key: object,
+    entry: FairValueManifestEntry,
+) -> None:
+    if any(
+        value not in (None, "")
+        for value in (entry.condition_id, entry.event_key, entry.game_id)
+    ):
+        return
+    raise RuntimeError(
+        "manifest record must include event identity "
+        f"(condition_id, event_key, or game_id) for market key: {market_key}"
+    )
 
 
 def _parse_manifest_record(
@@ -112,6 +149,7 @@ def build_fair_value_provider(
         return StaticFairValueProvider(
             {str(key): float(value) for key, value in payload.items()}
         )
+    schema_version = _parse_manifest_schema_version(payload)
 
     resolved_max_age = max_age_seconds
     if resolved_max_age is None and payload.get("max_age_seconds") not in (None, ""):
@@ -121,6 +159,14 @@ def build_fair_value_provider(
         str(market_key): _parse_manifest_record(market_key, item)
         for market_key, item in manifest_values.items()
     }
+    if schema_version is not None:
+        generated_at = _parse_fair_value_timestamp(payload.get("generated_at"))
+        if generated_at is None:
+            raise RuntimeError(
+                "fair-value manifest generated_at is required when schema_version is set"
+            )
+        for market_key, entry in records.items():
+            _validate_manifest_record_identity(market_key, entry)
     return ManifestFairValueProvider(
         records=records,
         generated_at=_parse_fair_value_timestamp(payload.get("generated_at")),
