@@ -17,6 +17,7 @@ from adapters.types import serialize_market_summary
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
 from engine.runtime_metrics import RuntimeMetricsCollector
+from engine.runtime_policy import load_runtime_policy
 from engine.structured_logging import build_structured_logger, structured_log
 from engine.runtime_bootstrap import build_adapter
 from storage import (
@@ -42,6 +43,7 @@ from storage import (
 from contracts import ResolutionRules, map_market
 from forecasting import FairValueEngine
 from opportunity import opportunity_from_prices, rank_opportunities
+from risk.freeze_windows import FreezeWindowPolicy, freeze_reasons_for_state
 from research.data.capture_polymarket import (
     build_polymarket_capture,
     write_polymarket_capture,
@@ -130,6 +132,7 @@ def build_new_parser() -> argparse.ArgumentParser:
     opportunities.add_argument("--root", default="runtime/data")
     opportunities.add_argument("--fee-bps", type=float, default=0.0)
     opportunities.add_argument("--slippage-bps", type=float, default=0.0)
+    opportunities.add_argument("--policy-file", default=None)
     add_quiet_flag(opportunities)
     return parser
 
@@ -208,10 +211,46 @@ def _metrics_collector(root: str) -> RuntimeMetricsCollector:
     return RuntimeMetricsCollector(Path(root) / "current" / "runtime_metrics.json")
 
 
+def _parse_datetime(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def _sorted_rows(mapping: dict[str, object]) -> list[dict]:
     rows = [row for row in mapping.values() if isinstance(row, dict)]
     rows.sort(key=lambda row: json.dumps(row, sort_keys=True))
     return rows
+
+
+def _required_sources(
+    source_health: dict[str, object],
+) -> tuple[str, ...]:
+    return tuple(
+        source_name
+        for source_name in (
+            "polymarket_market_channel",
+            "sportsbook_odds",
+            "market_mappings",
+            "fair_values",
+        )
+        if source_name in source_health
+    )
+
+
+def _build_opportunity_freeze_policy(policy_file: str | None) -> FreezeWindowPolicy:
+    if not policy_file:
+        return FreezeWindowPolicy()
+    policy = load_runtime_policy(policy_file)
+    planner_policy = policy.proposal_planner
+    return FreezeWindowPolicy(
+        freeze_minutes_before_start=planner_policy.freeze_minutes_before_start,
+        freeze_minutes_before_expiry=planner_policy.freeze_minutes_before_expiry,
+        freeze_when_source_unhealthy=planner_policy.block_on_unhealthy_source,
+    )
 
 
 def _run_polymarket_markets(args) -> int:
@@ -549,6 +588,11 @@ def _run_build_opportunities(args) -> int:
     }
     bbo_rows = stores["bbo"].read_all()
     mapping_rows = _sorted_rows(stores["mappings"].read_all())
+    source_health = stores["current"].read_table("source_health")
+    sportsbook_events = stores["current"].read_table("sportsbook_events")
+    polymarket_markets = stores["current"].read_table("polymarket_markets")
+    required_sources = _required_sources(source_health)
+    freeze_policy = _build_opportunity_freeze_policy(args.policy_file)
     opportunities: list[OpportunityRecord] = []
     materialized: list[dict] = []
     for mapping in mapping_rows:
@@ -556,6 +600,45 @@ def _run_build_opportunities(args) -> int:
         fair_value = fair_values.get(market_id)
         bbo = bbo_rows.get(market_id)
         blocked_reason = mapping.get("mismatch_reason")
+        sportsbook_event = sportsbook_events.get(
+            str(mapping.get("sportsbook_event_id") or "")
+        )
+        market_row = polymarket_markets.get(market_id)
+        freeze_reasons = freeze_reasons_for_state(
+            policy=freeze_policy,
+            now=_utc_now(),
+            event_start_time=(
+                _parse_datetime(sportsbook_event.get("start_time"))
+                if isinstance(sportsbook_event, dict)
+                else None
+            )
+            or (
+                _parse_datetime(sportsbook_event.get("commence_time"))
+                if isinstance(sportsbook_event, dict)
+                else None
+            ),
+            market_end_time=(
+                _parse_datetime(market_row.get("end_time"))
+                if isinstance(market_row, dict)
+                else None
+            ),
+            market_active=(
+                str(market_row.get("status") or "").strip().lower()
+                not in {"closed", "inactive", "resolved", "settled"}
+                if isinstance(market_row, dict)
+                else None
+            ),
+            market_resolved=(
+                str(market_row.get("status") or "").strip().lower()
+                in {"resolved", "settled"}
+                if isinstance(market_row, dict)
+                else None
+            ),
+            required_sources=required_sources,
+            source_health=source_health,
+        )
+        if blocked_reason is None and freeze_reasons:
+            blocked_reason = freeze_reasons[0]
         if fair_value is None:
             blocked_reason = blocked_reason or "missing fair value"
         if bbo is None:

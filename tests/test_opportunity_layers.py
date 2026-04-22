@@ -12,6 +12,7 @@ from opportunity import (
     compute_edge,
     estimate_fillability_from_market,
 )
+from risk.freeze_windows import FreezeWindowPolicy
 
 
 class OpportunityLayerTests(unittest.TestCase):
@@ -67,6 +68,18 @@ class OpportunityLayerTests(unittest.TestCase):
         self.assertAlmostEqual(edge["edge_buy_raw_bps"], 200.0)
         self.assertAlmostEqual(edge["edge_sell_raw_bps"], -2000.0)
         self.assertLess(edge["edge_after_costs_bps"], edge["edge_buy_raw_bps"])
+
+    def test_ranker_blocks_market_inside_freeze_window(self):
+        market = self._market()
+        market.start_time = datetime.now(timezone.utc) + timedelta(minutes=4)
+        candidates = OpportunityRanker(
+            edge_threshold=0.03,
+            freeze_window_policy=FreezeWindowPolicy(freeze_minutes_before_start=5),
+        ).rank(
+            [market],
+            StaticFairValueProvider({market.contract.market_key: 0.60}),
+        )
+        self.assertEqual(candidates, [])
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ import io
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +12,138 @@ from scripts import ingest_live_data
 
 
 class IngestLiveDataTests(unittest.TestCase):
+    def _write_json(self, path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _seed_opportunity_build_inputs(
+        self,
+        root: Path,
+        *,
+        event_start_time: datetime,
+        market_end_time: datetime | None = None,
+        market_status: str = "open",
+        source_health_overrides: dict[str, dict[str, object]] | None = None,
+    ) -> None:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        market_end = market_end_time or (event_start_time + timedelta(hours=3))
+        source_health = {
+            "polymarket_market_channel": {
+                "source_name": "polymarket_market_channel",
+                "last_seen_at": now_iso,
+                "last_success_at": now_iso,
+                "stale_after_ms": 60_000,
+                "status": "ok",
+                "details": {},
+            },
+            "sportsbook_odds": {
+                "source_name": "sportsbook_odds",
+                "last_seen_at": now_iso,
+                "last_success_at": now_iso,
+                "stale_after_ms": 60_000,
+                "status": "ok",
+                "details": {},
+            },
+            "market_mappings": {
+                "source_name": "market_mappings",
+                "last_seen_at": now_iso,
+                "last_success_at": now_iso,
+                "stale_after_ms": 60_000,
+                "status": "ok",
+                "details": {},
+            },
+            "fair_values": {
+                "source_name": "fair_values",
+                "last_seen_at": now_iso,
+                "last_success_at": now_iso,
+                "stale_after_ms": 60_000,
+                "status": "ok",
+                "details": {},
+            },
+        }
+        for source_name, override in (source_health_overrides or {}).items():
+            if source_name in source_health:
+                source_health[source_name] = {
+                    **source_health[source_name],
+                    **override,
+                }
+
+        self._write_json(
+            root / "postgres" / "market_mappings.json",
+            {
+                "0": {
+                    "polymarket_market_id": "pm-1",
+                    "sportsbook_event_id": "sb-1",
+                    "sportsbook_market_type": "h2h",
+                    "normalized_market_type": "moneyline_full_game",
+                    "match_confidence": 0.98,
+                    "resolution_risk": 0.05,
+                    "mismatch_reason": None,
+                    "is_active": True,
+                }
+            },
+        )
+        self._write_json(
+            root / "postgres" / "fair_values.json",
+            {
+                "pm-1|2026-04-21T18:00:00+00:00|deterministic_consensus|v1": {
+                    "market_id": "pm-1",
+                    "as_of": "2026-04-21T18:00:00+00:00",
+                    "fair_yes_prob": 0.61,
+                    "lower_prob": 0.58,
+                    "upper_prob": 0.64,
+                    "book_dispersion": 0.01,
+                    "data_age_ms": 250,
+                    "source_count": 2,
+                    "model_name": "deterministic_consensus",
+                    "model_version": "v1",
+                }
+            },
+        )
+        self._write_json(
+            root / "postgres" / "polymarket_bbo.json",
+            {
+                "pm-1": {
+                    "market_id": "pm-1",
+                    "best_bid_yes": 0.50,
+                    "best_bid_yes_size": 10.0,
+                    "best_ask_yes": 0.52,
+                    "best_ask_yes_size": 8.0,
+                    "midpoint_yes": 0.51,
+                    "spread_yes": 0.02,
+                    "book_ts": now_iso,
+                    "source_age_ms": 100,
+                    "raw_hash": None,
+                }
+            },
+        )
+        self._write_json(
+            root / "current" / "source_health.json",
+            source_health,
+        )
+        self._write_json(
+            root / "current" / "sportsbook_events.json",
+            {
+                "sb-1": {
+                    "id": "sb-1",
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "commence_time": event_start_time.isoformat(),
+                }
+            },
+        )
+        self._write_json(
+            root / "current" / "polymarket_markets.json",
+            {
+                "pm-1": {
+                    "market_id": "pm-1",
+                    "title": "Will Home Team beat Away Team?",
+                    "end_time": market_end.isoformat(),
+                    "status": market_status,
+                }
+            },
+        )
+
     def test_gamma_ingest_quiet_suppresses_stdout(self):
         gamma_payload = [
             {
@@ -99,6 +231,7 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertIsNotNone(payload["markets"][0]["contract"])
 
     def test_live_pipeline_subcommands_build_fair_values_and_opportunities(self):
+        event_start = datetime.now(timezone.utc) + timedelta(hours=2)
         market_payload = [
             {
                 "id": "pm-1",
@@ -106,7 +239,7 @@ class IngestLiveDataTests(unittest.TestCase):
                 "sports_market_type": "moneyline",
                 "sport": "nba",
                 "active": True,
-                "gameStartTime": "2026-04-21T19:00:00Z",
+                "gameStartTime": event_start.isoformat(),
             }
         ]
         odds_payload = [
@@ -115,7 +248,7 @@ class IngestLiveDataTests(unittest.TestCase):
                 "sport_title": "NBA",
                 "home_team": "Home Team",
                 "away_team": "Away Team",
-                "commence_time": "2026-04-21T19:00:00Z",
+                "commence_time": event_start.isoformat(),
                 "bookmakers": [
                     {
                         "key": "book-a",
@@ -145,10 +278,7 @@ class IngestLiveDataTests(unittest.TestCase):
                             "best_bid_size": 10,
                             "best_ask": 0.52,
                             "best_ask_size": 8,
-                            "timestamp": int(
-                                datetime(2026, 4, 21, 18, 0, tzinfo=timezone.utc).timestamp()
-                                * 1000
-                            ),
+                            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
                         }
                     ]
                 )
@@ -202,6 +332,49 @@ class IngestLiveDataTests(unittest.TestCase):
 
         self.assertIn("pm-1", fair_values)
         self.assertTrue(any(key.startswith("pm-1|") for key in opportunities))
+
+    def test_build_opportunities_persists_pre_start_freeze_reason(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(minutes=4),
+            )
+
+            ingest_live_data.main(
+                ["build-opportunities", "--root", str(root), "--quiet"]
+            )
+
+            opportunities = json.loads((root / "current" / "opportunities.json").read_text())
+
+        persisted = next(iter(opportunities.values()))
+        self.assertEqual(
+            persisted["blocked_reason"],
+            "market within pre-start freeze window",
+        )
+
+    def test_build_opportunities_persists_unhealthy_source_reason(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(hours=2),
+                source_health_overrides={
+                    "sportsbook_odds": {"status": "red"},
+                },
+            )
+
+            ingest_live_data.main(
+                ["build-opportunities", "--root", str(root), "--quiet"]
+            )
+
+            opportunities = json.loads((root / "current" / "opportunities.json").read_text())
+
+        persisted = next(iter(opportunities.values()))
+        self.assertEqual(
+            persisted["blocked_reason"],
+            "source sportsbook_odds unhealthy",
+        )
 
 
 if __name__ == "__main__":

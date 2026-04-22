@@ -16,6 +16,7 @@ from engine.order_state import OrderLifecyclePolicy
 from engine.strategies import FairValueBandStrategy
 from execution.planner import PlannerThresholds
 from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
+from risk.freeze_windows import FreezeWindowPolicy
 from risk.limits import RiskLimits
 
 SCHEMA_VERSION = 1
@@ -228,6 +229,9 @@ class OpportunityRankerPolicy:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def build(self) -> OpportunityRanker:
         return OpportunityRanker(
@@ -245,6 +249,7 @@ class OpportunityRankerPolicy:
             spread_penalty_weight=self.spread_penalty_weight,
             taker_fee_rate=self.taker_fee_rate,
             contract_rule_freeze=self.contract_rule_freeze,
+            freeze_window_policy=self.freeze_window_policy,
         )
 
 
@@ -261,6 +266,9 @@ class PairOpportunityRankerPolicy:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def build(self) -> PairOpportunityRanker:
         return PairOpportunityRanker(
@@ -273,6 +281,7 @@ class PairOpportunityRankerPolicy:
             min_hours_to_expiry=self.min_hours_to_expiry,
             max_hours_to_expiry=self.max_hours_to_expiry,
             contract_rule_freeze=self.contract_rule_freeze,
+            freeze_window_policy=self.freeze_window_policy,
         )
 
 
@@ -526,6 +535,7 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             "spread_penalty_weight",
             "taker_fee_rate",
             "contract_rules",
+            "freeze_windows",
         },
     )
     defaults = OpportunityRankerPolicy()
@@ -608,6 +618,11 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             key=key,
             defaults=defaults.contract_rule_freeze,
         ),
+        freeze_window_policy=_load_market_freeze_window_policy(
+            payload,
+            key=key,
+            defaults=defaults.freeze_window_policy,
+        ),
     )
 
 
@@ -628,6 +643,7 @@ def _load_pair_opportunity_ranker_policy(
             "min_hours_to_expiry",
             "max_hours_to_expiry",
             "contract_rules",
+            "freeze_windows",
         },
     )
     defaults = PairOpportunityRankerPolicy()
@@ -679,6 +695,11 @@ def _load_pair_opportunity_ranker_policy(
             payload,
             key=key,
             defaults=defaults.contract_rule_freeze,
+        ),
+        freeze_window_policy=_load_market_freeze_window_policy(
+            payload,
+            key=key,
+            defaults=defaults.freeze_window_policy,
         ),
     )
 
@@ -736,6 +757,73 @@ def _load_contract_rule_freeze_policy(
             "freeze_when_order_book_disabled",
             defaults.freeze_when_order_book_disabled,
             context=context,
+        ),
+    )
+
+
+def _load_market_freeze_window_policy(
+    payload: dict[str, Any],
+    *,
+    key: str,
+    defaults: FreezeWindowPolicy,
+) -> FreezeWindowPolicy:
+    raw = payload.get("freeze_windows")
+    if raw is None:
+        return defaults
+
+    context = f"{key}.freeze_windows"
+    freeze_payload = _ensure_object(raw, context=context)
+    _ensure_known_keys(
+        freeze_payload,
+        context=context,
+        allowed_keys={
+            "freeze_minutes_before_start",
+            "freeze_minutes_before_expiry",
+            "freeze_when_inactive",
+            "freeze_when_resolved",
+            "freeze_when_source_unhealthy",
+            "unhealthy_source_statuses",
+        },
+    )
+    return FreezeWindowPolicy(
+        freeze_minutes_before_start=_read_int(
+            freeze_payload,
+            "freeze_minutes_before_start",
+            defaults.freeze_minutes_before_start,
+            context=context,
+        ),
+        freeze_minutes_before_expiry=_read_int(
+            freeze_payload,
+            "freeze_minutes_before_expiry",
+            defaults.freeze_minutes_before_expiry,
+            context=context,
+        ),
+        freeze_when_inactive=_read_bool(
+            freeze_payload,
+            "freeze_when_inactive",
+            defaults.freeze_when_inactive,
+            context=context,
+        ),
+        freeze_when_resolved=_read_bool(
+            freeze_payload,
+            "freeze_when_resolved",
+            defaults.freeze_when_resolved,
+            context=context,
+        ),
+        freeze_when_source_unhealthy=_read_bool(
+            freeze_payload,
+            "freeze_when_source_unhealthy",
+            defaults.freeze_when_source_unhealthy,
+            context=context,
+        ),
+        unhealthy_source_statuses=(
+            _read_optional_string_tuple(
+                freeze_payload,
+                "unhealthy_source_statuses",
+                defaults.unhealthy_source_statuses,
+                context=context,
+            )
+            or defaults.unhealthy_source_statuses
         ),
     )
 

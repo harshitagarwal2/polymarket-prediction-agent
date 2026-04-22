@@ -15,6 +15,22 @@
     "max_price": 0.99,
     "enforce_atomic_batches": true
   },
+  "opportunity_ranker": {
+    "freeze_windows": {
+      "freeze_minutes_before_start": 10,
+      "freeze_minutes_before_expiry": 0,
+      "freeze_when_inactive": true,
+      "freeze_when_resolved": true
+    }
+  },
+  "pair_opportunity_ranker": {
+    "freeze_windows": {
+      "freeze_minutes_before_start": 10,
+      "freeze_minutes_before_expiry": 0,
+      "freeze_when_inactive": true,
+      "freeze_when_resolved": true
+    }
+  },
   "execution_policy_gate": {
     "min_top_level_liquidity": 0.0,
     "cooldown_seconds": 0.0,
@@ -29,6 +45,8 @@
     "entry_edge_bps": 150,
     "exit_edge_bps": 50,
     "freeze_minutes_before_start": 10,
+    "freeze_minutes_before_expiry": 0,
+    "block_on_unhealthy_source": true,
     "cooldown_seconds_after_score_change": 15
   }
 }
