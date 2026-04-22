@@ -22,6 +22,7 @@ from engine.fair_value_loader import (
 )
 from engine.runtime_bootstrap import build_adapter
 from engine.runtime_bootstrap import parse_comma_separated as _parse_comma_separated
+from engine.runtime_metrics import RuntimeMetricsCollector
 from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
@@ -139,9 +140,21 @@ def _parse_event_start(value: object) -> datetime | None:
     return parsed
 
 
-def _build_preview_order_proposals(args, policy) -> list[dict[str, object]]:
+def _metrics_collector(args) -> RuntimeMetricsCollector:
+    root = (
+        Path(args.opportunity_root) / "current"
+        if args.opportunity_root
+        else Path("runtime/data/current")
+    )
+    return RuntimeMetricsCollector(root / "runtime_metrics.json")
+
+
+def _build_preview_order_proposals(
+    args,
+    policy,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if not args.opportunity_root:
-        return []
+        return [], []
     root = Path(args.opportunity_root)
     current_root = root / "current"
     opportunities = _load_json_file(current_root / "opportunities.json")
@@ -149,6 +162,8 @@ def _build_preview_order_proposals(args, policy) -> list[dict[str, object]]:
     fair_values = _load_json_file(current_root / "fair_values.json")
     bbo_rows = _load_json_file(current_root / "polymarket_bbo.json")
     sportsbook_events = _load_json_file(current_root / "sportsbook_events.json")
+    source_health = _load_json_file(current_root / "source_health.json")
+    polymarket_markets = _load_json_file(current_root / "polymarket_markets.json")
 
     planner = ExecutionPlanner(
         None if policy is None else policy.proposal_planner.build()
@@ -159,6 +174,17 @@ def _build_preview_order_proposals(args, policy) -> list[dict[str, object]]:
             mapping_by_market[str(row.get("polymarket_market_id") or "")] = row
 
     proposals: list[dict[str, object]] = []
+    blocked: list[dict[str, object]] = []
+    required_sources = tuple(
+        source_name
+        for source_name in (
+            "polymarket_market_channel",
+            "sportsbook_odds",
+            "market_mappings",
+            "fair_values",
+        )
+        if source_name in source_health
+    )
     for row in opportunities.values():
         if not isinstance(row, dict):
             continue
@@ -166,6 +192,7 @@ def _build_preview_order_proposals(args, policy) -> list[dict[str, object]]:
         bbo = bbo_rows.get(market_id)
         fair_value = fair_values.get(market_id)
         mapping = mapping_by_market.get(market_id, {})
+        market_row = polymarket_markets.get(market_id)
         if not isinstance(bbo, dict):
             continue
         blocked_reason = row.get("blocked_reason")
@@ -182,6 +209,16 @@ def _build_preview_order_proposals(args, policy) -> list[dict[str, object]]:
             _parse_event_start(sportsbook_event.get("start_time"))
             if isinstance(sportsbook_event, dict)
             else None
+        )
+        market_end_time = (
+            _parse_event_start(market_row.get("end_time"))
+            if isinstance(market_row, dict)
+            else None
+        )
+        market_status = (
+            str(market_row.get("status") or "").strip().lower()
+            if isinstance(market_row, dict)
+            else ""
         )
         opportunity = Opportunity(
             market_id=market_id,
@@ -200,16 +237,28 @@ def _build_preview_order_proposals(args, policy) -> list[dict[str, object]]:
             confidence=float(row.get("confidence") or 0.0),
             blocked_reason=str(blocked_reason) if blocked_reason else None,
         )
-        proposal = planner.proposal_for(
+        decision = planner.evaluate(
             opportunity,
             source_age_ms=source_age_ms,
             book_dispersion=book_dispersion,
             event_start_time=event_start_time,
+            market_end_time=market_end_time,
+            market_active=market_status not in {"closed", "inactive", "resolved"},
+            market_resolved=market_status in {"resolved", "settled"},
+            source_health=source_health,
+            required_sources=required_sources,
         )
-        if proposal is None:
+        if decision.proposal is None:
+            blocked.append(
+                {
+                    "market_id": market_id,
+                    "side": opportunity.side,
+                    "blocked_reason": decision.blocked_reason,
+                }
+            )
             continue
-        proposals.append(proposal.__dict__.copy())
-    return proposals
+        proposals.append(decision.proposal.__dict__.copy())
+    return proposals, blocked
 
 
 def main() -> int:
@@ -342,7 +391,11 @@ def main() -> int:
             ),
         )
         results = loop.run()
-        preview_order_proposals = _build_preview_order_proposals(args, policy)
+        metrics = _metrics_collector(args)
+        preview_order_proposals, blocked_preview_orders = _build_preview_order_proposals(
+            args,
+            policy,
+        )
         status_snapshot = getattr(engine, "status_snapshot", None)
         status = status_snapshot() if callable(status_snapshot) else None
         live_state_status_getter = getattr(adapter, "live_state_status", None)
@@ -600,8 +653,19 @@ def main() -> int:
                     ),
                     "preview_order_proposal_count": len(preview_order_proposals),
                     "preview_order_proposals": preview_order_proposals,
+                    "preview_order_blocked_count": len(blocked_preview_orders),
+                    "preview_order_blocked": blocked_preview_orders,
                 },
             quiet=args.quiet,
+        )
+        metrics.record(
+            component="run_agent_loop",
+            action="preview_proposals",
+            status="ok",
+            trace_id=None,
+            cycle_count=len(results),
+            preview_order_proposal_count=len(preview_order_proposals),
+            preview_order_blocked_count=len(blocked_preview_orders),
         )
         return 0
     finally:

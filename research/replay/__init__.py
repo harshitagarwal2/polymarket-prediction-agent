@@ -107,8 +107,10 @@ class ReplayRunner:
 
 from research.replay.exchange_sim import (  # noqa: E402
     ExchangeSimConfig,
+    apply_wait_time_slippage,
     cancel_effective_after_steps,
     simulate_fillable_quantity,
+    snapshot_is_stale,
 )
 
 __all__ = [
@@ -117,6 +119,8 @@ __all__ = [
     "ReplayResult",
     "ReplayRunner",
     "ReplayStep",
+    "apply_wait_time_slippage",
     "cancel_effective_after_steps",
     "simulate_fillable_quantity",
+    "snapshot_is_stale",
 ]

@@ -19,6 +19,7 @@ from research.baselines import (
     evaluate_fair_value_baselines,
     evaluate_replay_baselines,
 )
+from research.attribution import TradeAttribution, attribute_replay_result
 from research.fair_values import build_fair_value_manifest, resolve_rows_to_markets
 from research.paper import PaperBroker, PaperExecutionConfig
 from research.replay import ReplayResult, ReplayRunner
@@ -185,6 +186,7 @@ class ReplayBenchmarkReport:
     ending_positions: dict[str, float]
     mark_prices: dict[str, float]
     replay_result: ReplayResult
+    trade_attributions: tuple[TradeAttribution, ...] = ()
     baselines: tuple[ReplayBaselineReport, ...] = ()
 
     def to_payload(self) -> dict[str, object]:
@@ -196,6 +198,11 @@ class ReplayBenchmarkReport:
             "ending_portfolio_value": self.replay_result.ending_portfolio_value,
             "net_pnl": self.replay_result.net_pnl,
         }
+        if self.trade_attributions:
+            payload["trade_attributions"] = [
+                attribution.to_record().__dict__
+                for attribution in self.trade_attributions
+            ]
         if self.baselines:
             payload["baselines"] = [
                 baseline.to_payload() for baseline in self.baselines
@@ -716,6 +723,7 @@ def run_replay_benchmark(case: ReplayBenchmarkCase) -> ReplayBenchmarkReport:
         ending_positions=dict(result.ending_positions),
         mark_prices=dict(result.mark_prices),
         replay_result=result,
+        trade_attributions=attribute_replay_result(result),
         baselines=evaluate_replay_baselines(case),
     )
 

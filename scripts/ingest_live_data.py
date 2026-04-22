@@ -16,6 +16,7 @@ from adapters.sportsbooks import TheOddsApiClient, normalize_odds_event
 from adapters.types import serialize_market_summary
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
+from engine.runtime_metrics import RuntimeMetricsCollector
 from engine.structured_logging import build_structured_logger, structured_log
 from engine.runtime_bootstrap import build_adapter
 from storage import (
@@ -203,6 +204,10 @@ def _trace_id() -> str:
     return uuid4().hex
 
 
+def _metrics_collector(root: str) -> RuntimeMetricsCollector:
+    return RuntimeMetricsCollector(Path(root) / "current" / "runtime_metrics.json")
+
+
 def _sorted_rows(mapping: dict[str, object]) -> list[dict]:
     rows = [row for row in mapping.values() if isinstance(row, dict)]
     rows.sort(key=lambda row: json.dumps(row, sort_keys=True))
@@ -212,6 +217,7 @@ def _sorted_rows(mapping: dict[str, object]) -> list[dict]:
 def _run_polymarket_markets(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.polymarket.markets")
+    metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
     client = PolymarketMarketCatalogClient()
     markets = client.fetch_open_markets()
@@ -259,6 +265,13 @@ def _run_polymarket_markets(args) -> int:
         trace_id=trace_id,
         latency_ms=None,
     )
+    metrics.record(
+        component="ingest.polymarket.markets",
+        action="sync",
+        status="ok",
+        trace_id=trace_id,
+        market_count=len(rows),
+    )
     emit_json({"market_count": len(rows), "root": args.root}, quiet=args.quiet)
     return 0
 
@@ -266,6 +279,7 @@ def _run_polymarket_markets(args) -> int:
 def _run_polymarket_bbo(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.polymarket.bbo")
+    metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
     if args.input:
         payload = json.loads(Path(args.input).read_text())
@@ -300,6 +314,13 @@ def _run_polymarket_bbo(args) -> int:
         message="normalized bbo events",
         trace_id=trace_id,
     )
+    metrics.record(
+        component="ingest.polymarket.bbo",
+        action="sync",
+        status="ok",
+        trace_id=trace_id,
+        bbo_count=len(rows),
+    )
     emit_json({"bbo_count": len(rows), "root": args.root}, quiet=args.quiet)
     return 0
 
@@ -307,6 +328,7 @@ def _run_polymarket_bbo(args) -> int:
 def _run_sportsbook_odds(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.sportsbook.odds")
+    metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
     api_key = os.getenv(args.api_key_env)
     if not api_key:
@@ -362,6 +384,14 @@ def _run_sportsbook_odds(args) -> int:
         message="normalized sportsbook odds",
         trace_id=trace_id,
     )
+    metrics.record(
+        component="ingest.sportsbook.odds",
+        action="sync",
+        status="ok",
+        trace_id=trace_id,
+        event_count=len(events),
+        row_count=len(normalized_rows),
+    )
     emit_json({"event_count": len(events), "row_count": len(normalized_rows), "root": args.root}, quiet=args.quiet)
     return 0
 
@@ -369,6 +399,7 @@ def _run_sportsbook_odds(args) -> int:
 def _run_build_mappings(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.mappings")
+    metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
     markets = _sorted_rows(stores["markets"].read_all())
     events = stores["sb_events"].read_all()
@@ -413,6 +444,13 @@ def _run_build_mappings(args) -> int:
         message="built deterministic mappings",
         trace_id=trace_id,
     )
+    metrics.record(
+        component="ingest.mappings",
+        action="build",
+        status="ok",
+        trace_id=trace_id,
+        mapping_count=len(mappings),
+    )
     emit_json({"mapping_count": len(mappings), "root": args.root}, quiet=args.quiet)
     return 0
 
@@ -420,6 +458,7 @@ def _run_build_mappings(args) -> int:
 def _run_build_fair_values(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("forecasting.fair_values")
+    metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
     engine = FairValueEngine(
         model_name=args.model_name,
@@ -481,6 +520,14 @@ def _run_build_fair_values(args) -> int:
         message="built deterministic fair values",
         trace_id=trace_id,
     )
+    metrics.record(
+        component="forecasting.fair_values",
+        action="build",
+        status="ok",
+        trace_id=trace_id,
+        active_mapping_count=active_mapping_count,
+        fair_value_count=len(snapshots),
+    )
     emit_json(
         {
             "active_mapping_count": active_mapping_count,
@@ -495,6 +542,7 @@ def _run_build_fair_values(args) -> int:
 def _run_build_opportunities(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("opportunity.build")
+    metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
     fair_values = {
         str(row["market_id"]): row for row in _sorted_rows(stores["fair_values"].read_all())
@@ -595,6 +643,14 @@ def _run_build_opportunities(args) -> int:
         status="ok",
         message="built executable opportunities",
         trace_id=trace_id,
+    )
+    metrics.record(
+        component="opportunity.build",
+        action="build",
+        status="ok",
+        trace_id=trace_id,
+        opportunity_count=len(materialized),
+        ranked_count=len(ranked),
     )
     emit_json(
         {

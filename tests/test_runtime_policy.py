@@ -52,6 +52,8 @@ class RuntimePolicyTests(unittest.TestCase):
                         "min_match_confidence": 0.9,
                         "max_source_age_ms": 2500,
                         "freeze_minutes_before_start": 5,
+                        "freeze_minutes_before_expiry": 30,
+                        "block_on_unhealthy_source": False,
                     },
                     "order_lifecycle_policy": {
                         "max_order_age_seconds": 45,
@@ -92,6 +94,8 @@ class RuntimePolicyTests(unittest.TestCase):
         self.assertEqual(policy.proposal_planner.min_match_confidence, 0.9)
         self.assertEqual(policy.proposal_planner.max_source_age_ms, 2500)
         self.assertEqual(policy.proposal_planner.freeze_minutes_before_start, 5)
+        self.assertEqual(policy.proposal_planner.freeze_minutes_before_expiry, 30)
+        self.assertFalse(policy.proposal_planner.block_on_unhealthy_source)
         self.assertEqual(policy.order_lifecycle_policy.max_order_age_seconds, 45.0)
 
         strategy = policy.strategy.build_strategy()
@@ -109,6 +113,8 @@ class RuntimePolicyTests(unittest.TestCase):
         self.assertEqual(limits.max_contracts_per_event, 12)
         self.assertEqual(gate.max_open_orders_global, 3)
         self.assertEqual(planner.freeze_minutes_before_start, 5)
+        self.assertEqual(planner.freeze_minutes_before_expiry, 30)
+        self.assertFalse(planner.block_on_unhealthy_source)
         self.assertEqual(
             ranker.contract_rule_freeze.freeze_before_expiry_seconds,
             1800,

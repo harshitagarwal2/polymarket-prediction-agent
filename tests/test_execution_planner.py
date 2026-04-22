@@ -5,6 +5,7 @@ import unittest
 
 from execution import ExecutionPlanner
 from opportunity.models import Opportunity
+from risk.correlated_exposure import CorrelatedExposureDecision
 
 
 class ExecutionPlannerTests(unittest.TestCase):
@@ -60,3 +61,52 @@ class ExecutionPlannerTests(unittest.TestCase):
             event_start_time=datetime.now(timezone.utc) + timedelta(minutes=5),
         )
         self.assertIsNone(proposal)
+
+    def test_planner_evaluate_surfaces_source_health_reason(self):
+        decision = ExecutionPlanner().evaluate(
+            self._opportunity(),
+            source_age_ms=1000,
+            book_dispersion=0.01,
+            source_health={
+                "polymarket_market_channel": {
+                    "status": "red",
+                    "last_success_at": "2026-04-22T00:00:00+00:00",
+                    "stale_after_ms": 4000,
+                }
+            },
+            required_sources=("polymarket_market_channel",),
+            now=datetime(2026, 4, 22, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertIsNone(decision.proposal)
+        self.assertEqual(decision.blocked_reason, "source polymarket_market_channel unhealthy")
+
+    def test_planner_blocks_pre_expiry_window(self):
+        planner = ExecutionPlanner()
+        planner.thresholds = planner.thresholds.__class__(
+            freeze_minutes_before_expiry=30,
+        )
+        decision = planner.evaluate(
+            self._opportunity(),
+            source_age_ms=1000,
+            book_dispersion=0.01,
+            market_end_time=datetime.now(timezone.utc) + timedelta(minutes=20),
+        )
+        self.assertIsNone(decision.proposal)
+        self.assertEqual(decision.blocked_reason, "market within pre-expiry freeze window")
+
+    def test_planner_blocks_cluster_exposure_decision(self):
+        decision = ExecutionPlanner().evaluate(
+            self._opportunity(),
+            source_age_ms=1000,
+            book_dispersion=0.01,
+            correlated_exposure=CorrelatedExposureDecision(
+                allowed=False,
+                cluster_key="event:event-1",
+                current_cluster_exposure=2.0,
+                projected_cluster_exposure=3.0,
+                max_cluster_exposure=2.0,
+                reason="cluster exposure cap exceeded",
+            ),
+        )
+        self.assertIsNone(decision.proposal)
+        self.assertEqual(decision.blocked_reason, "cluster exposure cap exceeded")

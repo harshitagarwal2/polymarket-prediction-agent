@@ -344,7 +344,9 @@ class ProposalPlannerPolicy:
     entry_edge_bps: float = 150.0
     exit_edge_bps: float = 50.0
     freeze_minutes_before_start: int = 10
+    freeze_minutes_before_expiry: int = 0
     cooldown_seconds_after_score_change: int = 15
+    block_on_unhealthy_source: bool = True
 
     def build(self) -> PlannerThresholds:
         return PlannerThresholds(
@@ -354,7 +356,9 @@ class ProposalPlannerPolicy:
             entry_edge_bps=self.entry_edge_bps,
             exit_edge_bps=self.exit_edge_bps,
             freeze_minutes_before_start=self.freeze_minutes_before_start,
+            freeze_minutes_before_expiry=self.freeze_minutes_before_expiry,
             cooldown_seconds_after_score_change=self.cooldown_seconds_after_score_change,
+            block_on_unhealthy_source=self.block_on_unhealthy_source,
         )
 
 
@@ -930,7 +934,9 @@ def _load_proposal_planner_policy(root: dict[str, Any]) -> ProposalPlannerPolicy
             "entry_edge_bps",
             "exit_edge_bps",
             "freeze_minutes_before_start",
+            "freeze_minutes_before_expiry",
             "cooldown_seconds_after_score_change",
+            "block_on_unhealthy_source",
         },
     )
     defaults = ProposalPlannerPolicy()
@@ -971,10 +977,22 @@ def _load_proposal_planner_policy(root: dict[str, Any]) -> ProposalPlannerPolicy
             defaults.freeze_minutes_before_start,
             context=key,
         ),
+        freeze_minutes_before_expiry=_read_int(
+            payload,
+            "freeze_minutes_before_expiry",
+            defaults.freeze_minutes_before_expiry,
+            context=key,
+        ),
         cooldown_seconds_after_score_change=_read_int(
             payload,
             "cooldown_seconds_after_score_change",
             defaults.cooldown_seconds_after_score_change,
+            context=key,
+        ),
+        block_on_unhealthy_source=_read_bool(
+            payload,
+            "block_on_unhealthy_source",
+            defaults.block_on_unhealthy_source,
             context=key,
         ),
     )

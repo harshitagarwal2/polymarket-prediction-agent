@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 
 from contracts import parse_llm_contract_payload
 from execution.models import OrderProposal
@@ -11,10 +13,12 @@ from forecasting import (
     training_rows_from_labeled_features,
 )
 from llm import build_operator_memo, summarize_evidence
-from research.attribution.pnl_attribution import attribute_trade
+from research.attribution.pnl_attribution import attribute_trade, persist_trade_attribution
 from research.replay.exchange_sim import (
+    apply_wait_time_slippage,
     cancel_effective_after_steps,
     simulate_fillable_quantity,
+    snapshot_is_stale,
 )
 
 
@@ -106,3 +110,19 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
                 cancel_latency_steps=2,
             )
         )
+        self.assertTrue(snapshot_is_stale(current_step=5, snapshot_step=1, stale_after_steps=3))
+        self.assertGreater(
+            apply_wait_time_slippage(
+                price=0.5,
+                wait_steps=2,
+                price_move_bps_per_step=25.0,
+                is_buy=True,
+            ),
+            0.5,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            record = persist_trade_attribution(
+                attribution,
+                root=Path(temp_dir),
+            )
+            self.assertEqual(record.trade_id, "t-1")

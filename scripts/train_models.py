@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
+from forecasting import ForecastModelRegistry
 from research.data.build_training_set import load_training_set_rows
 from research.schemas import load_benchmark_case
 from research.train.train_blend import write_blend_config
 from research.train.train_bt import write_bt_artifact, write_bt_artifact_from_rows
 from research.train.train_elo import write_elo_artifact, write_elo_artifact_from_rows
+from storage.postgres import ModelRegistryRepository
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -22,6 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--training-data", default=None)
     parser.add_argument("--blend-weight", type=float, default=0.5)
     parser.add_argument("--config-file", default=None)
+    parser.add_argument("--model-version", default="v1")
+    parser.add_argument("--registry-root", default=None)
     add_quiet_flag(parser)
     return parser
 
@@ -56,6 +61,32 @@ def main() -> None:
                 path = write_elo_artifact(cases, args.output)
             else:
                 path = write_bt_artifact(cases, args.output)
+    artifact_payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    training_match_count = artifact_payload.get("training_match_count")
+    metrics = (
+        {"training_match_count": int(training_match_count)}
+        if isinstance(training_match_count, int)
+        else {}
+    )
+    feature_spec = {
+        "model": model,
+        "input": "training-data" if args.training_data else "cases",
+    }
+    registry_root = (
+        Path(args.registry_root)
+        if args.registry_root
+        else Path(path).resolve().parent / "model_registry"
+    )
+    registry = ForecastModelRegistry(
+        repository=ModelRegistryRepository(registry_root)
+    )
+    registry.persist_artifact(
+        model_name=model,
+        model_version=args.model_version,
+        feature_spec=feature_spec,
+        metrics=metrics,
+        artifact_uri=str(path),
+    )
     emit_json({"model": model, "output": str(path)}, quiet=args.quiet)
 
 
