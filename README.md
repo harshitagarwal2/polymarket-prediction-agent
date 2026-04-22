@@ -146,6 +146,28 @@ Additional architecture-aligned helper entrypoints now exist for the split resea
 - `train-models` - write lightweight Elo, Bradley–Terry, or blend artifacts from benchmark cases
 - `build-fair-values` - thin wrapper around the existing sports fair-value manifest builder
 
+For the supervised live/current-state path, use the `ingest-live-data` subcommands directly:
+
+```bash
+python -m scripts.train_models --model consensus --output runtime/consensus_artifact.json
+
+python -m scripts.ingest_live_data sportsbook-odds \
+  --sport basketball_nba \
+  --market h2h \
+  --event-map-file runtime/odds_event_map.json \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --market h2h \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --root runtime/data \
+  --consensus-artifact runtime/consensus_artifact.json
+```
+
+That live path keeps sportsbook event identity (`event_key` / `game_id`) in the current-state mapping flow and lets the consensus artifact configure the deterministic fair-value snapshot builder. The standalone `build-fair-values` entrypoint above remains the research/manifest builder.
+
 The sample league configs can drive the new helper entrypoints directly:
 
 ```bash

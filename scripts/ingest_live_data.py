@@ -14,6 +14,7 @@ from adapters.polymarket.market_catalog import PolymarketMarketCatalogClient
 from adapters.polymarket.normalizer import normalize_bbo_event, normalize_market_row
 from adapters.sportsbooks import TheOddsApiClient, normalize_odds_event
 from adapters.types import serialize_market_summary
+from contracts.models import ContractMatch
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
 from engine.runtime_metrics import RuntimeMetricsCollector
@@ -59,6 +60,7 @@ from research.data.odds_api import (
     normalize_odds_events,
 )
 from research.features import map_contract_candidate, semantics_from_market_type
+from research.models.book_consensus import load_book_consensus_artifact
 
 
 SPORT_KEY_BY_LEAGUE = {
@@ -116,6 +118,7 @@ def build_new_parser() -> argparse.ArgumentParser:
     sb_odds.add_argument("--sport", required=True)
     sb_odds.add_argument("--market", required=True)
     sb_odds.add_argument("--root", default="runtime/data")
+    sb_odds.add_argument("--event-map-file", default=None)
     sb_odds.add_argument("--api-key-env", default="THE_ODDS_API_KEY")
     add_quiet_flag(sb_odds)
 
@@ -128,6 +131,7 @@ def build_new_parser() -> argparse.ArgumentParser:
     fair_values.add_argument("--root", default="runtime/data")
     fair_values.add_argument("--model-name", default="deterministic_consensus")
     fair_values.add_argument("--model-version", default="v1")
+    fair_values.add_argument("--consensus-artifact", default=None)
     add_quiet_flag(fair_values)
 
     opportunities = subparsers.add_parser("build-opportunities")
@@ -222,6 +226,15 @@ def _parse_datetime(value: object) -> datetime | None:
     return parsed
 
 
+def _float_or_default(value: object, default: float = 0.0) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _sorted_rows(mapping: dict[str, object]) -> list[dict]:
     rows = [row for row in mapping.values() if isinstance(row, dict)]
     rows.sort(key=lambda row: json.dumps(row, sort_keys=True))
@@ -263,6 +276,41 @@ def _mapping_event_payload(event: dict[str, object]) -> dict[str, object]:
     )
 
 
+def _has_upstream_event_identity(payload: dict[str, object]) -> bool:
+    return any(
+        payload.get(field) not in (None, "") for field in ("event_key", "game_id")
+    )
+
+
+def _build_fair_value_engine(args) -> FairValueEngine:
+    if args.consensus_artifact in (None, ""):
+        return FairValueEngine(
+            model_name=args.model_name,
+            model_version=args.model_version,
+        )
+    artifact = load_book_consensus_artifact(args.consensus_artifact)
+    return FairValueEngine(
+        model_name=artifact.model,
+        model_version=artifact.model_version,
+        half_life_seconds=artifact.half_life_seconds,
+    )
+
+
+def _artifact_configured(args) -> bool:
+    return args.consensus_artifact not in (None, "")
+
+
+def _safe_error_kind(exc: Exception) -> str:
+    return exc.__class__.__name__
+
+
+def _best_effort(callback) -> None:
+    try:
+        callback()
+    except Exception:
+        return None
+
+
 def _required_sources(
     source_health: dict[str, object],
 ) -> tuple[str, ...]:
@@ -298,13 +346,19 @@ def _run_polymarket_markets(args) -> int:
     client = PolymarketMarketCatalogClient()
     markets = client.fetch_open_markets()
     if args.sport:
-        markets = [item for item in markets if str(item.get("sport") or "").lower() == args.sport.lower()]
+        markets = [
+            item
+            for item in markets
+            if str(item.get("sport") or "").lower() == args.sport.lower()
+        ]
     if args.market_type:
         markets = [
             item
             for item in markets
             if args.market_type.lower()
-            in str(item.get("sports_market_type") or item.get("market_type") or "").lower()
+            in str(
+                item.get("sports_market_type") or item.get("market_type") or ""
+            ).lower()
         ]
     markets = markets[: args.limit]
     rows = [normalize_market_row(item) for item in markets]
@@ -332,7 +386,9 @@ def _run_polymarket_markets(args) -> int:
         stores["markets"].upsert(record.market_id, record)
         stores["current"].upsert("polymarket_markets", record.market_id, row)
     stores["parquet"].append_records("polymarket_markets", _utc_now(), rows)
-    stores["health"].upsert("polymarket_market_catalog", stale_after_ms=60_000, status="ok")
+    stores["health"].upsert(
+        "polymarket_market_catalog", stale_after_ms=60_000, status="ok"
+    )
     structured_log(
         logger,
         action="sync",
@@ -382,7 +438,9 @@ def _run_polymarket_bbo(args) -> int:
         if isinstance(event, dict):
             stores["raw"].write("polymarket", "market_channel", _utc_now(), event)
     stores["parquet"].append_records("polymarket_bbo_history", _utc_now(), rows)
-    stores["health"].upsert("polymarket_market_channel", stale_after_ms=4_000, status="ok")
+    stores["health"].upsert(
+        "polymarket_market_channel", stale_after_ms=4_000, status="ok"
+    )
     structured_log(
         logger,
         action="sync",
@@ -411,9 +469,11 @@ def _run_sportsbook_odds(args) -> int:
         raise RuntimeError(f"missing required environment variable: {args.api_key_env}")
     client = TheOddsApiClient(api_key=api_key)
     events = client.fetch_upcoming(args.sport, args.market)
+    event_map = load_event_map(args.event_map_file)
     normalized_rows: list[dict] = []
     for event in events:
         event["sport_key"] = args.sport
+        event_identity = event_map.get(str(event.get("id") or ""), {})
         normalized_rows.extend(
             normalize_odds_event(
                 event,
@@ -423,6 +483,10 @@ def _run_sportsbook_odds(args) -> int:
             )
         )
         stores["raw"].write("sportsbook", "odds", _utc_now(), event)
+        event_payload = dict(event)
+        for field in ("event_key", "game_id", "sport", "series"):
+            if event_identity.get(field) not in (None, ""):
+                event_payload[field] = event_identity[field]
         event_record = SportsbookEventRecord(
             sportsbook_event_id=str(event.get("id") or ""),
             source="theoddsapi",
@@ -431,7 +495,7 @@ def _run_sportsbook_odds(args) -> int:
             home_team=event.get("home_team"),
             away_team=event.get("away_team"),
             start_time=str(event.get("commence_time") or ""),
-            raw_json=event,
+            raw_json=event_payload,
         )
         stores["sb_events"].upsert(event_record.sportsbook_event_id, event_record)
         stores["current"].upsert(
@@ -480,7 +544,14 @@ def _run_sportsbook_odds(args) -> int:
         event_count=len(events),
         row_count=len(normalized_rows),
     )
-    emit_json({"event_count": len(events), "row_count": len(normalized_rows), "root": args.root}, quiet=args.quiet)
+    emit_json(
+        {
+            "event_count": len(events),
+            "row_count": len(normalized_rows),
+            "root": args.root,
+        },
+        quiet=args.quiet,
+    )
     return 0
 
 
@@ -515,24 +586,33 @@ def _run_build_mappings(args) -> int:
                     source="sportsbook",
                 ),
             )
+            blocked_reason = decision.blocked_reason
+            if blocked_reason is None and not _has_upstream_event_identity(
+                event_payload
+            ):
+                blocked_reason = "missing upstream event identity"
             candidate = MarketMappingRecord(
                 polymarket_market_id=decision.polymarket_market_id,
                 sportsbook_event_id=decision.sportsbook_event_id,
                 sportsbook_market_type=decision.sportsbook_market_type,
                 normalized_market_type=decision.normalized_market_type,
-                match_confidence=decision.match_confidence,
+                match_confidence=(
+                    min(decision.match_confidence, 0.59)
+                    if blocked_reason is not None
+                    else decision.match_confidence
+                ),
                 resolution_risk=decision.resolution_risk,
-                mismatch_reason=decision.blocked_reason,
+                mismatch_reason=blocked_reason,
                 event_key=decision.event_key,
                 sport=decision.sport,
                 series=decision.series,
                 game_id=decision.game_id,
-                blocked_reason=decision.blocked_reason,
-                is_active=decision.blocked_reason is None,
+                blocked_reason=blocked_reason,
+                is_active=blocked_reason is None,
             )
-            if best_match is None or mapping_priority(candidate.__dict__) > mapping_priority(
-                best_match.__dict__
-            ):
+            if best_match is None or mapping_priority(
+                candidate.__dict__
+            ) > mapping_priority(best_match.__dict__):
                 best_match = candidate
         if best_match is None:
             continue
@@ -568,88 +648,176 @@ def _run_build_fair_values(args) -> int:
     logger = build_structured_logger("forecasting.fair_values")
     metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
-    engine = FairValueEngine(
-        model_name=args.model_name,
-        model_version=args.model_version,
-    )
-    current_odds_rows = stores["current"].read_table("sportsbook_odds")
-    odds_rows = (
-        _sorted_rows(current_odds_rows)
-        if current_odds_rows
-        else _sorted_rows(stores["sb_odds"].read_all())
-    )
-    odds_by_event_market: dict[tuple[str, str], list[dict]] = {}
-    for row in odds_rows:
-        event_id = str(row.get("sportsbook_event_id") or "")
-        market_type = str(row.get("market_type") or "")
-        odds_by_event_market.setdefault((event_id, market_type), []).append(row)
+    try:
+        engine = _build_fair_value_engine(args)
+        persisted_history = stores["fair_values"].read_all()
+        persisted_current = stores["current"].read_table("fair_values")
+        current_odds_rows = stores["current"].read_table("sportsbook_odds")
+        odds_rows = (
+            _sorted_rows(current_odds_rows)
+            if current_odds_rows
+            else _sorted_rows(stores["sb_odds"].read_all())
+        )
+        odds_by_event_market: dict[tuple[str, str], list[dict]] = {}
+        for row in odds_rows:
+            event_id = str(row.get("sportsbook_event_id") or "")
+            market_type = str(row.get("market_type") or "")
+            odds_by_event_market.setdefault((event_id, market_type), []).append(row)
 
-    snapshots: list[dict] = []
-    active_mapping_count = 0
-    for row in best_mapping_rows(stores["current"].read_table("market_mappings")):
-        if not bool(row.get("is_active", True)):
-            continue
-        active_mapping_count += 1
-        odds_for_mapping = odds_by_event_market.get(
-            (
-                str(row.get("sportsbook_event_id") or ""),
-                str(row.get("sportsbook_market_type") or ""),
-            ),
-            [],
-        )
-        if not odds_for_mapping:
-            continue
-        snapshot = engine.build(
-            MarketMappingRecord(**row),
-            odds_for_mapping,
-        )
-        as_of = datetime.fromtimestamp(
-            snapshot.timestamp_ms / 1000.0,
-            tz=timezone.utc,
-        ).isoformat()
-        record = FairValueRecord(
-            market_id=snapshot.market_id,
-            as_of=as_of,
-            fair_yes_prob=snapshot.fair_yes_prob,
-            lower_prob=snapshot.lower_prob,
-            upper_prob=snapshot.upper_prob,
-            book_dispersion=snapshot.book_dispersion,
-            data_age_ms=snapshot.data_age_ms,
-            source_count=snapshot.source_count,
-            model_name=snapshot.model_name,
-            model_version=snapshot.model_version,
-        )
-        stores["fair_values"].append(record)
-        record_payload = record.__dict__.copy()
-        stores["current"].upsert("fair_values", record.market_id, record_payload)
-        snapshots.append(record_payload)
+        snapshots: list[dict] = []
+        pending_history_updates: dict[str, dict] = {}
+        pending_current_updates: dict[str, dict] = {}
+        active_mapping_count = 0
+        for row in best_mapping_rows(stores["current"].read_table("market_mappings")):
+            if not bool(row.get("is_active", True)):
+                continue
+            if all(row.get(field) in (None, "") for field in ("event_key", "game_id")):
+                continue
+            active_mapping_count += 1
+            odds_for_mapping = odds_by_event_market.get(
+                (
+                    str(row.get("sportsbook_event_id") or ""),
+                    str(row.get("sportsbook_market_type") or ""),
+                ),
+                [],
+            )
+            if not odds_for_mapping:
+                continue
+            snapshot = engine.build(
+                ContractMatch(
+                    polymarket_market_id=str(row.get("polymarket_market_id") or ""),
+                    sportsbook_event_id=str(row.get("sportsbook_event_id") or ""),
+                    sportsbook_market_type=str(row.get("sportsbook_market_type") or ""),
+                    normalized_market_type=str(row.get("normalized_market_type") or ""),
+                    match_confidence=_float_or_default(row.get("match_confidence")),
+                    resolution_risk=_float_or_default(row.get("resolution_risk")),
+                    mismatch_reason=(
+                        str(row.get("mismatch_reason"))
+                        if row.get("mismatch_reason") not in (None, "")
+                        else None
+                    ),
+                ),
+                odds_for_mapping,
+            )
+            as_of = datetime.fromtimestamp(
+                snapshot.timestamp_ms / 1000.0,
+                tz=timezone.utc,
+            ).isoformat()
+            record = FairValueRecord(
+                market_id=snapshot.market_id,
+                as_of=as_of,
+                fair_yes_prob=snapshot.fair_yes_prob,
+                lower_prob=snapshot.lower_prob,
+                upper_prob=snapshot.upper_prob,
+                book_dispersion=snapshot.book_dispersion,
+                data_age_ms=snapshot.data_age_ms,
+                source_count=snapshot.source_count,
+                model_name=snapshot.model_name,
+                model_version=snapshot.model_version,
+            )
+            record_payload = record.__dict__.copy()
+            history_key = "|".join(
+                [
+                    record.market_id,
+                    record.as_of,
+                    record.model_name,
+                    record.model_version,
+                ]
+            )
+            pending_history_updates[history_key] = record_payload
+            pending_current_updates[record.market_id] = record_payload
+            snapshots.append(record_payload)
 
-    stores["parquet"].append_records("fair_values", _utc_now(), snapshots)
-    stores["health"].upsert("fair_values", stale_after_ms=60_000, status="ok")
-    structured_log(
-        logger,
-        action="build",
-        status="ok",
-        message="built deterministic fair values",
-        trace_id=trace_id,
-    )
-    metrics.record(
-        component="forecasting.fair_values",
-        action="build",
-        status="ok",
-        trace_id=trace_id,
-        active_mapping_count=active_mapping_count,
-        fair_value_count=len(snapshots),
-    )
-    emit_json(
-        {
-            "active_mapping_count": active_mapping_count,
-            "fair_value_count": len(snapshots),
-            "root": args.root,
-        },
-        quiet=args.quiet,
-    )
-    return 0
+        stores["parquet"].append_records("fair_values", _utc_now(), snapshots)
+        stores["fair_values"].write_all(
+            {
+                **persisted_history,
+                **pending_history_updates,
+            }
+        )
+        stores["current"].write_table(
+            "fair_values",
+            {
+                **persisted_current,
+                **pending_current_updates,
+            },
+        )
+        _best_effort(
+            lambda: stores["health"].upsert(
+                "fair_values",
+                stale_after_ms=60_000,
+                status="ok",
+                details={
+                    "model_name": engine.model_name,
+                    "model_version": engine.model_version,
+                    "consensus_artifact_configured": _artifact_configured(args),
+                },
+            )
+        )
+        _best_effort(
+            lambda: structured_log(
+                logger,
+                action="build",
+                status="ok",
+                message="built deterministic fair values",
+                trace_id=trace_id,
+            )
+        )
+        _best_effort(
+            lambda: metrics.record(
+                component="forecasting.fair_values",
+                action="build",
+                status="ok",
+                trace_id=trace_id,
+                active_mapping_count=active_mapping_count,
+                fair_value_count=len(snapshots),
+            )
+        )
+        _best_effort(
+            lambda: emit_json(
+                {
+                    "active_mapping_count": active_mapping_count,
+                    "fair_value_count": len(snapshots),
+                    "root": args.root,
+                    "model_name": engine.model_name,
+                    "model_version": engine.model_version,
+                },
+                quiet=args.quiet,
+            )
+        )
+        return 0
+    except Exception as exc:
+        _best_effort(
+            lambda: stores["health"].upsert(
+                "fair_values",
+                stale_after_ms=60_000,
+                status="red",
+                details={
+                    "error_kind": _safe_error_kind(exc),
+                    "consensus_artifact_configured": _artifact_configured(args),
+                },
+                success=False,
+            )
+        )
+        _best_effort(
+            lambda: structured_log(
+                logger,
+                action="build",
+                status="error",
+                message="failed to build deterministic fair values",
+                trace_id=trace_id,
+            )
+        )
+        _best_effort(
+            lambda: metrics.record(
+                component="forecasting.fair_values",
+                action="build",
+                status="error",
+                trace_id=trace_id,
+                error_kind=_safe_error_kind(exc),
+            )
+        )
+        raise
 
 
 def _run_build_opportunities(args) -> int:
@@ -727,9 +895,11 @@ def _run_build_opportunities(args) -> int:
                 side="buy_yes",
                 edge_after_costs_bps=0.0,
                 fillable_size=0.0,
-                confidence=float(mapping.get("match_confidence") or 0.0),
+                confidence=_float_or_default(mapping.get("match_confidence")),
                 blocked_reason=str(blocked_reason),
-                fair_value_ref=str(fair_value.get("as_of")) if fair_value else _utc_now().isoformat(),
+                fair_value_ref=str(fair_value.get("as_of"))
+                if fair_value
+                else _utc_now().isoformat(),
             )
         else:
             fillable_size = min(
@@ -742,7 +912,7 @@ def _run_build_opportunities(args) -> int:
                 best_bid_yes=float(bbo["best_bid_yes"]),
                 best_ask_yes=float(bbo["best_ask_yes"]),
                 fillable_size=max(fillable_size, 0.0),
-                confidence=float(mapping.get("match_confidence") or 0.0),
+                confidence=_float_or_default(mapping.get("match_confidence")),
                 fee_bps=args.fee_bps,
                 slippage_bps=args.slippage_bps,
                 blocked_reason=str(blocked_reason) if blocked_reason else None,
@@ -775,10 +945,12 @@ def _run_build_opportunities(args) -> int:
                 if row.market_id in fair_values
                 else 0.0,
                 best_bid_yes=float(bbo_rows[row.market_id]["best_bid_yes"])
-                if row.market_id in bbo_rows and bbo_rows[row.market_id].get("best_bid_yes") is not None
+                if row.market_id in bbo_rows
+                and bbo_rows[row.market_id].get("best_bid_yes") is not None
                 else 0.0,
                 best_ask_yes=float(bbo_rows[row.market_id]["best_ask_yes"])
-                if row.market_id in bbo_rows and bbo_rows[row.market_id].get("best_ask_yes") is not None
+                if row.market_id in bbo_rows
+                and bbo_rows[row.market_id].get("best_ask_yes") is not None
                 else 0.0,
                 fillable_size=row.fillable_size,
                 confidence=row.confidence,

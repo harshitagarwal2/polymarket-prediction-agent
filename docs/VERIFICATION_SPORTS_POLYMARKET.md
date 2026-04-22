@@ -61,6 +61,24 @@ Observed output excerpt:
 }
 ```
 
+## Manual QA — live current-state fair-value build with consensus artifact
+
+Command shape:
+
+```bash
+python -m scripts.train_models --model consensus --output <consensus_artifact.json>
+python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root>
+python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root>
+python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json>
+```
+
+Observed behavior:
+
+- the live sportsbook ingest path accepts `--event-map-file` and persists enriched sportsbook event identity for mapping
+- `build-mappings` blocks rows missing upstream `event_key` / `game_id`
+- `build-fair-values --consensus-artifact ...` changes live fair-value output based on artifact half-life and writes current-state fair values plus `source_health`
+- a failing fair-value build marks `source_health["fair_values"]` red without partially overwriting the prior fair-values tables
+
 ## Automated verification — config-driven runtime defaults
 
 Committed test path:

@@ -151,6 +151,28 @@ build-fair-values \
 
 With the checked-in sample config, that currently resolves to `best-line` aggregation and `multiplicative` devigging.
 
+For the live/current-state path, the fair-value builder is a different command surface. The intended sequence is:
+
+```bash
+python -m scripts.train_models --model consensus --output runtime/consensus_artifact.json
+
+python -m scripts.ingest_live_data sportsbook-odds \
+  --sport basketball_nba \
+  --market h2h \
+  --event-map-file runtime/odds_event_map.json \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --market h2h \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --root runtime/data \
+  --consensus-artifact runtime/consensus_artifact.json
+```
+
+The `--event-map-file` input enriches live sportsbook events with stable identity fields such as `event_key` and `game_id`. `build-mappings` now fails closed if that upstream identity is missing, and `build-fair-values --consensus-artifact ...` uses the consensus artifact as deterministic inference configuration for the current-state fair-value snapshot builder.
+
 ### 4. Run a preview cycle
 
 ```bash
@@ -303,6 +325,8 @@ train-models \
 ```
 
 `ingest-live-data` writes typed capture artifacts (`markets` for Polymarket, `rows` for sports inputs). The checked-in league configs currently drive the `sports-inputs` path by supplying league-to-sport-key defaults; Gamma/CLOB capture still needs its layer selected explicitly. `train-models` can train from captured sports-input rows when they include labels.
+
+Note that this config-driven helper path is for offline research captures. The live supervised path uses the `ingest-live-data` subcommands shown above rather than the standalone `build-fair-values` manifest builder.
 
 ## Environment variables
 
