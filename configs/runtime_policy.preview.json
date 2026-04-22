@@ -21,5 +21,14 @@
     "block_on_unhealthy_reconciliation": true,
     "prevent_same_side_duplicate": true,
     "block_on_contract_partial_fills": true
+  },
+  "proposal_planner": {
+    "min_match_confidence": 0.95,
+    "max_source_age_ms": 4000,
+    "max_book_dispersion": 0.03,
+    "entry_edge_bps": 150,
+    "exit_edge_bps": 50,
+    "freeze_minutes_before_start": 10,
+    "cooldown_seconds_after_score_change": 15
   }
 }

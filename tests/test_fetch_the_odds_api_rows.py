@@ -11,31 +11,22 @@ from scripts import fetch_the_odds_api_rows
 
 class FetchTheOddsApiRowsTests(unittest.TestCase):
     def test_main_quiet_suppresses_stdout(self):
-        class FakeResponse:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return None
-
-            def read(self):
-                return json.dumps(
-                    [
-                        {
-                            "id": "event-1",
-                            "home_team": "Home",
-                            "away_team": "Away",
-                            "bookmakers": [],
-                        }
-                    ]
-                ).encode("utf-8")
-
+        fake_payload = [
+            {
+                "id": "event-1",
+                "home_team": "Home",
+                "away_team": "Away",
+                "bookmakers": [],
+            }
+        ]
         stdout = io.StringIO()
         with tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle:
             with (
                 patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
                 patch.object(
-                    fetch_the_odds_api_rows, "urlopen", return_value=FakeResponse()
+                    fetch_the_odds_api_rows,
+                    "_fetch_odds_payload",
+                    return_value=fake_payload,
                 ),
                 patch(
                     "sys.argv",
@@ -102,39 +93,28 @@ class FetchTheOddsApiRowsTests(unittest.TestCase):
         self.assertEqual({row["outcome"] for row in rows}, {"yes", "no"})
 
     def test_main_fetches_and_writes_rows(self):
-        class FakeResponse:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return None
-
-            def read(self):
-                return json.dumps(
-                    [
-                        {
-                            "id": "event-1",
-                            "home_team": "Home",
-                            "away_team": "Away",
-                            "bookmakers": [
-                                {
-                                    "key": "book-a",
-                                    "last_update": "2026-04-07T12:00:00Z",
-                                    "markets": [
-                                        {
-                                            "key": "h2h",
-                                            "outcomes": [
-                                                {"name": "Home", "price": 1.7},
-                                                {"name": "Away", "price": 2.3},
-                                            ],
-                                        }
-                                    ],
-                                }
-                            ],
-                        }
-                    ]
-                ).encode("utf-8")
-
+        fake_payload = [
+            {
+                "id": "event-1",
+                "home_team": "Home",
+                "away_team": "Away",
+                "bookmakers": [
+                    {
+                        "key": "book-a",
+                        "last_update": "2026-04-07T12:00:00Z",
+                        "markets": [
+                            {
+                                "key": "h2h",
+                                "outcomes": [
+                                    {"name": "Home", "price": 1.7},
+                                    {"name": "Away", "price": 2.3},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
         event_map = {
             "event-1": {
                 "event_key": "nba-finals-game-1",
@@ -155,7 +135,9 @@ class FetchTheOddsApiRowsTests(unittest.TestCase):
             with (
                 patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
                 patch.object(
-                    fetch_the_odds_api_rows, "urlopen", return_value=FakeResponse()
+                    fetch_the_odds_api_rows,
+                    "_fetch_odds_payload",
+                    return_value=fake_payload,
                 ),
                 patch(
                     "sys.argv",

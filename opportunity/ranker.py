@@ -12,6 +12,7 @@ from contracts.resolution_rules import (
     contract_freeze_reasons,
 )
 from forecasting.fair_value_engine import FairValueProvider
+from opportunity.models import Opportunity
 from opportunity.executable_edge import assess_executable_edge
 from opportunity.fillability import estimate_fillability_from_market, market_spread
 
@@ -401,3 +402,15 @@ class OpportunityRanker:
         return sorted(candidates, key=lambda candidate: candidate.score, reverse=True)[
             : self.limit
         ]
+
+
+def rank_opportunities(opportunities: list[Opportunity]) -> list[Opportunity]:
+    def _score(item: Opportunity) -> tuple[float, float, float]:
+        dispersion_penalty = 0.0 if item.blocked_reason else 1.0
+        return (
+            item.edge_after_costs_bps,
+            item.fillable_size,
+            item.confidence * dispersion_penalty,
+        )
+
+    return sorted(opportunities, key=_score, reverse=True)

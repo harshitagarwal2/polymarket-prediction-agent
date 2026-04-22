@@ -7,10 +7,12 @@ from adapters import MarketSummary
 from adapters.types import Contract, OutcomeSide, Venue
 from contracts import (
     contract_freeze_reasons,
+    map_market,
     evaluate_contract_match_confidence,
     map_market_to_contract,
     market_group_key,
     market_identity_from_market,
+    ResolutionRules,
 )
 from contracts.resolution_rules import ContractRuleFreezePolicy
 
@@ -68,6 +70,37 @@ class ContractsLayerTests(unittest.TestCase):
             now=datetime.now(timezone.utc),
         )
         self.assertTrue(any("not accepting orders" in reason for reason in reasons))
+
+    def test_map_market_blocks_overtime_rule_mismatch(self):
+        match = map_market(
+            {
+                "market_id": "pm-1",
+                "question": "Will Home Team beat Away Team?",
+                "sports_market_type": "moneyline",
+                "gameStartTime": "2026-04-21T19:00:00Z",
+            },
+            {
+                "sportsbook_event_id": "sb-1",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "start_time": "2026-04-21T19:00:00Z",
+            },
+            "moneyline",
+            ResolutionRules(
+                includes_overtime=True,
+                void_on_postponement=True,
+                requires_player_to_start=None,
+                resolution_source="league",
+            ),
+            ResolutionRules(
+                includes_overtime=False,
+                void_on_postponement=True,
+                requires_player_to_start=None,
+                resolution_source="book",
+            ),
+        )
+        self.assertEqual(match.match_confidence, 0.0)
+        self.assertEqual(match.mismatch_reason, "overtime/regulation mismatch")
 
 
 if __name__ == "__main__":

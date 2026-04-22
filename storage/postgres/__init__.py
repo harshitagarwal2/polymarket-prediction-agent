@@ -4,6 +4,29 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from adapters.types import MarketSummary, OrderBookSnapshot
+from storage.postgres.models import (
+    FairValueRecord,
+    MarketMappingRecord,
+    ModelRegistryRecord,
+    OpportunityRecord,
+    PolymarketBBORecord,
+    PolymarketMarketRecord,
+    SportsbookEventRecord,
+    SportsbookOddsRecord,
+    TradeAttributionRecord,
+)
+from storage.postgres.repositories import (
+    BBORepository,
+    FairValueRepository,
+    MappingRepository,
+    MarketRepository,
+    ModelRegistryRepository,
+    OpportunityRepository,
+    SourceHealthRepository,
+    SportsbookEventRepository,
+    SportsbookOddsRepository,
+    TradeAttributionRepository,
+)
 
 
 @dataclass(frozen=True)
@@ -77,3 +100,30 @@ def order_book_row_from_snapshot(book: OrderBookSnapshot) -> NormalizedOrderBook
         ask_levels=len(book.asks),
         observed_at=book.observed_at.isoformat(),
     )
+
+
+__all__ = [
+    "BBORepository",
+    "FairValueRecord",
+    "FairValueRepository",
+    "MappingRepository",
+    "MarketMappingRecord",
+    "MarketRepository",
+    "ModelRegistryRecord",
+    "ModelRegistryRepository",
+    "NormalizedMarketRow",
+    "NormalizedOrderBookRow",
+    "OpportunityRecord",
+    "OpportunityRepository",
+    "PolymarketBBORecord",
+    "PolymarketMarketRecord",
+    "SourceHealthRepository",
+    "SportsbookEventRecord",
+    "SportsbookEventRepository",
+    "SportsbookOddsRecord",
+    "SportsbookOddsRepository",
+    "TradeAttributionRecord",
+    "TradeAttributionRepository",
+    "market_row_from_summary",
+    "order_book_row_from_snapshot",
+]

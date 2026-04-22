@@ -9,6 +9,7 @@ from forecasting.fair_value_engine import StaticFairValueProvider
 from opportunity import (
     OpportunityRanker,
     assess_executable_edge,
+    compute_edge,
     estimate_fillability_from_market,
 )
 
@@ -54,6 +55,18 @@ class OpportunityLayerTests(unittest.TestCase):
         )
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].action, OrderAction.BUY)
+
+    def test_compute_edge_uses_executable_bid_ask_not_midpoint(self):
+        edge = compute_edge(
+            fair_yes_prob=0.60,
+            best_bid_yes=0.40,
+            best_ask_yes=0.58,
+            fee_bps=10.0,
+            slippage_bps=10.0,
+        )
+        self.assertAlmostEqual(edge["edge_buy_raw_bps"], 200.0)
+        self.assertAlmostEqual(edge["edge_sell_raw_bps"], -2000.0)
+        self.assertLess(edge["edge_after_costs_bps"], edge["edge_buy_raw_bps"])
 
 
 if __name__ == "__main__":

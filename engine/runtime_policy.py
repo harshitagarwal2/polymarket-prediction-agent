@@ -14,6 +14,7 @@ from engine.discovery import (
 )
 from engine.order_state import OrderLifecyclePolicy
 from engine.strategies import FairValueBandStrategy
+from execution.planner import PlannerThresholds
 from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
 from risk.limits import RiskLimits
 
@@ -336,6 +337,28 @@ class TradingEnginePolicy:
 
 
 @dataclass(frozen=True)
+class ProposalPlannerPolicy:
+    min_match_confidence: float = 0.95
+    max_source_age_ms: int = 4000
+    max_book_dispersion: float = 0.03
+    entry_edge_bps: float = 150.0
+    exit_edge_bps: float = 50.0
+    freeze_minutes_before_start: int = 10
+    cooldown_seconds_after_score_change: int = 15
+
+    def build(self) -> PlannerThresholds:
+        return PlannerThresholds(
+            min_match_confidence=self.min_match_confidence,
+            max_source_age_ms=self.max_source_age_ms,
+            max_book_dispersion=self.max_book_dispersion,
+            entry_edge_bps=self.entry_edge_bps,
+            exit_edge_bps=self.exit_edge_bps,
+            freeze_minutes_before_start=self.freeze_minutes_before_start,
+            cooldown_seconds_after_score_change=self.cooldown_seconds_after_score_change,
+        )
+
+
+@dataclass(frozen=True)
 class OrderLifecyclePolicyConfig:
     max_order_age_seconds: float = 30.0
 
@@ -373,6 +396,7 @@ class RuntimePolicy:
     pair_opportunity_ranker: PairOpportunityRankerPolicy = PairOpportunityRankerPolicy()
     execution_policy_gate: ExecutionPolicyGatePolicy = ExecutionPolicyGatePolicy()
     trading_engine: TradingEnginePolicy = TradingEnginePolicy()
+    proposal_planner: ProposalPlannerPolicy = ProposalPlannerPolicy()
     order_lifecycle_policy: OrderLifecyclePolicyConfig = OrderLifecyclePolicyConfig()
     venues: VenuePolicy = VenuePolicy()
 
@@ -894,6 +918,68 @@ def _load_trading_engine_policy(root: dict[str, Any]) -> TradingEnginePolicy:
     )
 
 
+def _load_proposal_planner_policy(root: dict[str, Any]) -> ProposalPlannerPolicy:
+    key = "proposal_planner"
+    payload = _read_section(
+        root,
+        key,
+        allowed_keys={
+            "min_match_confidence",
+            "max_source_age_ms",
+            "max_book_dispersion",
+            "entry_edge_bps",
+            "exit_edge_bps",
+            "freeze_minutes_before_start",
+            "cooldown_seconds_after_score_change",
+        },
+    )
+    defaults = ProposalPlannerPolicy()
+    return ProposalPlannerPolicy(
+        min_match_confidence=_read_float(
+            payload,
+            "min_match_confidence",
+            defaults.min_match_confidence,
+            context=key,
+        ),
+        max_source_age_ms=_read_int(
+            payload,
+            "max_source_age_ms",
+            defaults.max_source_age_ms,
+            context=key,
+        ),
+        max_book_dispersion=_read_float(
+            payload,
+            "max_book_dispersion",
+            defaults.max_book_dispersion,
+            context=key,
+        ),
+        entry_edge_bps=_read_float(
+            payload,
+            "entry_edge_bps",
+            defaults.entry_edge_bps,
+            context=key,
+        ),
+        exit_edge_bps=_read_float(
+            payload,
+            "exit_edge_bps",
+            defaults.exit_edge_bps,
+            context=key,
+        ),
+        freeze_minutes_before_start=_read_int(
+            payload,
+            "freeze_minutes_before_start",
+            defaults.freeze_minutes_before_start,
+            context=key,
+        ),
+        cooldown_seconds_after_score_change=_read_int(
+            payload,
+            "cooldown_seconds_after_score_change",
+            defaults.cooldown_seconds_after_score_change,
+            context=key,
+        ),
+    )
+
+
 def _load_order_lifecycle_policy(root: dict[str, Any]) -> OrderLifecyclePolicyConfig:
     key = "order_lifecycle_policy"
     payload = _read_section(root, key, allowed_keys={"max_order_age_seconds"})
@@ -965,6 +1051,7 @@ def load_runtime_policy(path: str | Path) -> RuntimePolicy:
             "pair_opportunity_ranker",
             "execution_policy_gate",
             "trading_engine",
+            "proposal_planner",
             "order_lifecycle_policy",
             "venues",
         },
@@ -983,6 +1070,7 @@ def load_runtime_policy(path: str | Path) -> RuntimePolicy:
         pair_opportunity_ranker=_load_pair_opportunity_ranker_policy(root),
         execution_policy_gate=_load_execution_policy_gate_policy(root),
         trading_engine=_load_trading_engine_policy(root),
+        proposal_planner=_load_proposal_planner_policy(root),
         order_lifecycle_policy=_load_order_lifecycle_policy(root),
         venues=_load_venue_policy(root),
     )

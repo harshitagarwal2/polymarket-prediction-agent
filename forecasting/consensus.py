@@ -63,3 +63,56 @@ def dispersion_score(components: Iterable[ConsensusComponent]) -> float:
     return sum(abs(component.probability - mean) for component in resolved) / len(
         resolved
     )
+
+
+def american_to_prob(odds: int) -> float:
+    if odds == 0:
+        raise ValueError("american odds must not be zero")
+    if odds > 0:
+        return 100.0 / (odds + 100.0)
+    return abs(odds) / (abs(odds) + 100.0)
+
+
+def decimal_to_prob(odds: float) -> float:
+    if odds <= 0:
+        raise ValueError("decimal odds must be positive")
+    return 1.0 / odds
+
+
+def remove_overround(probs: dict[str, float]) -> dict[str, float]:
+    total = sum(probs.values())
+    if total <= 0:
+        raise ValueError("probability total must be positive")
+    return {key: value / total for key, value in probs.items()}
+
+
+def weighted_consensus(rows: list[dict]) -> float:
+    components: list[ConsensusComponent] = []
+    for row in rows:
+        if "implied_prob" in row and row["implied_prob"] is not None:
+            probability = float(row["implied_prob"])
+        elif "price_decimal" in row and row["price_decimal"] is not None:
+            probability = decimal_to_prob(float(row["price_decimal"]))
+        elif "decimal_odds" in row and row["decimal_odds"] is not None:
+            probability = decimal_to_prob(float(row["decimal_odds"]))
+        elif "american_odds" in row and row["american_odds"] is not None:
+            probability = american_to_prob(int(row["american_odds"]))
+        else:
+            continue
+        weight = float(row.get("weight", 1.0))
+        weight *= float(row.get("reputation_weight", 1.0))
+        weight *= float(row.get("agreement_weight", 1.0))
+        freshness_seconds = row.get("freshness_seconds")
+        if freshness_seconds is None and row.get("source_age_ms") is not None:
+            freshness_seconds = float(row["source_age_ms"]) / 1000.0
+        components.append(
+            ConsensusComponent(
+                probability=probability,
+                weight=weight,
+                freshness_seconds=(
+                    float(freshness_seconds) if freshness_seconds is not None else None
+                ),
+                source=row.get("source"),
+            )
+        )
+    return consensus_probability(components)

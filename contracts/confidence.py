@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
+from contracts.models import ContractMatch
 from contracts.ontology import NormalizedContractIdentity
+from contracts.rules import ResolutionRules, rules_compatible
 
 
 @dataclass(frozen=True)
@@ -53,4 +57,46 @@ def evaluate_contract_match_confidence(
         score=round(score, 4),
         level=_level_for_score(score),
         reasons=tuple(reasons),
+    )
+
+
+def score_contract_match(
+    *,
+    team_match: float,
+    time_match: float,
+    market_type_match: bool,
+    pm_rules: ResolutionRules,
+    sb_rules: ResolutionRules,
+) -> tuple[float, float, str | None]:
+    compatible, mismatch_reason = rules_compatible(pm_rules, sb_rules)
+    if not market_type_match:
+        return 0.0, 1.0, "market type mismatch"
+    if not compatible:
+        return 0.0, 1.0, mismatch_reason
+    score = 0.35 * max(0.0, min(team_match, 1.0))
+    score += 0.20 * max(0.0, min(time_match, 1.0))
+    score += 0.25
+    score += 0.20
+    resolution_risk = round(max(0.0, 1.0 - score), 4)
+    return round(min(score, 1.0), 4), resolution_risk, None
+
+
+def contract_match_from_score(
+    *,
+    polymarket_market_id: str,
+    sportsbook_event_id: str,
+    sportsbook_market_type: str,
+    normalized_market_type: str,
+    match_confidence: float,
+    resolution_risk: float,
+    mismatch_reason: str | None,
+) -> ContractMatch:
+    return ContractMatch(
+        polymarket_market_id=polymarket_market_id,
+        sportsbook_event_id=sportsbook_event_id,
+        sportsbook_market_type=sportsbook_market_type,
+        normalized_market_type=normalized_market_type,
+        match_confidence=match_confidence,
+        resolution_risk=resolution_risk,
+        mismatch_reason=mismatch_reason,
     )

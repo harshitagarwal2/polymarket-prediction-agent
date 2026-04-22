@@ -5,7 +5,15 @@ from datetime import datetime, timezone
 from typing import Literal, Protocol
 
 from adapters import MarketSummary
-from forecasting.consensus import ConsensusComponent, consensus_probability, dispersion_score
+from contracts.models import ContractMatch
+from forecasting.consensus import (
+    ConsensusComponent,
+    consensus_probability,
+    decimal_to_prob,
+    dispersion_score,
+    weighted_consensus,
+)
+from forecasting.models import FairValueSnapshot
 
 
 class FairValueProvider(Protocol):
@@ -158,4 +166,58 @@ class ConsensusFairValueEngine:
             fair_value=fair_value,
             dispersion=dispersion_score(components),
             component_count=len(components),
+        )
+
+
+class FairValueEngine:
+    def __init__(
+        self,
+        *,
+        model_name: str = "deterministic_consensus",
+        model_version: str = "v1",
+    ) -> None:
+        self.model_name = model_name
+        self.model_version = model_version
+
+    def build(self, mapping: ContractMatch, odds_rows: list[dict]) -> FairValueSnapshot:
+        if not odds_rows:
+            raise ValueError("odds_rows must not be empty")
+        fair_yes_prob = weighted_consensus(odds_rows)
+        components = [
+            ConsensusComponent(
+                probability=(
+                    float(row["implied_prob"])
+                    if row.get("implied_prob") is not None
+                    else decimal_to_prob(float(row["price_decimal"]))
+                ),
+                weight=float(row.get("weight", 1.0)),
+                freshness_seconds=(
+                    float(row["source_age_ms"]) / 1000.0
+                    if row.get("source_age_ms") is not None
+                    else None
+                ),
+            )
+            for row in odds_rows
+            if row.get("implied_prob") is not None or row.get("price_decimal") is not None
+        ]
+        dispersion = dispersion_score(components)
+        lower_prob = max(0.0, fair_yes_prob - dispersion / 2.0)
+        upper_prob = min(1.0, fair_yes_prob + dispersion / 2.0)
+        data_age_ms = int(
+            max(float(row.get("source_age_ms", 0.0)) for row in odds_rows)
+        )
+        source_count = len(
+            {str(row.get("source") or row.get("bookmaker") or "") for row in odds_rows}
+        )
+        return FairValueSnapshot(
+            market_id=mapping.polymarket_market_id,
+            timestamp_ms=int(datetime.now(timezone.utc).timestamp() * 1000),
+            fair_yes_prob=round(fair_yes_prob, 6),
+            lower_prob=round(lower_prob, 6),
+            upper_prob=round(upper_prob, 6),
+            book_dispersion=round(dispersion, 6),
+            data_age_ms=data_age_ms,
+            source_count=source_count,
+            model_name=self.model_name,
+            model_version=self.model_version,
         )

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from storage.parquet_store import ParquetStore
 
 class ParquetStorage:
     """Small optional Parquet writer influenced by upstream chunked market storage."""
@@ -57,3 +58,6 @@ class PartitionedParquetStorage(ParquetStorage):
             return self.append_records(dataset.replace("/", "_"), records)
         finally:
             self.data_dir = original
+
+
+__all__ = ["ParquetStorage", "PartitionedParquetStorage", "ParquetStore"]

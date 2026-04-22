@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
@@ -23,7 +25,9 @@ from engine.runtime_bootstrap import parse_comma_separated as _parse_comma_separ
 from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
+from execution import ExecutionPlanner
 from forecasting.fair_value_engine import ManifestFairValueProvider
+from opportunity.models import Opportunity
 from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
 from risk.limits import RiskEngine, RiskLimits
 from storage.journal import EventJournal
@@ -99,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-hours-to-expiry", type=float, default=None)
     parser.add_argument("--polymarket-live-user-markets", default=None)
     parser.add_argument("--polymarket-user-ws-host", default=None)
+    parser.add_argument("--opportunity-root", default=None)
     add_quiet_flag(parser)
     return parser
 
@@ -114,6 +119,97 @@ def _seed_event_exposure_registry(risk_engine: RiskEngine, provider: object) -> 
             series=record.series,
             game_id=record.game_id,
         )
+
+
+def _load_json_file(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    payload = json.loads(path.read_text())
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def _parse_event_start(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _build_preview_order_proposals(args, policy) -> list[dict[str, object]]:
+    if not args.opportunity_root:
+        return []
+    root = Path(args.opportunity_root)
+    current_root = root / "current"
+    opportunities = _load_json_file(current_root / "opportunities.json")
+    mappings = _load_json_file(current_root / "market_mappings.json")
+    fair_values = _load_json_file(current_root / "fair_values.json")
+    bbo_rows = _load_json_file(current_root / "polymarket_bbo.json")
+    sportsbook_events = _load_json_file(current_root / "sportsbook_events.json")
+
+    planner = ExecutionPlanner(
+        None if policy is None else policy.proposal_planner.build()
+    )
+    mapping_by_market: dict[str, dict[str, object]] = {}
+    for row in mappings.values():
+        if isinstance(row, dict):
+            mapping_by_market[str(row.get("polymarket_market_id") or "")] = row
+
+    proposals: list[dict[str, object]] = []
+    for row in opportunities.values():
+        if not isinstance(row, dict):
+            continue
+        market_id = str(row.get("market_id") or "")
+        bbo = bbo_rows.get(market_id)
+        fair_value = fair_values.get(market_id)
+        mapping = mapping_by_market.get(market_id, {})
+        if not isinstance(bbo, dict):
+            continue
+        blocked_reason = row.get("blocked_reason")
+        source_age_ms = int(fair_value.get("data_age_ms", 0)) if isinstance(fair_value, dict) else 0
+        book_dispersion = (
+            float(fair_value.get("book_dispersion", 0.0))
+            if isinstance(fair_value, dict)
+            else 0.0
+        )
+        sportsbook_event = sportsbook_events.get(
+            str(mapping.get("sportsbook_event_id") or "")
+        )
+        event_start_time = (
+            _parse_event_start(sportsbook_event.get("start_time"))
+            if isinstance(sportsbook_event, dict)
+            else None
+        )
+        opportunity = Opportunity(
+            market_id=market_id,
+            side=str(row.get("side") or "buy_yes"),
+            fair_yes_prob=(
+                float(fair_value.get("fair_yes_prob", 0.0))
+                if isinstance(fair_value, dict)
+                else 0.0
+            ),
+            best_bid_yes=float(bbo.get("best_bid_yes") or 0.0),
+            best_ask_yes=float(bbo.get("best_ask_yes") or 0.0),
+            edge_buy_bps=0.0,
+            edge_sell_bps=0.0,
+            edge_after_costs_bps=float(row.get("edge_after_costs_bps") or 0.0),
+            fillable_size=float(row.get("fillable_size") or 0.0),
+            confidence=float(row.get("confidence") or 0.0),
+            blocked_reason=str(blocked_reason) if blocked_reason else None,
+        )
+        proposal = planner.proposal_for(
+            opportunity,
+            source_age_ms=source_age_ms,
+            book_dispersion=book_dispersion,
+            event_start_time=event_start_time,
+        )
+        if proposal is None:
+            continue
+        proposals.append(proposal.__dict__.copy())
+    return proposals
 
 
 def main() -> int:
@@ -246,6 +342,7 @@ def main() -> int:
             ),
         )
         results = loop.run()
+        preview_order_proposals = _build_preview_order_proposals(args, policy)
         status_snapshot = getattr(engine, "status_snapshot", None)
         status = status_snapshot() if callable(status_snapshot) else None
         live_state_status_getter = getattr(adapter, "live_state_status", None)
@@ -501,6 +598,8 @@ def main() -> int:
                     "market_state_subscribed_assets": list(
                         getattr(market_state_status, "subscribed_assets", ()) or ()
                     ),
+                    "preview_order_proposal_count": len(preview_order_proposals),
+                    "preview_order_proposals": preview_order_proposals,
                 },
             quiet=args.quiet,
         )
