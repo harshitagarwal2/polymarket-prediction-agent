@@ -14,7 +14,9 @@ from engine.discovery import (
 )
 from engine.order_state import OrderLifecyclePolicy
 from engine.strategies import FairValueBandStrategy
+from execution.planner import PlannerThresholds
 from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
+from risk.freeze_windows import FreezeWindowPolicy
 from risk.limits import RiskLimits
 
 SCHEMA_VERSION = 1
@@ -227,6 +229,9 @@ class OpportunityRankerPolicy:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def build(self) -> OpportunityRanker:
         return OpportunityRanker(
@@ -244,6 +249,7 @@ class OpportunityRankerPolicy:
             spread_penalty_weight=self.spread_penalty_weight,
             taker_fee_rate=self.taker_fee_rate,
             contract_rule_freeze=self.contract_rule_freeze,
+            freeze_window_policy=self.freeze_window_policy,
         )
 
 
@@ -260,6 +266,9 @@ class PairOpportunityRankerPolicy:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def build(self) -> PairOpportunityRanker:
         return PairOpportunityRanker(
@@ -272,6 +281,7 @@ class PairOpportunityRankerPolicy:
             min_hours_to_expiry=self.min_hours_to_expiry,
             max_hours_to_expiry=self.max_hours_to_expiry,
             contract_rule_freeze=self.contract_rule_freeze,
+            freeze_window_policy=self.freeze_window_policy,
         )
 
 
@@ -336,6 +346,32 @@ class TradingEnginePolicy:
 
 
 @dataclass(frozen=True)
+class ProposalPlannerPolicy:
+    min_match_confidence: float = 0.95
+    max_source_age_ms: int = 4000
+    max_book_dispersion: float = 0.03
+    entry_edge_bps: float = 150.0
+    exit_edge_bps: float = 50.0
+    freeze_minutes_before_start: int = 10
+    freeze_minutes_before_expiry: int = 0
+    cooldown_seconds_after_score_change: int = 15
+    block_on_unhealthy_source: bool = True
+
+    def build(self) -> PlannerThresholds:
+        return PlannerThresholds(
+            min_match_confidence=self.min_match_confidence,
+            max_source_age_ms=self.max_source_age_ms,
+            max_book_dispersion=self.max_book_dispersion,
+            entry_edge_bps=self.entry_edge_bps,
+            exit_edge_bps=self.exit_edge_bps,
+            freeze_minutes_before_start=self.freeze_minutes_before_start,
+            freeze_minutes_before_expiry=self.freeze_minutes_before_expiry,
+            cooldown_seconds_after_score_change=self.cooldown_seconds_after_score_change,
+            block_on_unhealthy_source=self.block_on_unhealthy_source,
+        )
+
+
+@dataclass(frozen=True)
 class OrderLifecyclePolicyConfig:
     max_order_age_seconds: float = 30.0
 
@@ -373,6 +409,7 @@ class RuntimePolicy:
     pair_opportunity_ranker: PairOpportunityRankerPolicy = PairOpportunityRankerPolicy()
     execution_policy_gate: ExecutionPolicyGatePolicy = ExecutionPolicyGatePolicy()
     trading_engine: TradingEnginePolicy = TradingEnginePolicy()
+    proposal_planner: ProposalPlannerPolicy = ProposalPlannerPolicy()
     order_lifecycle_policy: OrderLifecyclePolicyConfig = OrderLifecyclePolicyConfig()
     venues: VenuePolicy = VenuePolicy()
 
@@ -498,6 +535,7 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             "spread_penalty_weight",
             "taker_fee_rate",
             "contract_rules",
+            "freeze_windows",
         },
     )
     defaults = OpportunityRankerPolicy()
@@ -580,6 +618,11 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             key=key,
             defaults=defaults.contract_rule_freeze,
         ),
+        freeze_window_policy=_load_market_freeze_window_policy(
+            payload,
+            key=key,
+            defaults=defaults.freeze_window_policy,
+        ),
     )
 
 
@@ -600,6 +643,7 @@ def _load_pair_opportunity_ranker_policy(
             "min_hours_to_expiry",
             "max_hours_to_expiry",
             "contract_rules",
+            "freeze_windows",
         },
     )
     defaults = PairOpportunityRankerPolicy()
@@ -651,6 +695,11 @@ def _load_pair_opportunity_ranker_policy(
             payload,
             key=key,
             defaults=defaults.contract_rule_freeze,
+        ),
+        freeze_window_policy=_load_market_freeze_window_policy(
+            payload,
+            key=key,
+            defaults=defaults.freeze_window_policy,
         ),
     )
 
@@ -708,6 +757,73 @@ def _load_contract_rule_freeze_policy(
             "freeze_when_order_book_disabled",
             defaults.freeze_when_order_book_disabled,
             context=context,
+        ),
+    )
+
+
+def _load_market_freeze_window_policy(
+    payload: dict[str, Any],
+    *,
+    key: str,
+    defaults: FreezeWindowPolicy,
+) -> FreezeWindowPolicy:
+    raw = payload.get("freeze_windows")
+    if raw is None:
+        return defaults
+
+    context = f"{key}.freeze_windows"
+    freeze_payload = _ensure_object(raw, context=context)
+    _ensure_known_keys(
+        freeze_payload,
+        context=context,
+        allowed_keys={
+            "freeze_minutes_before_start",
+            "freeze_minutes_before_expiry",
+            "freeze_when_inactive",
+            "freeze_when_resolved",
+            "freeze_when_source_unhealthy",
+            "unhealthy_source_statuses",
+        },
+    )
+    return FreezeWindowPolicy(
+        freeze_minutes_before_start=_read_int(
+            freeze_payload,
+            "freeze_minutes_before_start",
+            defaults.freeze_minutes_before_start,
+            context=context,
+        ),
+        freeze_minutes_before_expiry=_read_int(
+            freeze_payload,
+            "freeze_minutes_before_expiry",
+            defaults.freeze_minutes_before_expiry,
+            context=context,
+        ),
+        freeze_when_inactive=_read_bool(
+            freeze_payload,
+            "freeze_when_inactive",
+            defaults.freeze_when_inactive,
+            context=context,
+        ),
+        freeze_when_resolved=_read_bool(
+            freeze_payload,
+            "freeze_when_resolved",
+            defaults.freeze_when_resolved,
+            context=context,
+        ),
+        freeze_when_source_unhealthy=_read_bool(
+            freeze_payload,
+            "freeze_when_source_unhealthy",
+            defaults.freeze_when_source_unhealthy,
+            context=context,
+        ),
+        unhealthy_source_statuses=(
+            _read_optional_string_tuple(
+                freeze_payload,
+                "unhealthy_source_statuses",
+                defaults.unhealthy_source_statuses,
+                context=context,
+            )
+            or defaults.unhealthy_source_statuses
         ),
     )
 
@@ -894,6 +1010,82 @@ def _load_trading_engine_policy(root: dict[str, Any]) -> TradingEnginePolicy:
     )
 
 
+def _load_proposal_planner_policy(root: dict[str, Any]) -> ProposalPlannerPolicy:
+    key = "proposal_planner"
+    payload = _read_section(
+        root,
+        key,
+        allowed_keys={
+            "min_match_confidence",
+            "max_source_age_ms",
+            "max_book_dispersion",
+            "entry_edge_bps",
+            "exit_edge_bps",
+            "freeze_minutes_before_start",
+            "freeze_minutes_before_expiry",
+            "cooldown_seconds_after_score_change",
+            "block_on_unhealthy_source",
+        },
+    )
+    defaults = ProposalPlannerPolicy()
+    return ProposalPlannerPolicy(
+        min_match_confidence=_read_float(
+            payload,
+            "min_match_confidence",
+            defaults.min_match_confidence,
+            context=key,
+        ),
+        max_source_age_ms=_read_int(
+            payload,
+            "max_source_age_ms",
+            defaults.max_source_age_ms,
+            context=key,
+        ),
+        max_book_dispersion=_read_float(
+            payload,
+            "max_book_dispersion",
+            defaults.max_book_dispersion,
+            context=key,
+        ),
+        entry_edge_bps=_read_float(
+            payload,
+            "entry_edge_bps",
+            defaults.entry_edge_bps,
+            context=key,
+        ),
+        exit_edge_bps=_read_float(
+            payload,
+            "exit_edge_bps",
+            defaults.exit_edge_bps,
+            context=key,
+        ),
+        freeze_minutes_before_start=_read_int(
+            payload,
+            "freeze_minutes_before_start",
+            defaults.freeze_minutes_before_start,
+            context=key,
+        ),
+        freeze_minutes_before_expiry=_read_int(
+            payload,
+            "freeze_minutes_before_expiry",
+            defaults.freeze_minutes_before_expiry,
+            context=key,
+        ),
+        cooldown_seconds_after_score_change=_read_int(
+            payload,
+            "cooldown_seconds_after_score_change",
+            defaults.cooldown_seconds_after_score_change,
+            context=key,
+        ),
+        block_on_unhealthy_source=_read_bool(
+            payload,
+            "block_on_unhealthy_source",
+            defaults.block_on_unhealthy_source,
+            context=key,
+        ),
+    )
+
+
 def _load_order_lifecycle_policy(root: dict[str, Any]) -> OrderLifecyclePolicyConfig:
     key = "order_lifecycle_policy"
     payload = _read_section(root, key, allowed_keys={"max_order_age_seconds"})
@@ -965,6 +1157,7 @@ def load_runtime_policy(path: str | Path) -> RuntimePolicy:
             "pair_opportunity_ranker",
             "execution_policy_gate",
             "trading_engine",
+            "proposal_planner",
             "order_lifecycle_policy",
             "venues",
         },
@@ -983,6 +1176,7 @@ def load_runtime_policy(path: str | Path) -> RuntimePolicy:
         pair_opportunity_ranker=_load_pair_opportunity_ranker_policy(root),
         execution_policy_gate=_load_execution_policy_gate_policy(root),
         trading_engine=_load_trading_engine_policy(root),
+        proposal_planner=_load_proposal_planner_policy(root),
         order_lifecycle_policy=_load_order_lifecycle_policy(root),
         venues=_load_venue_policy(root),
     )

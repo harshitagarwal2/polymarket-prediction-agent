@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from storage.journal import normalize_for_json, write_json
+from storage.raw_store import RawStore
 
 
 @dataclass(frozen=True)
@@ -35,3 +36,6 @@ def write_raw_capture(
     path: str | Path,
 ) -> Path:
     return write_json(path, envelope.to_payload())
+
+
+__all__ = ["RawCaptureEnvelope", "RawStore", "build_raw_capture", "write_raw_capture"]

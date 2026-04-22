@@ -32,12 +32,20 @@ class RuntimePolicyTests(unittest.TestCase):
                             "freeze_before_expiry_seconds": 1800,
                             "freeze_when_not_accepting_orders": False,
                         },
+                        "freeze_windows": {
+                            "freeze_minutes_before_start": 20,
+                            "freeze_when_resolved": False,
+                        },
                     },
                     "pair_opportunity_ranker": {
                         "edge_threshold": 0.03,
                         "allowed_categories": ["sports"],
                         "contract_rules": {
                             "freeze_when_closed": False,
+                        },
+                        "freeze_windows": {
+                            "freeze_minutes_before_start": 15,
+                            "freeze_minutes_before_expiry": 5,
                         },
                     },
                     "execution_policy_gate": {
@@ -47,6 +55,13 @@ class RuntimePolicyTests(unittest.TestCase):
                     "trading_engine": {
                         "overlay_max_age_seconds": 12,
                         "cancel_retry_max_attempts": 5,
+                    },
+                    "proposal_planner": {
+                        "min_match_confidence": 0.9,
+                        "max_source_age_ms": 2500,
+                        "freeze_minutes_before_start": 5,
+                        "freeze_minutes_before_expiry": 30,
+                        "block_on_unhealthy_source": False,
                     },
                     "order_lifecycle_policy": {
                         "max_order_age_seconds": 45,
@@ -80,10 +95,30 @@ class RuntimePolicyTests(unittest.TestCase):
         self.assertFalse(
             policy.opportunity_ranker.contract_rule_freeze.freeze_when_not_accepting_orders
         )
+        self.assertEqual(
+            policy.opportunity_ranker.freeze_window_policy.freeze_minutes_before_start,
+            20,
+        )
+        self.assertFalse(
+            policy.opportunity_ranker.freeze_window_policy.freeze_when_resolved
+        )
         self.assertEqual(policy.pair_opportunity_ranker.edge_threshold, 0.03)
         self.assertFalse(policy.pair_opportunity_ranker.contract_rule_freeze.freeze_when_closed)
+        self.assertEqual(
+            policy.pair_opportunity_ranker.freeze_window_policy.freeze_minutes_before_start,
+            15,
+        )
+        self.assertEqual(
+            policy.pair_opportunity_ranker.freeze_window_policy.freeze_minutes_before_expiry,
+            5,
+        )
         self.assertEqual(policy.execution_policy_gate.max_open_orders_global, 3)
         self.assertEqual(policy.trading_engine.overlay_max_age_seconds, 12.0)
+        self.assertEqual(policy.proposal_planner.min_match_confidence, 0.9)
+        self.assertEqual(policy.proposal_planner.max_source_age_ms, 2500)
+        self.assertEqual(policy.proposal_planner.freeze_minutes_before_start, 5)
+        self.assertEqual(policy.proposal_planner.freeze_minutes_before_expiry, 30)
+        self.assertFalse(policy.proposal_planner.block_on_unhealthy_source)
         self.assertEqual(policy.order_lifecycle_policy.max_order_age_seconds, 45.0)
 
         strategy = policy.strategy.build_strategy()
@@ -91,6 +126,7 @@ class RuntimePolicyTests(unittest.TestCase):
         limits = policy.risk_limits.build()
         gate = policy.execution_policy_gate.build()
         ranker = policy.opportunity_ranker.build()
+        planner = policy.proposal_planner.build()
         venue_config = policy.venues.polymarket.apply(PolymarketConfig())
 
         self.assertEqual(strategy.quantity, 2.5)
@@ -99,10 +135,18 @@ class RuntimePolicyTests(unittest.TestCase):
         self.assertEqual(sizer.edge_unit, 0.07)
         self.assertEqual(limits.max_contracts_per_event, 12)
         self.assertEqual(gate.max_open_orders_global, 3)
+        self.assertEqual(planner.freeze_minutes_before_start, 5)
+        self.assertEqual(planner.freeze_minutes_before_expiry, 30)
+        self.assertFalse(planner.block_on_unhealthy_source)
         self.assertEqual(
             ranker.contract_rule_freeze.freeze_before_expiry_seconds,
             1800,
         )
+        self.assertEqual(ranker.freeze_window_policy.freeze_minutes_before_start, 20)
+        self.assertFalse(ranker.freeze_window_policy.freeze_when_resolved)
+        pair_ranker = policy.pair_opportunity_ranker.build()
+        self.assertEqual(pair_ranker.freeze_window_policy.freeze_minutes_before_start, 15)
+        self.assertEqual(pair_ranker.freeze_window_policy.freeze_minutes_before_expiry, 5)
         self.assertEqual(venue_config.depth_admission_levels, 4)
         self.assertEqual(venue_config.depth_admission_liquidity_fraction, 0.6)
         self.assertEqual(

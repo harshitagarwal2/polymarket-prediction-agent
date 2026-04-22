@@ -6,6 +6,7 @@ from typing import Iterable
 
 from adapters.types import MarketSummary, NormalizedOrder, OrderIntent, PositionSnapshot
 from engine.interfaces import LinkedMarketRiskGraphSnapshot
+from risk.correlated_exposure import CorrelatedExposureGraph
 
 
 @dataclass
@@ -49,6 +50,7 @@ class RiskEngine:
         self.state = state or RiskState()
         self.market_key_to_event_exposure_key: dict[str, str] = {}
         self.market_key_to_mutually_exclusive_group_key: dict[str, str] = {}
+        self.correlated_graph = CorrelatedExposureGraph()
 
     def _normalize_event_component(self, value: str | None) -> str | None:
         if value in (None, ""):
@@ -98,6 +100,11 @@ class RiskEngine:
             self.market_key_to_mutually_exclusive_group_key[str(market_key)] = str(
                 mutually_exclusive_group_key
             )
+        self.correlated_graph.register_market(
+            str(market_key),
+            cluster_key=exposure_key,
+            mutually_exclusive_group_key=mutually_exclusive_group_key,
+        )
         if exposure_key is None:
             return None
         self.market_key_to_event_exposure_key[str(market_key)] = exposure_key
@@ -140,9 +147,7 @@ class RiskEngine:
             )
 
     def _mutually_exclusive_group_key_for_market_key(self, market_key: str) -> str:
-        return self.market_key_to_mutually_exclusive_group_key.get(
-            market_key, f"market:{market_key}"
-        )
+        return self.correlated_graph.group_key_for(market_key)
 
     def graph_snapshot_for(
         self, market_key: str
@@ -210,14 +215,17 @@ class RiskEngine:
                 == event_exposure_key
             }
         )
-        grouped_exposure: dict[str, float] = {}
-        for market_key in market_keys:
-            group_key = self._mutually_exclusive_group_key_for_market_key(market_key)
-            grouped_exposure[group_key] = max(
-                grouped_exposure.get(group_key, 0.0),
-                self._current_market_exposure(market_key, positions, open_orders),
-            )
-        return sum(grouped_exposure.values())
+        return self.correlated_graph.grouped_cluster_exposure(
+            cluster_key=event_exposure_key,
+            exposure_by_market={
+                market_key: self._current_market_exposure(
+                    market_key,
+                    positions,
+                    open_orders,
+                )
+                for market_key in market_keys
+            },
+        )
 
     def _resolve_positions(
         self,
@@ -298,19 +306,22 @@ class RiskEngine:
                 open_orders,
             )
         running_event_group_exposure: dict[str, dict[str, float]] = {}
+        running_event_exposure: dict[str, float] = {}
+        for event_exposure_key in set(self.market_key_to_event_exposure_key.values()):
+            running_event_exposure[event_exposure_key] = self._current_event_exposure(
+                event_exposure_key,
+                current_positions,
+                open_orders,
+            )
         for market_key, exposure in running_market_exposure.items():
             event_exposure_key = self.market_key_to_event_exposure_key.get(market_key)
             if event_exposure_key is None:
                 continue
-            group_key = self._mutually_exclusive_group_key_for_market_key(market_key)
             event_groups = running_event_group_exposure.setdefault(
                 event_exposure_key, {}
             )
+            group_key = self._mutually_exclusive_group_key_for_market_key(market_key)
             event_groups[group_key] = max(event_groups.get(group_key, 0.0), exposure)
-        running_event_exposure = {
-            event_exposure_key: sum(grouped.values())
-            for event_exposure_key, grouped in running_event_group_exposure.items()
-        }
         remaining_reduce_only_capacity = {
             current_position.contract.market_key: max(current_position.quantity, 0.0)
             for current_position in current_positions

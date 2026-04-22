@@ -11,9 +11,13 @@ from forecasting.calibration import (
 from forecasting.calibrator import ForecastCalibrator
 from forecasting.consensus import (
     ConsensusComponent,
+    american_to_prob,
     consensus_probability,
+    decimal_to_prob,
     dispersion_score,
     freshness_weight,
+    remove_overround,
+    weighted_consensus,
 )
 from forecasting.contracts import (
     ContractConsistencySurface,
@@ -34,12 +38,20 @@ from forecasting.fair_value_engine import (
     ConsensusFairValueInput,
     ConsensusFairValueResult,
     FairValueField,
+    FairValueEngine,
     FairValueManifestEntry,
     FairValueProvider,
     ManifestFairValueProvider,
     StaticFairValueProvider,
 )
+from forecasting.models import FairValueSnapshot
 from forecasting.model_registry import ForecastModelRegistry, ForecastModelSpec
+from forecasting.ml_features import build_feature_row
+from forecasting.ml_infer import LinearFeatureModelArtifact, predict_rows
+from forecasting.ml_train import (
+    fit_linear_feature_model,
+    training_rows_from_labeled_features,
+)
 from forecasting.pipeline import (
     ForecastingPipelineScaffold,
     ForecastingPipelineStage,
@@ -66,8 +78,10 @@ __all__ = [
     'ConsensusFairValueResult',
     'ContractConsistencySurface',
     'ContractEvidence',
+    'FairValueEngine',
     'FairValueField',
     'FairValueManifestEntry',
+    'FairValueSnapshot',
     'FairValueProvider',
     'ForecastCalibrator',
     'ForecastScore',
@@ -77,28 +91,37 @@ __all__ = [
     'ForecastingPipelineStage',
     'HistogramCalibrator',
     'HistogramCalibrationBin',
+    'LinearFeatureModelArtifact',
     'ManifestFairValueProvider',
     'ModelVsMarketDashboard',
     'ModelVsMarketRow',
     'PairedLossComparison',
     'StaticFairValueProvider',
     'bootstrap_mean_confidence_interval',
+    'build_feature_row',
     'build_contract_consistency_surface',
     'build_model_vs_market_dashboard',
     'build_pipeline_scaffold',
+    'american_to_prob',
     'calibration_samples_from_rows',
     'compare_paired_loss_differentials',
     'consensus_probability',
+    'decimal_to_prob',
     'fit_histogram_calibrator',
     'fit_histogram_calibrator_from_rows',
     'dispersion_score',
+    'fit_linear_feature_model',
     'freshness_weight',
     'histogram_calibrator_from_payload',
     'load_calibration_artifact',
     'load_contract_evidence',
     'load_model_vs_market_rows',
     'render_model_vs_market_markdown',
+    'remove_overround',
     'score_binary_forecasts',
+    'training_rows_from_labeled_features',
+    'predict_rows',
+    'weighted_consensus',
     'write_model_vs_market_dashboard',
     'write_pipeline_scaffold',
 ]

@@ -12,8 +12,10 @@ from contracts.resolution_rules import (
     contract_freeze_reasons,
 )
 from forecasting.fair_value_engine import FairValueProvider
+from opportunity.models import Opportunity
 from opportunity.executable_edge import assess_executable_edge
 from opportunity.fillability import estimate_fillability_from_market, market_spread
+from risk.freeze_windows import FreezeWindowPolicy, freeze_reason_for_market
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,9 @@ class PairOpportunityRanker:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -65,6 +70,12 @@ class PairOpportunityRanker:
         if contract_freeze_reasons(
             market,
             policy=self.contract_rule_freeze,
+            now=now,
+        ):
+            return False
+        if freeze_reason_for_market(
+            market,
+            policy=self.freeze_window_policy,
             now=now,
         ):
             return False
@@ -164,6 +175,9 @@ class OpportunityRanker:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
+    freeze_window_policy: FreezeWindowPolicy = field(
+        default_factory=FreezeWindowPolicy
+    )
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -213,6 +227,12 @@ class OpportunityRanker:
         if contract_freeze_reasons(
             market,
             policy=self.contract_rule_freeze,
+            now=now,
+        ):
+            return False
+        if freeze_reason_for_market(
+            market,
+            policy=self.freeze_window_policy,
             now=now,
         ):
             return False
@@ -401,3 +421,15 @@ class OpportunityRanker:
         return sorted(candidates, key=lambda candidate: candidate.score, reverse=True)[
             : self.limit
         ]
+
+
+def rank_opportunities(opportunities: list[Opportunity]) -> list[Opportunity]:
+    def _score(item: Opportunity) -> tuple[float, float, float]:
+        dispersion_penalty = 0.0 if item.blocked_reason else 1.0
+        return (
+            item.edge_after_costs_bps,
+            item.fillable_size,
+            item.confidence * dispersion_penalty,
+        )
+
+    return sorted(opportunities, key=_score, reverse=True)

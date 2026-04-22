@@ -103,3 +103,24 @@ class ReplayRunner:
             ending_portfolio_value=ending_portfolio_value,
             net_pnl=ending_portfolio_value - self.broker.initial_cash,
         )
+
+
+from research.replay.exchange_sim import (  # noqa: E402
+    ExchangeSimConfig,
+    apply_wait_time_slippage,
+    cancel_effective_after_steps,
+    simulate_fillable_quantity,
+    snapshot_is_stale,
+)
+
+__all__ = [
+    "ExchangeSimConfig",
+    "ReplayEvent",
+    "ReplayResult",
+    "ReplayRunner",
+    "ReplayStep",
+    "apply_wait_time_slippage",
+    "cancel_effective_after_steps",
+    "simulate_fillable_quantity",
+    "snapshot_is_stale",
+]

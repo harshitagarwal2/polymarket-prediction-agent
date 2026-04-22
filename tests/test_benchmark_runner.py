@@ -72,6 +72,11 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertIsNone(report.fair_value_report.calibration)
         self.assertEqual(report.replay_report.score.trade_count, 1)
         self.assertAlmostEqual(report.replay_report.score.net_pnl, 0.5)
+        self.assertEqual(len(report.replay_report.trade_attributions), 1)
+        self.assertEqual(
+            report.replay_report.trade_attributions[0].market_id,
+            "token-home:yes",
+        )
 
     def test_write_benchmark_report_emits_json(self):
         report = load_and_run_benchmark_case(FIXTURE_PATH)
@@ -104,6 +109,7 @@ class BenchmarkRunnerTests(unittest.TestCase):
         if not isinstance(baselines, list) or not baselines:
             self.fail("expected serialized replay baselines")
         self.assertEqual(baselines[0]["name"], "noop_strategy")
+        self.assertIn("trade_attributions", payload)
 
     def test_missing_expected_market_keys_fail_closed(self):
         payload = json.loads(FIXTURE_PATH.read_text())

@@ -15,11 +15,11 @@ authors = [
 ]
 dependencies = [
   "pandas>=2.0",
+  "pyarrow>=14",
 ]
 
 [project.optional-dependencies]
 research = [
-  "pyarrow>=14",
   "duckdb>=0.10",
 ]
 polymarket = [
@@ -57,4 +57,4 @@ include-package-data = true
 research = ["fixtures/*.json"]
 
 [tool.setuptools.packages.find]
-include = ["adapters*", "contracts*", "engine*", "forecasting*", "opportunity*", "risk*", "research*", "scripts*", "storage*"]
+include = ["adapters*", "contracts*", "engine*", "execution*", "forecasting*", "llm*", "opportunity*", "risk*", "research*", "scripts*", "storage*"]

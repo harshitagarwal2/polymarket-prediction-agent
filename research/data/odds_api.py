@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
-from urllib.parse import urlencode
-from urllib.request import urlopen
+from typing import Any
+
+from engine.http_client import get_json
 
 
 def load_event_map(path: str | None) -> dict[str, dict[str, Any]]:
@@ -102,7 +102,6 @@ def fetch_odds_payload(
     markets: str,
     odds_format: str,
     bookmakers: str | None,
-    urlopen_fn: Callable[..., Any] = urlopen,
 ) -> list[dict[str, Any]]:
     params = {
         "apiKey": api_key,
@@ -113,11 +112,11 @@ def fetch_odds_payload(
     }
     if bookmakers not in (None, ""):
         params["bookmakers"] = bookmakers
-    url = (
-        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?{urlencode(params)}"
+    payload = get_json(
+        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/",
+        params=params,
+        timeout_seconds=30.0,
     )
-    with urlopen_fn(url, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, list):
         raise RuntimeError("The Odds API returned a non-list payload")
     return [event for event in payload if isinstance(event, dict)]

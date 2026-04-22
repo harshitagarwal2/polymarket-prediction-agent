@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
@@ -20,12 +22,16 @@ from engine.fair_value_loader import (
 )
 from engine.runtime_bootstrap import build_adapter
 from engine.runtime_bootstrap import parse_comma_separated as _parse_comma_separated
+from engine.runtime_metrics import RuntimeMetricsCollector
 from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
+from execution import ExecutionPlanner
 from forecasting.fair_value_engine import ManifestFairValueProvider
+from opportunity.models import Opportunity
 from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
 from risk.limits import RiskEngine, RiskLimits
+from storage import best_mapping_by_market
 from storage.journal import EventJournal
 
 
@@ -99,6 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-hours-to-expiry", type=float, default=None)
     parser.add_argument("--polymarket-live-user-markets", default=None)
     parser.add_argument("--polymarket-user-ws-host", default=None)
+    parser.add_argument("--opportunity-root", default=None)
     add_quiet_flag(parser)
     return parser
 
@@ -114,6 +121,142 @@ def _seed_event_exposure_registry(risk_engine: RiskEngine, provider: object) -> 
             series=record.series,
             game_id=record.game_id,
         )
+
+
+def _load_json_file(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    payload = json.loads(path.read_text())
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def _parse_event_start(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _metrics_collector(args) -> RuntimeMetricsCollector:
+    root = (
+        Path(args.opportunity_root) / "current"
+        if args.opportunity_root
+        else Path("runtime/data/current")
+    )
+    return RuntimeMetricsCollector(root / "runtime_metrics.json")
+
+
+def _build_preview_order_proposals(
+    args,
+    policy,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    if not args.opportunity_root:
+        return [], []
+    root = Path(args.opportunity_root)
+    current_root = root / "current"
+    opportunities = _load_json_file(current_root / "opportunities.json")
+    mappings = _load_json_file(current_root / "market_mappings.json")
+    fair_values = _load_json_file(current_root / "fair_values.json")
+    bbo_rows = _load_json_file(current_root / "polymarket_bbo.json")
+    sportsbook_events = _load_json_file(current_root / "sportsbook_events.json")
+    source_health = _load_json_file(current_root / "source_health.json")
+    polymarket_markets = _load_json_file(current_root / "polymarket_markets.json")
+
+    planner = ExecutionPlanner(
+        None if policy is None else policy.proposal_planner.build()
+    )
+    mapping_by_market = best_mapping_by_market(mappings)
+
+    proposals: list[dict[str, object]] = []
+    blocked: list[dict[str, object]] = []
+    required_sources = tuple(
+        source_name
+        for source_name in (
+            "polymarket_market_channel",
+            "sportsbook_odds",
+            "market_mappings",
+            "fair_values",
+        )
+        if source_name in source_health
+    )
+    for row in opportunities.values():
+        if not isinstance(row, dict):
+            continue
+        market_id = str(row.get("market_id") or "")
+        bbo = bbo_rows.get(market_id)
+        fair_value = fair_values.get(market_id)
+        mapping = mapping_by_market.get(market_id, {})
+        market_row = polymarket_markets.get(market_id)
+        if not isinstance(bbo, dict):
+            continue
+        blocked_reason = row.get("blocked_reason")
+        source_age_ms = int(fair_value.get("data_age_ms", 0)) if isinstance(fair_value, dict) else 0
+        book_dispersion = (
+            float(fair_value.get("book_dispersion", 0.0))
+            if isinstance(fair_value, dict)
+            else 0.0
+        )
+        sportsbook_event = sportsbook_events.get(
+            str(mapping.get("sportsbook_event_id") or "")
+        )
+        event_start_time = (
+            _parse_event_start(sportsbook_event.get("start_time"))
+            if isinstance(sportsbook_event, dict)
+            else None
+        )
+        market_end_time = (
+            _parse_event_start(market_row.get("end_time"))
+            if isinstance(market_row, dict)
+            else None
+        )
+        market_status = (
+            str(market_row.get("status") or "").strip().lower()
+            if isinstance(market_row, dict)
+            else ""
+        )
+        opportunity = Opportunity(
+            market_id=market_id,
+            side=str(row.get("side") or "buy_yes"),
+            fair_yes_prob=(
+                float(fair_value.get("fair_yes_prob", 0.0))
+                if isinstance(fair_value, dict)
+                else 0.0
+            ),
+            best_bid_yes=float(bbo.get("best_bid_yes") or 0.0),
+            best_ask_yes=float(bbo.get("best_ask_yes") or 0.0),
+            edge_buy_bps=0.0,
+            edge_sell_bps=0.0,
+            edge_after_costs_bps=float(row.get("edge_after_costs_bps") or 0.0),
+            fillable_size=float(row.get("fillable_size") or 0.0),
+            confidence=float(row.get("confidence") or 0.0),
+            blocked_reason=str(blocked_reason) if blocked_reason else None,
+        )
+        decision = planner.evaluate(
+            opportunity,
+            source_age_ms=source_age_ms,
+            book_dispersion=book_dispersion,
+            event_start_time=event_start_time,
+            market_end_time=market_end_time,
+            market_active=market_status not in {"closed", "inactive", "resolved"},
+            market_resolved=market_status in {"resolved", "settled"},
+            source_health=source_health,
+            required_sources=required_sources,
+        )
+        if decision.proposal is None:
+            blocked.append(
+                {
+                    "market_id": market_id,
+                    "side": opportunity.side,
+                    "blocked_reason": decision.blocked_reason,
+                }
+            )
+            continue
+        proposals.append(decision.proposal.__dict__.copy())
+    return proposals, blocked
 
 
 def main() -> int:
@@ -246,6 +389,11 @@ def main() -> int:
             ),
         )
         results = loop.run()
+        metrics = _metrics_collector(args)
+        preview_order_proposals, blocked_preview_orders = _build_preview_order_proposals(
+            args,
+            policy,
+        )
         status_snapshot = getattr(engine, "status_snapshot", None)
         status = status_snapshot() if callable(status_snapshot) else None
         live_state_status_getter = getattr(adapter, "live_state_status", None)
@@ -501,8 +649,21 @@ def main() -> int:
                     "market_state_subscribed_assets": list(
                         getattr(market_state_status, "subscribed_assets", ()) or ()
                     ),
+                    "preview_order_proposal_count": len(preview_order_proposals),
+                    "preview_order_proposals": preview_order_proposals,
+                    "preview_order_blocked_count": len(blocked_preview_orders),
+                    "preview_order_blocked": blocked_preview_orders,
                 },
             quiet=args.quiet,
+        )
+        metrics.record(
+            component="run_agent_loop",
+            action="preview_proposals",
+            status="ok",
+            trace_id=None,
+            cycle_count=len(results),
+            preview_order_proposal_count=len(preview_order_proposals),
+            preview_order_blocked_count=len(blocked_preview_orders),
         )
         return 0
     finally:

@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 from typing import Any
-from urllib.request import urlopen
 
 from engine.cli_output import add_quiet_flag, emit_json
 from research.data.odds_api import fetch_odds_payload as _fetch_odds_payload
@@ -60,7 +59,6 @@ def fetch_odds_payload(
         markets=markets,
         odds_format=odds_format,
         bookmakers=bookmakers,
-        urlopen_fn=urlopen,
     )
 
 

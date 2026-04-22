@@ -145,6 +145,7 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             training_path = Path(temp_dir) / "training.json"
             output_path = Path(temp_dir) / "elo.json"
+            registry_root = Path(temp_dir) / "registry"
             training_path.write_text(json.dumps(training_payload))
             rows = load_training_set_rows(str(training_path))
             self.assertEqual(len(rows), 1)
@@ -159,14 +160,20 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
                     str(training_path),
                     "--output",
                     str(output_path),
+                    "--registry-root",
+                    str(registry_root),
                 ],
             ):
                 train_models.main()
 
             artifact_payload = json.loads(output_path.read_text())
+            registry_payload = json.loads(
+                (registry_root / "model_registry.json").read_text()
+            )
 
         self.assertEqual(artifact_payload["model_generator"], "elo")
         self.assertEqual(artifact_payload["training_match_count"], 1)
+        self.assertIn("elo|v1", registry_payload)
 
     def test_train_models_can_read_model_from_config_file(self):
         training_payload = {
