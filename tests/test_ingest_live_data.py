@@ -861,6 +861,69 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(fair_values["pm-1"]["model_name"], "consensus")
         self.assertEqual(source_health["fair_values"]["status"], "ok")
 
+    def test_build_fair_values_replaces_current_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "pm-1|sb-1": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "mismatch_reason": None,
+                        "event_key": "event-1",
+                        "game_id": "game-1",
+                        "is_active": True,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_odds.json",
+                {
+                    "sb-1|book-a|h2h|Home Team": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "book-a",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.5,
+                        "implied_prob": 0.6666666667,
+                        "overround": 0.6666666667,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "fair_values.json",
+                {
+                    "stale-market": {
+                        "market_id": "stale-market",
+                        "as_of": "2026-04-21T17:00:00+00:00",
+                        "fair_yes_prob": 0.42,
+                        "lower_prob": 0.40,
+                        "upper_prob": 0.44,
+                        "book_dispersion": 0.02,
+                        "data_age_ms": 50,
+                        "source_count": 1,
+                        "model_name": "baseline",
+                        "model_version": "v1",
+                    }
+                },
+            )
+
+            ingest_live_data.main(["build-fair-values", "--root", str(root), "--quiet"])
+
+            fair_values = json.loads(
+                (root / "current" / "fair_values.json").read_text()
+            )
+
+        self.assertEqual(list(fair_values.keys()), ["pm-1"])
+
     def test_build_mappings_blocks_missing_upstream_event_identity(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
@@ -899,6 +962,36 @@ class IngestLiveDataTests(unittest.TestCase):
         persisted = next(iter(mappings.values()))
         self.assertFalse(persisted["is_active"])
         self.assertEqual(persisted["blocked_reason"], "missing upstream event identity")
+
+    def test_build_mappings_replaces_current_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_mapping_build_inputs(root)
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "stale-market": {
+                        "polymarket_market_id": "stale-market",
+                        "sportsbook_event_id": "stale-sb",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.25,
+                        "resolution_risk": 0.50,
+                        "mismatch_reason": "stale",
+                        "is_active": False,
+                    }
+                },
+            )
+
+            ingest_live_data.main(
+                ["build-mappings", "--market", "h2h", "--root", str(root), "--quiet"]
+            )
+
+            mappings = json.loads(
+                (root / "current" / "market_mappings.json").read_text()
+            )
+
+        self.assertEqual(list(mappings.keys()), ["pm-1|sb-1"])
 
     def test_build_fair_values_does_not_partially_write_on_failure(self):
         with tempfile.TemporaryDirectory() as temp_dir:

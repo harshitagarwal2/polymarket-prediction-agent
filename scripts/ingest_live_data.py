@@ -563,6 +563,7 @@ def _run_build_mappings(args) -> int:
     markets = _sorted_rows(stores["markets"].read_all())
     events = stores["sb_events"].read_all()
     mappings: list[dict] = []
+    current_mappings: dict[str, dict] = {}
     for market in markets:
         best_match: MarketMappingRecord | None = None
         market_payload = _mapping_market_payload(market)
@@ -617,13 +618,13 @@ def _run_build_mappings(args) -> int:
         if best_match is None:
             continue
         stores["mappings"].append(best_match)
-        mappings.append(best_match.__dict__.copy())
-        stores["current"].upsert(
-            "market_mappings",
-            f"{best_match.polymarket_market_id}|{best_match.sportsbook_event_id}",
-            best_match.__dict__.copy(),
-        )
+        best_match_payload = best_match.__dict__.copy()
+        mappings.append(best_match_payload)
+        current_mappings[
+            f"{best_match.polymarket_market_id}|{best_match.sportsbook_event_id}"
+        ] = best_match_payload
     stores["parquet"].append_records("market_mapping_history", _utc_now(), mappings)
+    stores["current"].write_table("market_mappings", current_mappings)
     stores["health"].upsert("market_mappings", stale_after_ms=60_000, status="ok")
     structured_log(
         logger,
@@ -651,7 +652,6 @@ def _run_build_fair_values(args) -> int:
     try:
         engine = _build_fair_value_engine(args)
         persisted_history = stores["fair_values"].read_all()
-        persisted_current = stores["current"].read_table("fair_values")
         current_odds_rows = stores["current"].read_table("sportsbook_odds")
         odds_rows = (
             _sorted_rows(current_odds_rows)
@@ -737,10 +737,7 @@ def _run_build_fair_values(args) -> int:
         )
         stores["current"].write_table(
             "fair_values",
-            {
-                **persisted_current,
-                **pending_current_updates,
-            },
+            pending_current_updates,
         )
         _best_effort(
             lambda: stores["health"].upsert(
