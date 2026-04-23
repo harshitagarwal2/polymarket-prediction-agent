@@ -151,13 +151,58 @@ build-fair-values \
 
 With the checked-in sample config, that currently resolves to `best-line` aggregation and `multiplicative` devigging.
 
+For the live/current-state path, the fair-value builder is a different command surface. The intended sequence is:
+
+```bash
+python -m scripts.train_models --model consensus --output runtime/consensus_artifact.json
+
+python -m scripts.ingest_live_data sportsbook-odds \
+  --sport basketball_nba \
+  --market h2h \
+  --event-map-file runtime/odds_event_map.json \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --market h2h \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --root runtime/data \
+  --consensus-artifact runtime/consensus_artifact.json
+
+python -m scripts.ingest_live_data build-fair-values \
+  --root runtime/data \
+  --consensus-artifact runtime/consensus_artifact.json \
+  --calibration-artifact runtime/calibration_artifact.json
+```
+
+The `--event-map-file` input enriches live sportsbook events with stable identity fields such as `event_key` and `game_id`. `build-mappings` now fails closed if that upstream identity is missing, keeps the flat runtime selector snapshot in `runtime/data/current/market_mappings.json`, and also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, event identity, and rule-semantics details for each mapping decision. `build-fair-values --consensus-artifact ...` uses the consensus artifact as deterministic inference configuration for the current-state fair-value snapshot builder, and the optional `--calibration-artifact ...` overlay adds sibling `calibrated_fair_yes_prob` / `calibrated_fair_value` outputs without changing the raw baseline fields.
+
+The checked-in sample configs now include `capture.sport_key`, `runtime.sportsbook_market`, `runtime.event_map_file`, `runtime.consensus_artifact`, and an optional `runtime.calibration_artifact` key, so the live/current-state flow can also be driven from config defaults:
+
+```bash
+python -m scripts.ingest_live_data sportsbook-odds \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+```
+
+If the config also points `runtime.calibration_artifact` at a histogram calibration payload, the same command writes raw live fair values to `runtime/data/current/fair_values.json`, includes `calibrated_fair_yes_prob` beside them, and emits `metadata.calibration` in `runtime/data/current/fair_value_manifest.json` for runtime policy selection.
+
 ### 4. Run a preview cycle
 
 ```bash
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-cycles 1
 ```
 
@@ -172,12 +217,14 @@ If you want the sample runtime defaults from `configs/sports_nba.yaml`, you can 
 
 ```bash
 run-agent-loop \
-  --venue polymarket \
-  --fair-values-file runtime/fair_values.json \
   --config-file configs/sports_nba.yaml
 ```
 
-That path currently provides `configs/runtime_policy.preview.json` and keeps the loop in preview mode.
+That path currently provides `configs/runtime_policy.preview.json`, keeps the loop in preview mode, points `run-agent-loop` at `runtime/data/current/fair_value_manifest.json`, and sets `opportunity_root` to `runtime/data`.
+
+The sample config also carries the normal preview-loop defaults for `max_fair_value_age_seconds`, `interval_seconds`, and `max_cycles`, so you only need extra CLI flags when you want to override them.
+
+For Polymarket, the runtime now also derives live user-stream condition IDs from that configured fair-value manifest by default. You only need `POLYMARKET_LIVE_USER_MARKETS` when you want to override the derived subscription set manually.
 
 For a long-running supervised preview process, add `--interval-seconds` and a larger `--max-cycles`.
 
@@ -188,6 +235,26 @@ operator-cli status --state-file runtime/safety-state.json
 operator-cli status --state-file runtime/safety-state.json --journal runtime/events.jsonl
 ```
 
+If you have offline contract-evidence rows, materialize the advisory sidecar before reviewing them:
+
+```bash
+operator-cli build-llm-advisory \
+  --llm-input runtime/llm_contract_rows.json \
+  --policy-file runtime/policy.json \
+  --opportunity-root runtime/data \
+  --output runtime/data/current/llm_advisory.json
+
+operator-cli show-llm-advisory \
+  --llm-advisory-file runtime/data/current/llm_advisory.json \
+  --format markdown
+
+operator-cli status --state-file runtime/safety-state.json --llm-advisory-file runtime/data/current/llm_advisory.json
+```
+
+`runtime/data/current/llm_advisory.json` is a review artifact for operators and dashboards. It is not an execution input.
+
+Pass `--policy-file` when you want the advisory preview proposals and blocked reasons to match the same runtime policy that `run-agent-loop` is using.
+
 ## Runtime policy files
 
 If you want repeatable runtime behavior, use `--policy-file`.
@@ -196,7 +263,7 @@ If you want repeatable runtime behavior, use `--policy-file`.
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --policy-file runtime/policy.json
 ```
 
@@ -269,6 +336,8 @@ Current knobs are:
 - `slippage_bps`
 - `resting_max_fill_ratio_per_step`
 - `resting_fill_delay_steps`
+- `stale_after_steps`
+- `price_move_bps_per_step`
 
 These help make offline replay less naive, but they still do not make replay venue-true.
 
@@ -303,6 +372,8 @@ train-models \
 ```
 
 `ingest-live-data` writes typed capture artifacts (`markets` for Polymarket, `rows` for sports inputs). The checked-in league configs currently drive the `sports-inputs` path by supplying league-to-sport-key defaults; Gamma/CLOB capture still needs its layer selected explicitly. `train-models` can train from captured sports-input rows when they include labels.
+
+Note that this config-driven helper path is for offline research captures. The live supervised path uses the `ingest-live-data` subcommands shown above rather than the standalone `build-fair-values` manifest builder.
 
 ## Environment variables
 

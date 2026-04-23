@@ -61,6 +61,44 @@ Observed output excerpt:
 }
 ```
 
+## Manual QA — live current-state fair-value build with consensus artifact
+
+Command shape:
+
+```bash
+python -m scripts.train_models --model consensus --output <consensus_artifact.json>
+python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root>
+python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root>
+python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json>
+```
+
+Observed behavior:
+
+- the live sportsbook ingest path accepts `--event-map-file` and persists enriched sportsbook event identity for mapping
+- `build-mappings` blocks rows missing upstream `event_key` / `game_id`
+- `build-mappings` keeps the flat current-state selector rows in `runtime/data/current/market_mappings.json` and also writes `runtime/data/current/market_mapping_manifest.json` with structured `mapping_status`, `mapping_confidence`, `blocked_reason`, identity, and rule-semantics payloads
+- `build-fair-values --consensus-artifact ...` changes live fair-value output based on artifact half-life and writes current-state fair values plus `source_health`
+- a failing fair-value build marks `source_health["fair_values"]` red without partially overwriting the prior fair-values tables
+
+## Manual QA — live current-state fair-value build with optional calibration artifact
+
+Command shape:
+
+```bash
+python -m scripts.ingest_live_data build-fair-values \
+  --root <runtime_root> \
+  --consensus-artifact <consensus_artifact.json> \
+  --calibration-artifact <calibration_artifact.json>
+```
+
+Observed behavior:
+
+- the raw live snapshot still writes `fair_yes_prob` to `runtime/data/current/fair_values.json`
+- the calibrated overlay adds sibling `calibrated_fair_yes_prob` to the same current-state rows
+- `runtime/data/current/fair_value_manifest.json` keeps raw `fair_value` and adds sibling `calibrated_fair_value`
+- the runtime manifest includes `metadata.calibration` with histogram bin and sample counts
+- `source_health["fair_values"]["details"]` records whether a calibration artifact was configured
+
 ## Automated verification — config-driven runtime defaults
 
 Committed test path:

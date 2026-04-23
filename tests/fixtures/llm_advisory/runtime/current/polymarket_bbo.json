@@ -1,0 +1,18 @@
+{
+  "pm-1": {
+    "market_id": "pm-1",
+    "best_bid_yes": 0.45,
+    "best_ask_yes": 0.47,
+    "best_bid_yes_size": 9.0,
+    "best_ask_yes_size": 5.0,
+    "source_age_ms": 900
+  },
+  "pm-2": {
+    "market_id": "pm-2",
+    "best_bid_yes": 0.44,
+    "best_ask_yes": 0.46,
+    "best_bid_yes_size": 3.0,
+    "best_ask_yes_size": 2.0,
+    "source_age_ms": 900
+  }
+}

@@ -9,9 +9,11 @@ from types import SimpleNamespace
 from adapters.types import Contract, MarketSummary, OutcomeSide, Venue
 from engine.discovery import ManifestFairValueProvider, StaticFairValueProvider
 from engine.fair_value_loader import (
+    FairValueLookup,
     ReloadingFairValueProvider,
     build_fair_value_provider,
 )
+from research.fair_value_manifest import FairValueManifestBuild
 
 
 def make_manifest_market(
@@ -82,6 +84,34 @@ class FairValueLoaderTests(unittest.TestCase):
         self.assertEqual(provider.source, "sports-model-v1")
         self.assertEqual(provider.records["token-1:yes"].fair_value, 0.61)
         self.assertEqual(provider.records["token-1:yes"].condition_id, "condition-1")
+
+    def test_build_fair_value_provider_accepts_shared_manifest_builder_payload(self):
+        generated_at = datetime.now(timezone.utc).replace(microsecond=0)
+        manifest = FairValueManifestBuild(
+            generated_at=generated_at,
+            source="unit-test",
+            max_age_seconds=900,
+            values={
+                "token-1:yes": {
+                    "fair_value": 0.61,
+                    "generated_at": generated_at.isoformat().replace("+00:00", "Z"),
+                    "condition_id": "condition-1",
+                    "event_key": "event-1",
+                }
+            },
+        )
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(manifest.to_payload(), handle)
+            handle.flush()
+
+            provider = build_fair_value_provider(handle.name)
+
+        if not isinstance(provider, ManifestFairValueProvider):
+            self.fail("expected manifest fair value provider")
+
+        self.assertEqual(provider.source, "unit-test")
+        self.assertEqual(provider.fair_value_for(make_manifest_market()), 0.61)
 
     def test_build_fair_value_provider_rejects_unknown_manifest_schema_version(self):
         with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
@@ -272,11 +302,11 @@ class FairValueLoaderTests(unittest.TestCase):
         self.assertIsNone(provider.fair_value_for(make_manifest_market()))
 
     def test_reloading_fair_value_provider_reloads_after_interval(self):
-        class Provider:
+        class Provider(FairValueLookup):
             def __init__(self, value):
                 self.value = value
 
-            def fair_value_for(self, _market):
+            def fair_value_for(self, market: object) -> float | None:
                 return self.value
 
         values = iter([Provider(0.6), Provider(0.7), Provider(0.8)])

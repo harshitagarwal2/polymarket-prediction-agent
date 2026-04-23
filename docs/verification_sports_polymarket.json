@@ -15,6 +15,24 @@
         "source": "sportsbook-devig:multiplicative:best-line"
       }
     },
+    "live_current_state_build_fair_values": {
+      "command": "python -m scripts.train_models --model consensus --output <consensus_artifact.json> && python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> && python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root> && python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json>",
+      "observed": {
+        "event_map_file_supported": true,
+        "consensus_artifact_supported": true,
+        "fair_values_source_health_status": "ok",
+        "missing_identity_blocked": true
+      }
+    },
+    "live_current_state_build_fair_values_with_calibration": {
+      "command": "python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json> --calibration-artifact <calibration_artifact.json>",
+      "observed": {
+        "calibration_artifact_supported": true,
+        "calibrated_fair_yes_prob_present": true,
+        "calibrated_fair_value_present": true,
+        "manifest_calibration_metadata_present": true
+      }
+    },
     "live_gamma_capture": {
       "command": "ingest-live-data --layer gamma --config-file configs/sports_nba.yaml --output <gamma.json> --limit 2",
       "observed": {

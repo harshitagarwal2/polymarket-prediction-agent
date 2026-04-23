@@ -12,8 +12,9 @@ from forecasting.fair_value_engine import (
     ManifestFairValueProvider,
     StaticFairValueProvider,
 )
+from research.manifest_schema import FAIR_VALUE_MANIFEST_SCHEMA_VERSION
 
-SUPPORTED_FAIR_VALUE_MANIFEST_SCHEMA_VERSION = 1
+SUPPORTED_FAIR_VALUE_MANIFEST_SCHEMA_VERSION = FAIR_VALUE_MANIFEST_SCHEMA_VERSION
 
 
 class FairValueLookup(Protocol):

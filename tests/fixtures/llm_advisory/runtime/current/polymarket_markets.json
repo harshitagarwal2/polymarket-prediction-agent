@@ -1,0 +1,12 @@
+{
+  "pm-1": {
+    "market_id": "pm-1",
+    "status": "open",
+    "end_time": "2026-04-30T19:00:00Z"
+  },
+  "pm-2": {
+    "market_id": "pm-2",
+    "status": "open",
+    "end_time": "2026-04-30T19:00:00Z"
+  }
+}

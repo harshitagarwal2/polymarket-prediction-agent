@@ -28,9 +28,14 @@ class _JsonRepository:
         payload = _row_payload(row)
         existing = self.read_all()
         existing[str(key)] = payload
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8")
+        self.write_all(existing)
         return payload
+
+    def write_all(self, rows: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8"
+        )
 
     def read_all(self) -> dict[str, Any]:
         if not self.path.exists():
@@ -59,7 +64,9 @@ class SportsbookOddsRepository(_JsonRepository):
         index = str(len(existing))
         existing[index] = payload
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8")
+        self.path.write_text(
+            json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8"
+        )
         return payload
 
 
@@ -72,7 +79,9 @@ class MappingRepository(_JsonRepository):
         index = str(len(existing))
         existing[index] = payload
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8")
+        self.path.write_text(
+            json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8"
+        )
         return payload
 
 
@@ -120,7 +129,5 @@ class ModelRegistryRepository(_JsonRepository):
 
     def append(self, row: Any) -> dict[str, Any]:
         payload = _row_payload(row)
-        key = "|".join(
-            [str(payload["model_name"]), str(payload["model_version"])]
-        )
+        key = "|".join([str(payload["model_name"]), str(payload["model_version"])])
         return self.upsert(key, payload)

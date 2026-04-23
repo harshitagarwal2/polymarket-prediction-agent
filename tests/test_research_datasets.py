@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 
 from research.benchmark_suite import run_benchmark_suite
+from research.data.storage_paths import build_research_storage_paths
+from research.features.quality_checks import evaluate_inference_quality
 
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "research" / "fixtures"
@@ -17,6 +19,44 @@ def _datasets_module():
 
 
 class ResearchDatasetTests(unittest.TestCase):
+    def test_research_storage_paths_build_expected_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = build_research_storage_paths(Path(temp_dir) / "runtime" / "data")
+            paths.create_dirs()
+
+            expected_paths = (
+                paths.raw_polymarket_root,
+                paths.raw_sportsbook_root,
+                paths.processed_training_root,
+                paths.processed_inference_root,
+                paths.model_artifacts_root,
+                paths.calibration_artifacts_root,
+            )
+
+            self.assertEqual(paths.root.name, "data")
+            for path in expected_paths:
+                self.assertTrue(path.exists(), msg=f"expected directory to exist: {path}")
+
+    def test_inference_quality_checks_collect_blocked_reasons(self):
+        result = evaluate_inference_quality(
+            source_age_ms=12_000,
+            max_source_age_ms=4_000,
+            bookmaker_count=1,
+            min_bookmaker_count=2,
+            has_polymarket_book=False,
+            match_confidence=0.5,
+            min_match_confidence=0.9,
+            book_dispersion=0.08,
+            max_book_dispersion=0.03,
+        )
+
+        self.assertFalse(result.allowed)
+        self.assertIn("source data stale", result.blocked_reasons)
+        self.assertIn("insufficient book coverage", result.blocked_reasons)
+        self.assertIn("missing Polymarket book", result.blocked_reasons)
+        self.assertIn("low match confidence", result.blocked_reasons)
+        self.assertIn("book dispersion exceeds threshold", result.blocked_reasons)
+
     def test_rows_snapshot_round_trips_and_registry_tracks_latest_version(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")

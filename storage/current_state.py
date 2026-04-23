@@ -16,8 +16,13 @@ class FileBackedCurrentStateStore:
         if table_path.exists():
             existing = json.loads(table_path.read_text(encoding="utf-8"))
         existing[str(key)] = payload
+        self.write_table(table, existing)
+
+    def write_table(self, table: str, payload: dict[str, Any]) -> None:
+        table_path = self.root / f"{table}.json"
+        table_path.parent.mkdir(parents=True, exist_ok=True)
         table_path.write_text(
-            json.dumps(existing, indent=2, sort_keys=True),
+            json.dumps(payload, indent=2, sort_keys=True),
             encoding="utf-8",
         )
 

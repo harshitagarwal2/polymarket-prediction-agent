@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+import json
 from typing import TYPE_CHECKING, Any
 
 from adapters.base import TradingAdapter
@@ -18,6 +20,31 @@ def parse_comma_separated(value: str | None) -> list[str] | None:
     return items or None
 
 
+def _load_manifest_condition_ids(path: str | None) -> list[str] | None:
+    if path in (None, ""):
+        return None
+    manifest_path = Path(path)
+    if not manifest_path.exists():
+        return None
+    payload = json.loads(manifest_path.read_text())
+    if not isinstance(payload, dict):
+        return None
+    values = payload.get("values")
+    if not isinstance(values, dict):
+        return None
+    condition_ids: list[str] = []
+    for value in values.values():
+        if not isinstance(value, dict):
+            continue
+        condition_id = value.get("condition_id")
+        if condition_id in (None, ""):
+            continue
+        normalized = str(condition_id)
+        if normalized not in condition_ids:
+            condition_ids.append(normalized)
+    return condition_ids or None
+
+
 def build_adapter(
     venue_name: str,
     args: Any = None,
@@ -29,6 +56,10 @@ def build_adapter(
             getattr(args, "polymarket_live_user_markets", None)
             or os.getenv("POLYMARKET_LIVE_USER_MARKETS")
         )
+        if markets is None:
+            markets = _load_manifest_condition_ids(
+                getattr(args, "fair_values_file", None)
+            )
         config = PolymarketConfig(
             private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
             funder=os.getenv("POLYMARKET_FUNDER"),

@@ -164,7 +164,10 @@ class ConsensusFairValueEngine:
         )
         return ConsensusFairValueResult(
             fair_value=fair_value,
-            dispersion=dispersion_score(components),
+            dispersion=dispersion_score(
+                components,
+                half_life_seconds=self.half_life_seconds,
+            ),
             component_count=len(components),
         )
 
@@ -175,14 +178,19 @@ class FairValueEngine:
         *,
         model_name: str = "deterministic_consensus",
         model_version: str = "v1",
+        half_life_seconds: float = 3600.0,
     ) -> None:
         self.model_name = model_name
         self.model_version = model_version
+        self.half_life_seconds = half_life_seconds
 
     def build(self, mapping: ContractMatch, odds_rows: list[dict]) -> FairValueSnapshot:
         if not odds_rows:
             raise ValueError("odds_rows must not be empty")
-        fair_yes_prob = weighted_consensus(odds_rows)
+        fair_yes_prob = weighted_consensus(
+            odds_rows,
+            half_life_seconds=self.half_life_seconds,
+        )
         components = [
             ConsensusComponent(
                 probability=(
@@ -198,9 +206,13 @@ class FairValueEngine:
                 ),
             )
             for row in odds_rows
-            if row.get("implied_prob") is not None or row.get("price_decimal") is not None
+            if row.get("implied_prob") is not None
+            or row.get("price_decimal") is not None
         ]
-        dispersion = dispersion_score(components)
+        dispersion = dispersion_score(
+            components,
+            half_life_seconds=self.half_life_seconds,
+        )
         lower_prob = max(0.0, fair_yes_prob - dispersion / 2.0)
         upper_prob = min(1.0, fair_yes_prob + dispersion / 2.0)
         data_age_ms = int(

@@ -16,7 +16,7 @@ It is not an unattended live trading system. The live path is still supervised, 
 - **Runtime policy is real and schema-validated.** `engine/runtime_policy.py` loads a versioned JSON policy file and rejects unknown keys or wrong types.
 - **Fair-value manifests can carry raw and calibrated values.** Runtime can choose which field to trade from through policy.
 - **Risk caps include event-level exposure.** `risk/limits.py` enforces per-market, global, and optional per-event caps when event identity is available.
-- **Replay is approximate.** The paper broker models resting orders, reserved capital, fill caps, delay, and slippage, but it is still not a claim of venue-true queue or latency realism.
+- **Replay is approximate.** The paper broker models resting orders, reserved capital, fill caps, delay, slippage, wait-time drift, and stale-snapshot flags, but it is still not a claim of venue-true queue or latency realism.
 
 ## What the repo does
 
@@ -120,6 +120,7 @@ The suite writes:
 - `benchmark_suite_summary.json`
 - `benchmark_suite_summary.md`
 - `benchmark_suite_edge_ledger.json`
+- `benchmark_suite_execution_ledger.json`
 - `cases/<case-name>.json`
 
 There is also a checked-in example suite output under `runtime/benchmark-suite-e2e-check/`.
@@ -145,6 +146,51 @@ Additional architecture-aligned helper entrypoints now exist for the split resea
 - `ingest-live-data` - write normalized offline capture envelopes for Gamma, CLOB, Data API, or sports-input payloads
 - `train-models` - write lightweight Elo, Bradley–Terry, or blend artifacts from benchmark cases
 - `build-fair-values` - thin wrapper around the existing sports fair-value manifest builder
+
+For the supervised live/current-state path, use the `ingest-live-data` subcommands directly:
+
+```bash
+python -m scripts.train_models --model consensus --output runtime/consensus_artifact.json
+
+python -m scripts.ingest_live_data sportsbook-odds \
+  --sport basketball_nba \
+  --market h2h \
+  --event-map-file runtime/odds_event_map.json \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --market h2h \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --root runtime/data \
+  --consensus-artifact runtime/consensus_artifact.json
+
+python -m scripts.ingest_live_data build-fair-values \
+  --root runtime/data \
+  --consensus-artifact runtime/consensus_artifact.json \
+  --calibration-artifact runtime/calibration_artifact.json
+```
+
+That live path keeps sportsbook event identity (`event_key` / `game_id`) in the current-state mapping flow and lets the consensus artifact configure the deterministic fair-value snapshot builder. `build-mappings` still writes the flat selector-facing snapshot to `runtime/data/current/market_mappings.json`, and now also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, identity metadata, and rule semantics for each mapped Polymarket market. If you also pass a calibration artifact, the live snapshot keeps raw `fair_yes_prob` in `runtime/data/current/fair_values.json`, adds sibling `calibrated_fair_yes_prob`, and projects `calibrated_fair_value` plus calibration metadata into `runtime/data/current/fair_value_manifest.json`. The standalone `build-fair-values` entrypoint above remains the research/manifest builder.
+
+The checked-in sample league configs now carry those live defaults too, so the same flow can be driven with fewer flags:
+
+```bash
+python -m scripts.ingest_live_data sportsbook-odds \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-mappings \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-fair-values \
+  --config-file configs/sports_nba.yaml \
+  --root runtime/data
+```
+
+The sample league configs now include an optional `runtime.calibration_artifact` key alongside `runtime.consensus_artifact`. Leave it empty for the raw-only path, or point it at a histogram calibration payload when you want the live manifest to carry calibrated values too.
 
 The sample league configs can drive the new helper entrypoints directly:
 
@@ -173,7 +219,7 @@ build-fair-values \
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-cycles 1
 ```
 
@@ -188,7 +234,7 @@ You can also run pair ranking modes:
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --policy-file runtime/policy.json
 ```
 
@@ -207,12 +253,12 @@ The sample sports configs can also set runtime defaults:
 
 ```bash
 run-agent-loop \
-  --venue polymarket \
-  --fair-values-file runtime/fair_values.json \
   --config-file configs/sports_nba.yaml
 ```
 
-With the current sample config, that path supplies `configs/runtime_policy.preview.json` and keeps the loop in preview mode.
+With the current sample config, that path supplies `configs/runtime_policy.preview.json`, keeps the loop in preview mode, points `run-agent-loop` at `runtime/data/current/fair_value_manifest.json`, and sets `opportunity_root` to `runtime/data`.
+
+It also supplies the sample safety/polling defaults, so you do not need to restate `--max-fair-value-age-seconds`, `--interval-seconds`, or `--max-cycles` for the normal preview loop.
 
 ### 5. Inspect runtime state
 
@@ -220,6 +266,26 @@ With the current sample config, that path supplies `configs/runtime_policy.previ
 operator-cli status --state-file runtime/safety-state.json
 operator-cli status --state-file runtime/safety-state.json --journal runtime/events.jsonl
 ```
+
+### 6. Build an operator-side advisory artifact
+
+```bash
+operator-cli build-llm-advisory \
+  --llm-input runtime/llm_contract_rows.json \
+  --policy-file runtime/policy.json \
+  --opportunity-root runtime/data \
+  --output runtime/data/current/llm_advisory.json
+
+operator-cli show-llm-advisory \
+  --llm-advisory-file runtime/data/current/llm_advisory.json \
+  --format markdown
+
+operator-cli status --state-file runtime/safety-state.json --llm-advisory-file runtime/data/current/llm_advisory.json
+```
+
+`runtime/data/current/llm_advisory.json` is an operator-side sidecar artifact. It stays off the deterministic runtime path and can also be passed to `render-model-vs-market-dashboard --llm-contract-evidence ...` for contract review.
+
+Pass `--policy-file` when you want the advisory preview proposals and blocked reasons to use the same thresholds and freeze rules as `run-agent-loop`.
 
 ## Runtime safety model
 

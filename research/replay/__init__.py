@@ -6,7 +6,10 @@ from typing import Any
 from adapters.types import (
     BalanceSnapshot,
     OrderBookSnapshot,
+    OrderAction,
     OrderIntent,
+    NormalizedOrder,
+    PositionSnapshot,
 )
 from engine.interfaces import Strategy, StrategyContext
 from research.paper import PaperBroker, PaperTrade
@@ -32,6 +35,7 @@ class ReplayEvent:
 @dataclass
 class ReplayResult:
     events: list[ReplayEvent]
+    execution_ledger: tuple[PaperTrade, ...]
     ending_cash: float
     ending_positions: dict[str, float]
     mark_prices: dict[str, float]
@@ -50,11 +54,33 @@ class ReplayRunner:
         self.risk_engine = risk_engine
         self.broker = broker or PaperBroker()
 
+    def _filter_duplicate_open_orders(
+        self,
+        intents: list[OrderIntent],
+        *,
+        open_orders: list[NormalizedOrder],
+        position: PositionSnapshot,
+    ) -> list[OrderIntent]:
+        filtered: list[OrderIntent] = []
+        for intent in intents:
+            if intent.action is OrderAction.BUY and position.quantity > 0:
+                continue
+            if any(
+                order.contract.market_key == intent.contract.market_key
+                and order.action is intent.action
+                for order in open_orders
+            ):
+                continue
+            filtered.append(intent)
+        return filtered
+
     def run(self, steps: list[ReplayStep]) -> ReplayResult:
         events: list[ReplayEvent] = []
+        execution_ledger: list[PaperTrade] = []
         mark_prices: dict[str, float] = {}
         for index, step in enumerate(steps):
             carry_trades = self.broker.advance(step.book)
+            execution_ledger.extend(carry_trades)
             contract = step.book.contract
             mark_price = step.book.midpoint
             if mark_price is None:
@@ -84,12 +110,36 @@ class ReplayRunner:
                 positions=self.broker.positions_snapshot(),
                 open_orders=self.broker.open_order_snapshots(),
             )
-            submitted_trades = self.broker.submit_intents(step.book, risk.approved)
+            approved_intents = [
+                OrderIntent(
+                    contract=intent.contract,
+                    action=intent.action,
+                    price=intent.price,
+                    quantity=intent.quantity,
+                    post_only=intent.post_only,
+                    reduce_only=intent.reduce_only,
+                    expiration_ts=intent.expiration_ts,
+                    client_order_id=intent.client_order_id,
+                    metadata={
+                        **intent.metadata,
+                        "fair_value": step.fair_value,
+                        "replay_step_index": index,
+                    },
+                )
+                for intent in risk.approved
+            ]
+            approved_intents = self._filter_duplicate_open_orders(
+                approved_intents,
+                open_orders=context.open_orders,
+                position=context.position,
+            )
+            submitted_trades = self.broker.submit_intents(step.book, approved_intents)
+            execution_ledger.extend(submitted_trades)
             events.append(
                 ReplayEvent(
                     step_index=index,
                     book=step.book,
-                    approved=risk.approved,
+                    approved=approved_intents,
                     rejected=[rejection.reason for rejection in risk.rejected],
                     trades=[*carry_trades, *submitted_trades],
                 )
@@ -97,6 +147,7 @@ class ReplayRunner:
         ending_portfolio_value = self.broker.portfolio_value(mark_prices)
         return ReplayResult(
             events=events,
+            execution_ledger=tuple(execution_ledger),
             ending_cash=self.broker.cash,
             ending_positions=dict(self.broker.positions),
             mark_prices=mark_prices,

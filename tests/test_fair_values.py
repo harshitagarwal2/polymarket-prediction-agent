@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from research.fair_value_manifest import FairValueManifestBuild
 from research.calibration import fit_histogram_calibrator_from_rows
 from research.fair_values import (
     SportsbookFairValueRow,
@@ -13,9 +14,31 @@ from research.fair_values import (
     resolve_rows_to_markets,
 )
 from adapters.types import Contract, MarketSummary, OutcomeSide, Venue
+from research.manifest_schema import FAIR_VALUE_MANIFEST_SCHEMA_VERSION
+from research.manifest_validation import validate_manifest_payload
 
 
 class FairValueResearchTests(unittest.TestCase):
+    def test_manifest_build_uses_shared_schema_version(self):
+        manifest = FairValueManifestBuild(
+            schema_version=FAIR_VALUE_MANIFEST_SCHEMA_VERSION,
+            generated_at=parse_timestamp("2026-04-07T12:00:00Z"),
+            source="unit-test",
+            max_age_seconds=60.0,
+            values={
+                "token-yes:yes": {
+                    "fair_value": 0.6,
+                    "generated_at": "2026-04-07T12:00:00Z",
+                    "event_key": "event-1",
+                }
+            },
+            skipped_groups=[],
+        )
+
+        payload = manifest.to_payload()
+        self.assertEqual(payload["schema_version"], FAIR_VALUE_MANIFEST_SCHEMA_VERSION)
+        validate_manifest_payload(payload)
+
     def test_american_to_decimal_positive_and_negative(self):
         self.assertAlmostEqual(american_to_decimal(150), 2.5)
         self.assertAlmostEqual(american_to_decimal(-120), 1.8333333333)
@@ -125,6 +148,7 @@ class FairValueResearchTests(unittest.TestCase):
             metadata["match_quality"]["match_strategy_counts"],
             {"input_market_key": 2},
         )
+        validate_manifest_payload(payload)
 
     def test_build_fair_value_manifest_preserves_raw_and_adds_calibrated_field(self):
         rows = [
@@ -443,6 +467,25 @@ class FairValueResearchTests(unittest.TestCase):
         self.assertTrue(
             all(row.market_match_strategy == "market_snapshot" for row in resolved)
         )
+
+    def test_validate_manifest_payload_rejects_missing_identity(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "manifest record must include event identity",
+        ):
+            validate_manifest_payload(
+                {
+                    "schema_version": FAIR_VALUE_MANIFEST_SCHEMA_VERSION,
+                    "generated_at": "2026-04-07T12:00:00Z",
+                    "source": "unit-test",
+                    "values": {
+                        "token-yes:yes": {
+                            "fair_value": 0.6,
+                            "generated_at": "2026-04-07T12:00:00Z",
+                        }
+                    },
+                }
+            )
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import os
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.cli_output import add_quiet_flag, emit_json
@@ -13,10 +14,13 @@ from engine.discovery import (
     AgentOrchestrator,
     DeterministicSizer,
     ExecutionPolicyGate,
+    OpportunityRanker,
+    PairOpportunityRanker,
     PollingAgentLoop,
     PollingLoopConfig,
 )
 from engine.fair_value_loader import (
+    FairValueLookup,
     ReloadingFairValueProvider,
     build_fair_value_provider,
 )
@@ -28,8 +32,7 @@ from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
 from execution import ExecutionPlanner
 from forecasting.fair_value_engine import ManifestFairValueProvider
-from opportunity.models import Opportunity
-from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
+from opportunity.models import Opportunity, normalize_blocked_reasons
 from risk.limits import RiskEngine, RiskLimits
 from storage import best_mapping_by_market
 from storage.journal import EventJournal
@@ -44,6 +47,10 @@ def _required_env_vars(venue_name: str) -> list[str]:
 
 
 def validate_runtime(args) -> None:
+    if args.venue in (None, ""):
+        raise RuntimeError("venue must be provided")
+    if args.fair_values_file in (None, ""):
+        raise RuntimeError("fair values file must be provided")
     fair_values_path = Path(args.fair_values_file)
     if not fair_values_path.exists():
         raise RuntimeError(f"fair values file not found: {fair_values_path}")
@@ -77,14 +84,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the prediction-market polling loop"
     )
-    parser.add_argument("--venue", choices=["polymarket", "kalshi"], required=True)
+    parser.add_argument("--venue", choices=["polymarket", "kalshi"], default=None)
     parser.add_argument("--config-file", default=None)
     parser.add_argument(
         "--mode",
         choices=["preview", "run", "pair-preview", "pair-run"],
         default="preview",
     )
-    parser.add_argument("--fair-values-file", required=True)
+    parser.add_argument("--fair-values-file", default=None)
     parser.add_argument("--policy-file", default=None)
     parser.add_argument("--market-limit", type=int, default=100)
     parser.add_argument("--interval-seconds", type=float, default=5.0)
@@ -141,6 +148,22 @@ def _parse_event_start(value: object) -> datetime | None:
     return parsed
 
 
+def _float_or_none(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    return float(value)
+
+
+def _coalesce_float(*values: object, default: float = 0.0) -> float:
+    for value in values:
+        parsed = _float_or_none(value)
+        if parsed is not None:
+            return parsed
+    return default
+
+
 def _metrics_collector(args) -> RuntimeMetricsCollector:
     root = (
         Path(args.opportunity_root) / "current"
@@ -183,6 +206,30 @@ def _build_preview_order_proposals(
         )
         if source_name in source_health
     )
+
+    def _snapshot_payload(
+        opportunity: Opportunity,
+        *,
+        blocked_reason: str | None,
+        blocked_reasons: tuple[str, ...],
+    ) -> dict[str, object]:
+        return {
+            "market_id": opportunity.market_id,
+            "side": opportunity.side,
+            "fair_yes_prob": opportunity.fair_yes_prob,
+            "best_bid_yes": opportunity.best_bid_yes,
+            "best_ask_yes": opportunity.best_ask_yes,
+            "edge_buy_bps": opportunity.edge_buy_bps,
+            "edge_sell_bps": opportunity.edge_sell_bps,
+            "edge_buy_after_costs_bps": opportunity.edge_buy_after_costs_bps,
+            "edge_sell_after_costs_bps": opportunity.edge_sell_after_costs_bps,
+            "edge_after_costs_bps": opportunity.edge_after_costs_bps,
+            "fillable_size": opportunity.fillable_size,
+            "confidence": opportunity.confidence,
+            "blocked_reason": blocked_reason,
+            "blocked_reasons": list(blocked_reasons),
+        }
+
     for row in opportunities.values():
         if not isinstance(row, dict):
             continue
@@ -191,15 +238,12 @@ def _build_preview_order_proposals(
         fair_value = fair_values.get(market_id)
         mapping = mapping_by_market.get(market_id, {})
         market_row = polymarket_markets.get(market_id)
-        if not isinstance(bbo, dict):
-            continue
-        blocked_reason = row.get("blocked_reason")
         fair_value_age_ms = (
             int(fair_value.get("data_age_ms", 0)) if isinstance(fair_value, dict) else 0
         )
         bbo_source_age_ms = (
             int(bbo.get("source_age_ms", 0))
-            if bbo.get("source_age_ms") not in (None, "")
+            if isinstance(bbo, dict) and bbo.get("source_age_ms") not in (None, "")
             else 0
         )
         source_age_ms = max(fair_value_age_ms, bbo_source_age_ms)
@@ -209,32 +253,61 @@ def _build_preview_order_proposals(
             else 0.0
         )
         side = str(row.get("side") or "buy_yes")
-        limit_price = (
-            bbo.get("best_ask_yes") if side == "buy_yes" else bbo.get("best_bid_yes")
+        blocked_reasons = list(
+            normalize_blocked_reasons(
+                row.get("blocked_reasons"),
+                row.get("blocked_reason"),
+            )
         )
+        if isinstance(bbo, dict):
+            limit_price = (
+                bbo.get("best_ask_yes")
+                if side == "buy_yes"
+                else bbo.get("best_bid_yes")
+            )
+        else:
+            limit_price = None
         if limit_price in (None, ""):
-            blocked_reason = blocked_reason or "missing executable bbo"
+            blocked_reasons = list(
+                normalize_blocked_reasons(blocked_reasons, "missing executable bbo")
+            )
         current_fillable_size = (
-            float(bbo.get("best_ask_yes_size"))
-            if side == "buy_yes" and bbo.get("best_ask_yes_size") not in (None, "")
-            else float(bbo.get("best_bid_yes_size"))
-            if side != "buy_yes" and bbo.get("best_bid_yes_size") not in (None, "")
+            _float_or_none(bbo.get("best_ask_yes_size"))
+            if isinstance(bbo, dict)
+            and side == "buy_yes"
+            and bbo.get("best_ask_yes_size") not in (None, "")
+            else _float_or_none(bbo.get("best_bid_yes_size"))
+            if isinstance(bbo, dict)
+            and side != "buy_yes"
+            and bbo.get("best_bid_yes_size") not in (None, "")
             else None
         )
-        fillable_size = float(row.get("fillable_size") or 0.0)
+        stored_fillable_size = _float_or_none(row.get("fillable_size"))
+        fillable_size = (
+            stored_fillable_size if stored_fillable_size is not None else 0.0
+        )
         if current_fillable_size is not None:
             fillable_size = (
                 current_fillable_size
-                if fillable_size <= 0.0
+                if stored_fillable_size is None
                 else min(fillable_size, current_fillable_size)
+                if fillable_size > 0.0
+                else fillable_size
             )
+        fillable_size = max(fillable_size, 0.0)
         if fillable_size <= 0.0:
-            blocked_reason = blocked_reason or "insufficient visible depth"
+            blocked_reasons = list(
+                normalize_blocked_reasons(blocked_reasons, "insufficient visible depth")
+            )
         sportsbook_event = sportsbook_events.get(
             str(mapping.get("sportsbook_event_id") or "")
         )
         event_start_time = (
             _parse_event_start(sportsbook_event.get("start_time"))
+            if isinstance(sportsbook_event, dict)
+            else None
+        ) or (
+            _parse_event_start(sportsbook_event.get("commence_time"))
             if isinstance(sportsbook_event, dict)
             else None
         )
@@ -251,19 +324,35 @@ def _build_preview_order_proposals(
         opportunity = Opportunity(
             market_id=market_id,
             side=side,
-            fair_yes_prob=(
-                float(fair_value.get("fair_yes_prob", 0.0))
+            fair_yes_prob=_coalesce_float(
+                row.get("fair_yes_prob"),
+                fair_value.get("fair_yes_prob")
                 if isinstance(fair_value, dict)
-                else 0.0
+                else None,
             ),
-            best_bid_yes=float(bbo.get("best_bid_yes") or 0.0),
-            best_ask_yes=float(bbo.get("best_ask_yes") or 0.0),
-            edge_buy_bps=0.0,
-            edge_sell_bps=0.0,
-            edge_after_costs_bps=float(row.get("edge_after_costs_bps") or 0.0),
+            best_bid_yes=_coalesce_float(
+                row.get("best_bid_yes"),
+                bbo.get("best_bid_yes") if isinstance(bbo, dict) else None,
+            ),
+            best_ask_yes=_coalesce_float(
+                row.get("best_ask_yes"),
+                bbo.get("best_ask_yes") if isinstance(bbo, dict) else None,
+            ),
+            edge_buy_bps=_coalesce_float(row.get("edge_buy_bps")),
+            edge_sell_bps=_coalesce_float(row.get("edge_sell_bps")),
+            edge_buy_after_costs_bps=_coalesce_float(
+                row.get("edge_buy_after_costs_bps"),
+                row.get("edge_buy_bps"),
+            ),
+            edge_sell_after_costs_bps=_coalesce_float(
+                row.get("edge_sell_after_costs_bps"),
+                row.get("edge_sell_bps"),
+            ),
+            edge_after_costs_bps=_coalesce_float(row.get("edge_after_costs_bps")),
             fillable_size=fillable_size,
-            confidence=float(row.get("confidence") or 0.0),
-            blocked_reason=str(blocked_reason) if blocked_reason else None,
+            confidence=_coalesce_float(row.get("confidence")),
+            blocked_reasons=tuple(blocked_reasons),
+            blocked_reason=blocked_reasons[0] if blocked_reasons else None,
         )
         decision = planner.evaluate(
             opportunity,
@@ -277,24 +366,63 @@ def _build_preview_order_proposals(
             required_sources=required_sources,
         )
         if decision.proposal is None:
-            blocked.append(
-                {
-                    "market_id": market_id,
-                    "side": opportunity.side,
-                    "blocked_reason": decision.blocked_reason,
-                }
+            blocked_payload = _snapshot_payload(
+                opportunity,
+                blocked_reason=decision.blocked_reason,
+                blocked_reasons=decision.blocked_reasons,
             )
+            blocked_payload["price"] = limit_price
+            blocked.append(blocked_payload)
             continue
-        proposals.append(decision.proposal.__dict__.copy())
+        proposal_payload = decision.proposal.__dict__.copy()
+        proposal_payload.update(
+            _snapshot_payload(
+                opportunity,
+                blocked_reason=decision.blocked_reason,
+                blocked_reasons=decision.blocked_reasons,
+            )
+        )
+        proposals.append(proposal_payload)
     return proposals, blocked
 
 
 def main() -> int:
     args = build_parser().parse_args()
     config = load_config_file(args.config_file) if args.config_file else {}
+    configured_venue = config.get("venue")
+    if args.venue is None and isinstance(configured_venue, str):
+        args.venue = configured_venue
+    configured_fair_values_file = nested_config_value(
+        config, "runtime", "fair_values_file"
+    )
+    if args.fair_values_file is None and isinstance(configured_fair_values_file, str):
+        args.fair_values_file = configured_fair_values_file
     configured_policy_file = nested_config_value(config, "runtime", "policy_file")
     if args.policy_file is None and isinstance(configured_policy_file, str):
         args.policy_file = configured_policy_file
+    configured_opportunity_root = nested_config_value(
+        config, "runtime", "opportunity_root"
+    )
+    if args.opportunity_root is None and isinstance(configured_opportunity_root, str):
+        args.opportunity_root = configured_opportunity_root
+    configured_interval_seconds = nested_config_value(
+        config, "runtime", "interval_seconds"
+    )
+    if isinstance(configured_interval_seconds, (int, float)):
+        args.interval_seconds = float(configured_interval_seconds)
+    configured_max_cycles = nested_config_value(config, "runtime", "max_cycles")
+    if isinstance(configured_max_cycles, int):
+        args.max_cycles = configured_max_cycles
+    configured_max_fair_value_age = nested_config_value(
+        config, "runtime", "max_fair_value_age_seconds"
+    )
+    if isinstance(configured_max_fair_value_age, (int, float)):
+        args.max_fair_value_age_seconds = float(configured_max_fair_value_age)
+    configured_reload_seconds = nested_config_value(
+        config, "runtime", "fair_values_reload_seconds"
+    )
+    if isinstance(configured_reload_seconds, (int, float)):
+        args.fair_values_reload_seconds = float(configured_reload_seconds)
     configured_preview_only = nested_config_value(config, "runtime", "preview_only")
     if args.mode == "preview" and isinstance(configured_preview_only, bool):
         args.mode = "preview" if configured_preview_only else "run"
@@ -303,11 +431,17 @@ def main() -> int:
     adapter = build_adapter(args.venue, args, policy=policy)
     try:
         fair_value_field = policy.fair_value.field if policy is not None else "raw"
-        loader = lambda: build_fair_value_provider(
-            args.fair_values_file,
-            max_age_seconds=args.max_fair_value_age_seconds,
-            fair_value_field=fair_value_field,
-        )
+
+        def loader() -> FairValueLookup:
+            return cast(
+                FairValueLookup,
+                build_fair_value_provider(
+                    args.fair_values_file,
+                    max_age_seconds=args.max_fair_value_age_seconds,
+                    fair_value_field=fair_value_field,
+                ),
+            )
+
         provider = loader()
         seeded_provider = provider
         if args.fair_values_reload_seconds is not None:
@@ -351,8 +485,11 @@ def main() -> int:
             lifecycle_policy = OrderLifecyclePolicy()
             pair_quantity = args.quantity
         else:
-            ranker = policy.opportunity_ranker.build()
-            pair_ranker = policy.pair_opportunity_ranker.build()
+            ranker = cast(OpportunityRanker, policy.opportunity_ranker.build())
+            pair_ranker = cast(
+                PairOpportunityRanker,
+                policy.pair_opportunity_ranker.build(),
+            )
             strategy = policy.strategy.build_strategy()
             risk_engine = RiskEngine(policy.risk_limits.build())
             policy_gate = policy.execution_policy_gate.build()
@@ -420,9 +557,11 @@ def main() -> int:
         )
         results = loop.run()
         metrics = _metrics_collector(args)
-        preview_order_proposals, blocked_preview_orders = _build_preview_order_proposals(
-            args,
-            policy,
+        preview_order_proposals, blocked_preview_orders = (
+            _build_preview_order_proposals(
+                args,
+                policy,
+            )
         )
         status_snapshot = getattr(engine, "status_snapshot", None)
         status = status_snapshot() if callable(status_snapshot) else None
@@ -469,221 +608,211 @@ def main() -> int:
 
         emit_json(
             {
-                    "cycles": len(results),
-                    "mode": args.mode,
-                    "last_selected": _selected_market_key(results[-1])
-                    if results
-                    else None,
-                    "engine_halted": engine.safety_state.halted,
-                    "engine_paused": engine.safety_state.paused,
-                    "heartbeat_active": getattr(status, "heartbeat_active", None),
-                    "heartbeat_running": getattr(status, "heartbeat_running", None),
-                    "heartbeat_healthy_for_trading": getattr(
-                        status, "heartbeat_healthy_for_trading", None
-                    ),
-                    "heartbeat_last_success_at": (
-                        heartbeat_last_success_at.isoformat()
-                        if heartbeat_last_success_at is not None
-                        else None
-                    ),
-                    "heartbeat_consecutive_failures": getattr(
-                        status, "heartbeat_consecutive_failures", None
-                    ),
-                    "heartbeat_last_error": getattr(
-                        status, "heartbeat_last_error", None
-                    ),
-                    "heartbeat_last_id": getattr(status, "heartbeat_last_id", None),
-                    "pending_cancel_count": len(pending_cancels),
-                    "pending_cancel_operator_attention_required": any(
-                        getattr(item, "operator_attention_required", False)
-                        for item in pending_cancels
-                    ),
-                    "pending_cancel_post_fill_seen": any(
-                        getattr(item, "post_cancel_fill_seen", False)
-                        for item in pending_cancels
-                    ),
-                    "last_depth_assessment": getattr(
-                        status, "last_depth_assessment", None
-                    ),
-                    "last_live_delta_applied_at": (
-                        last_live_delta_applied_at.isoformat()
-                        if last_live_delta_applied_at is not None
-                        else None
-                    ),
-                    "last_live_delta_source": getattr(
-                        status, "last_live_delta_source", None
-                    ),
-                    "last_live_delta_order_upserts": getattr(
-                        status, "last_live_delta_order_upserts", None
-                    ),
-                    "last_live_delta_fill_upserts": getattr(
-                        status, "last_live_delta_fill_upserts", None
-                    ),
-                    "last_live_delta_terminal_orders": getattr(
-                        status, "last_live_delta_terminal_orders", None
-                    ),
-                    "last_live_terminal_marker_applied_count": getattr(
-                        status, "last_live_terminal_marker_applied_count", None
-                    ),
-                    "last_snapshot_correction_at": (
-                        last_snapshot_correction_at.isoformat()
-                        if last_snapshot_correction_at is not None
-                        else None
-                    ),
-                    "last_snapshot_correction_order_count": getattr(
-                        status, "last_snapshot_correction_order_count", None
-                    ),
-                    "last_snapshot_correction_fill_count": getattr(
-                        status, "last_snapshot_correction_fill_count", None
-                    ),
-                    "last_snapshot_terminal_confirmation_count": getattr(
-                        status, "last_snapshot_terminal_confirmation_count", None
-                    ),
-                    "last_snapshot_terminal_reversal_count": getattr(
-                        status, "last_snapshot_terminal_reversal_count", None
-                    ),
-                    "overlay_degraded": getattr(status, "overlay_degraded", None),
-                    "overlay_degraded_since": (
-                        overlay_degraded_since.isoformat()
-                        if overlay_degraded_since is not None
-                        else None
-                    ),
-                    "overlay_degraded_reason": getattr(
-                        status, "overlay_degraded_reason", None
-                    ),
-                    "overlay_delta_suppressed": getattr(
-                        status, "overlay_delta_suppressed", None
-                    ),
-                    "overlay_last_live_event_at": (
-                        overlay_last_live_event_at.isoformat()
-                        if overlay_last_live_event_at is not None
-                        else None
-                    ),
-                    "overlay_last_confirmed_snapshot_at": (
-                        overlay_last_confirmed_snapshot_at.isoformat()
-                        if overlay_last_confirmed_snapshot_at is not None
-                        else None
-                    ),
-                    "overlay_forced_snapshot_count": getattr(
-                        status, "overlay_forced_snapshot_count", None
-                    ),
-                    "overlay_last_forced_snapshot_scope": getattr(
-                        status, "overlay_last_forced_snapshot_scope", None
-                    ),
-                    "overlay_last_forced_snapshot_reason": getattr(
-                        status, "overlay_last_forced_snapshot_reason", None
-                    ),
-                    "overlay_last_recovery_outcome": getattr(
-                        status, "overlay_last_recovery_outcome", None
-                    ),
-                    "overlay_last_recovery_scope": getattr(
-                        status, "overlay_last_recovery_scope", None
-                    ),
-                    "overlay_last_recovery_at": (
-                        overlay_last_recovery_at.isoformat()
-                        if overlay_last_recovery_at is not None
-                        else None
-                    ),
-                    "overlay_last_suppression_duration_seconds": getattr(
-                        status, "overlay_last_suppression_duration_seconds", None
-                    ),
-                    "live_state_active": getattr(live_state_status, "active", None),
-                    "live_state_running": getattr(live_state_status, "running", None),
-                    "live_state_mode": getattr(live_state_status, "mode", None),
-                    "live_state_initialized": getattr(
-                        live_state_status, "initialized", None
-                    ),
-                    "live_state_fresh": getattr(live_state_status, "fresh", None),
-                    "live_state_degraded_reason": getattr(
-                        live_state_status, "degraded_reason", None
-                    ),
-                    "live_state_recovery_attempts": getattr(
-                        live_state_status, "recovery_attempts", None
-                    ),
-                    "live_state_last_recovery_at": (
-                        live_state_last_recovery_at.isoformat()
-                        if live_state_last_recovery_at is not None
-                        else None
-                    ),
-                    "live_fills_initialized": getattr(
-                        live_state_status, "fills_initialized", None
-                    ),
-                    "live_fills_fresh": getattr(live_state_status, "fills_fresh", None),
-                    "live_fills_last_update_at": (
-                        live_fills_last_update_at.isoformat()
-                        if live_fills_last_update_at is not None
-                        else None
-                    ),
-                    "live_cached_fill_count": getattr(
-                        live_state_status, "cached_fill_count", None
-                    ),
-                    "live_last_fills_source": getattr(
-                        live_state_status, "last_fills_source", None
-                    ),
-                    "live_last_fills_fallback_reason": getattr(
-                        live_state_status, "last_fills_fallback_reason", None
-                    ),
-                    "snapshot_open_order_overlay_count": getattr(
-                        live_state_status, "snapshot_open_order_overlay_count", None
-                    ),
-                    "snapshot_open_order_overlay_source": getattr(
-                        live_state_status, "snapshot_open_order_overlay_source", None
-                    ),
-                    "snapshot_open_order_overlay_reason": getattr(
-                        live_state_status, "snapshot_open_order_overlay_reason", None
-                    ),
-                    "snapshot_fill_overlay_count": getattr(
-                        live_state_status, "snapshot_fill_overlay_count", None
-                    ),
-                    "snapshot_fill_overlay_source": getattr(
-                        live_state_status, "snapshot_fill_overlay_source", None
-                    ),
-                    "snapshot_fill_overlay_reason": getattr(
-                        live_state_status, "snapshot_fill_overlay_reason", None
-                    ),
-                    "live_state_last_error": getattr(
-                        live_state_status, "last_error", None
-                    ),
-                    "live_state_subscribed_markets": list(
-                        getattr(live_state_status, "subscribed_markets", ()) or ()
-                    ),
-                    "market_state_active": getattr(market_state_status, "active", None),
-                    "market_state_running": getattr(
-                        market_state_status, "running", None
-                    ),
-                    "market_state_mode": getattr(market_state_status, "mode", None),
-                    "market_state_fresh": getattr(market_state_status, "fresh", None),
-                    "market_state_last_error": getattr(
-                        market_state_status, "last_error", None
-                    ),
-                    "market_state_degraded_reason": getattr(
-                        market_state_status, "degraded_reason", None
-                    ),
-                    "market_state_recovery_attempts": getattr(
-                        market_state_status, "recovery_attempts", None
-                    ),
-                    "market_state_last_recovery_at": (
-                        market_state_last_recovery_at.isoformat()
-                        if market_state_last_recovery_at is not None
-                        else None
-                    ),
-                    "market_state_book_overlay_source": getattr(
-                        market_state_status, "snapshot_book_overlay_source", None
-                    ),
-                    "market_state_book_overlay_reason": getattr(
-                        market_state_status, "snapshot_book_overlay_reason", None
-                    ),
-                    "market_state_book_overlay_applied": getattr(
-                        market_state_status, "snapshot_book_overlay_applied", None
-                    ),
-                    "market_state_subscribed_assets": list(
-                        getattr(market_state_status, "subscribed_assets", ()) or ()
-                    ),
-                    "preview_order_proposal_count": len(preview_order_proposals),
-                    "preview_order_proposals": preview_order_proposals,
-                    "preview_order_blocked_count": len(blocked_preview_orders),
-                    "preview_order_blocked": blocked_preview_orders,
-                },
+                "cycles": len(results),
+                "mode": args.mode,
+                "last_selected": _selected_market_key(results[-1]) if results else None,
+                "engine_halted": engine.safety_state.halted,
+                "engine_paused": engine.safety_state.paused,
+                "heartbeat_active": getattr(status, "heartbeat_active", None),
+                "heartbeat_running": getattr(status, "heartbeat_running", None),
+                "heartbeat_healthy_for_trading": getattr(
+                    status, "heartbeat_healthy_for_trading", None
+                ),
+                "heartbeat_last_success_at": (
+                    heartbeat_last_success_at.isoformat()
+                    if heartbeat_last_success_at is not None
+                    else None
+                ),
+                "heartbeat_consecutive_failures": getattr(
+                    status, "heartbeat_consecutive_failures", None
+                ),
+                "heartbeat_last_error": getattr(status, "heartbeat_last_error", None),
+                "heartbeat_last_id": getattr(status, "heartbeat_last_id", None),
+                "pending_cancel_count": len(pending_cancels),
+                "pending_cancel_operator_attention_required": any(
+                    getattr(item, "operator_attention_required", False)
+                    for item in pending_cancels
+                ),
+                "pending_cancel_post_fill_seen": any(
+                    getattr(item, "post_cancel_fill_seen", False)
+                    for item in pending_cancels
+                ),
+                "last_depth_assessment": getattr(status, "last_depth_assessment", None),
+                "last_live_delta_applied_at": (
+                    last_live_delta_applied_at.isoformat()
+                    if last_live_delta_applied_at is not None
+                    else None
+                ),
+                "last_live_delta_source": getattr(
+                    status, "last_live_delta_source", None
+                ),
+                "last_live_delta_order_upserts": getattr(
+                    status, "last_live_delta_order_upserts", None
+                ),
+                "last_live_delta_fill_upserts": getattr(
+                    status, "last_live_delta_fill_upserts", None
+                ),
+                "last_live_delta_terminal_orders": getattr(
+                    status, "last_live_delta_terminal_orders", None
+                ),
+                "last_live_terminal_marker_applied_count": getattr(
+                    status, "last_live_terminal_marker_applied_count", None
+                ),
+                "last_snapshot_correction_at": (
+                    last_snapshot_correction_at.isoformat()
+                    if last_snapshot_correction_at is not None
+                    else None
+                ),
+                "last_snapshot_correction_order_count": getattr(
+                    status, "last_snapshot_correction_order_count", None
+                ),
+                "last_snapshot_correction_fill_count": getattr(
+                    status, "last_snapshot_correction_fill_count", None
+                ),
+                "last_snapshot_terminal_confirmation_count": getattr(
+                    status, "last_snapshot_terminal_confirmation_count", None
+                ),
+                "last_snapshot_terminal_reversal_count": getattr(
+                    status, "last_snapshot_terminal_reversal_count", None
+                ),
+                "overlay_degraded": getattr(status, "overlay_degraded", None),
+                "overlay_degraded_since": (
+                    overlay_degraded_since.isoformat()
+                    if overlay_degraded_since is not None
+                    else None
+                ),
+                "overlay_degraded_reason": getattr(
+                    status, "overlay_degraded_reason", None
+                ),
+                "overlay_delta_suppressed": getattr(
+                    status, "overlay_delta_suppressed", None
+                ),
+                "overlay_last_live_event_at": (
+                    overlay_last_live_event_at.isoformat()
+                    if overlay_last_live_event_at is not None
+                    else None
+                ),
+                "overlay_last_confirmed_snapshot_at": (
+                    overlay_last_confirmed_snapshot_at.isoformat()
+                    if overlay_last_confirmed_snapshot_at is not None
+                    else None
+                ),
+                "overlay_forced_snapshot_count": getattr(
+                    status, "overlay_forced_snapshot_count", None
+                ),
+                "overlay_last_forced_snapshot_scope": getattr(
+                    status, "overlay_last_forced_snapshot_scope", None
+                ),
+                "overlay_last_forced_snapshot_reason": getattr(
+                    status, "overlay_last_forced_snapshot_reason", None
+                ),
+                "overlay_last_recovery_outcome": getattr(
+                    status, "overlay_last_recovery_outcome", None
+                ),
+                "overlay_last_recovery_scope": getattr(
+                    status, "overlay_last_recovery_scope", None
+                ),
+                "overlay_last_recovery_at": (
+                    overlay_last_recovery_at.isoformat()
+                    if overlay_last_recovery_at is not None
+                    else None
+                ),
+                "overlay_last_suppression_duration_seconds": getattr(
+                    status, "overlay_last_suppression_duration_seconds", None
+                ),
+                "live_state_active": getattr(live_state_status, "active", None),
+                "live_state_running": getattr(live_state_status, "running", None),
+                "live_state_mode": getattr(live_state_status, "mode", None),
+                "live_state_initialized": getattr(
+                    live_state_status, "initialized", None
+                ),
+                "live_state_fresh": getattr(live_state_status, "fresh", None),
+                "live_state_degraded_reason": getattr(
+                    live_state_status, "degraded_reason", None
+                ),
+                "live_state_recovery_attempts": getattr(
+                    live_state_status, "recovery_attempts", None
+                ),
+                "live_state_last_recovery_at": (
+                    live_state_last_recovery_at.isoformat()
+                    if live_state_last_recovery_at is not None
+                    else None
+                ),
+                "live_fills_initialized": getattr(
+                    live_state_status, "fills_initialized", None
+                ),
+                "live_fills_fresh": getattr(live_state_status, "fills_fresh", None),
+                "live_fills_last_update_at": (
+                    live_fills_last_update_at.isoformat()
+                    if live_fills_last_update_at is not None
+                    else None
+                ),
+                "live_cached_fill_count": getattr(
+                    live_state_status, "cached_fill_count", None
+                ),
+                "live_last_fills_source": getattr(
+                    live_state_status, "last_fills_source", None
+                ),
+                "live_last_fills_fallback_reason": getattr(
+                    live_state_status, "last_fills_fallback_reason", None
+                ),
+                "snapshot_open_order_overlay_count": getattr(
+                    live_state_status, "snapshot_open_order_overlay_count", None
+                ),
+                "snapshot_open_order_overlay_source": getattr(
+                    live_state_status, "snapshot_open_order_overlay_source", None
+                ),
+                "snapshot_open_order_overlay_reason": getattr(
+                    live_state_status, "snapshot_open_order_overlay_reason", None
+                ),
+                "snapshot_fill_overlay_count": getattr(
+                    live_state_status, "snapshot_fill_overlay_count", None
+                ),
+                "snapshot_fill_overlay_source": getattr(
+                    live_state_status, "snapshot_fill_overlay_source", None
+                ),
+                "snapshot_fill_overlay_reason": getattr(
+                    live_state_status, "snapshot_fill_overlay_reason", None
+                ),
+                "live_state_last_error": getattr(live_state_status, "last_error", None),
+                "live_state_subscribed_markets": list(
+                    getattr(live_state_status, "subscribed_markets", ()) or ()
+                ),
+                "market_state_active": getattr(market_state_status, "active", None),
+                "market_state_running": getattr(market_state_status, "running", None),
+                "market_state_mode": getattr(market_state_status, "mode", None),
+                "market_state_fresh": getattr(market_state_status, "fresh", None),
+                "market_state_last_error": getattr(
+                    market_state_status, "last_error", None
+                ),
+                "market_state_degraded_reason": getattr(
+                    market_state_status, "degraded_reason", None
+                ),
+                "market_state_recovery_attempts": getattr(
+                    market_state_status, "recovery_attempts", None
+                ),
+                "market_state_last_recovery_at": (
+                    market_state_last_recovery_at.isoformat()
+                    if market_state_last_recovery_at is not None
+                    else None
+                ),
+                "market_state_book_overlay_source": getattr(
+                    market_state_status, "snapshot_book_overlay_source", None
+                ),
+                "market_state_book_overlay_reason": getattr(
+                    market_state_status, "snapshot_book_overlay_reason", None
+                ),
+                "market_state_book_overlay_applied": getattr(
+                    market_state_status, "snapshot_book_overlay_applied", None
+                ),
+                "market_state_subscribed_assets": list(
+                    getattr(market_state_status, "subscribed_assets", ()) or ()
+                ),
+                "preview_order_proposal_count": len(preview_order_proposals),
+                "preview_order_proposals": preview_order_proposals,
+                "preview_order_blocked_count": len(blocked_preview_orders),
+                "preview_order_blocked": blocked_preview_orders,
+            },
             quiet=args.quiet,
         )
         metrics.record(

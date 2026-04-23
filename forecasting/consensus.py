@@ -55,14 +55,29 @@ def consensus_probability(
     return weighted_total / total_weight
 
 
-def dispersion_score(components: Iterable[ConsensusComponent]) -> float:
+def dispersion_score(
+    components: Iterable[ConsensusComponent],
+    *,
+    half_life_seconds: float = 3600.0,
+) -> float:
     resolved = list(components)
     if not resolved:
         raise ValueError("components must not be empty")
-    mean = consensus_probability(resolved)
-    return sum(abs(component.probability - mean) for component in resolved) / len(
-        resolved
-    )
+    mean = consensus_probability(resolved, half_life_seconds=half_life_seconds)
+    weighted_total = 0.0
+    total_weight = 0.0
+    for component in resolved:
+        effective_weight = max(component.weight, 0.0) * freshness_weight(
+            component.freshness_seconds,
+            half_life_seconds=half_life_seconds,
+        )
+        if effective_weight <= 0:
+            continue
+        weighted_total += abs(component.probability - mean) * effective_weight
+        total_weight += effective_weight
+    if total_weight <= 0:
+        raise ValueError("consensus components must contribute positive weight")
+    return weighted_total / total_weight
 
 
 def american_to_prob(odds: int) -> float:
@@ -86,7 +101,11 @@ def remove_overround(probs: dict[str, float]) -> dict[str, float]:
     return {key: value / total for key, value in probs.items()}
 
 
-def weighted_consensus(rows: list[dict]) -> float:
+def weighted_consensus(
+    rows: list[dict],
+    *,
+    half_life_seconds: float = 3600.0,
+) -> float:
     components: list[ConsensusComponent] = []
     for row in rows:
         if "implied_prob" in row and row["implied_prob"] is not None:
@@ -115,4 +134,4 @@ def weighted_consensus(rows: list[dict]) -> float:
                 source=row.get("source"),
             )
         )
-    return consensus_probability(components)
+    return consensus_probability(components, half_life_seconds=half_life_seconds)

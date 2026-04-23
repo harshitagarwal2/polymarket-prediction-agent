@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from adapters.types import OrderAction
-from opportunity.models import Opportunity
+from opportunity.models import Opportunity, normalize_blocked_reasons
 
 
 @dataclass(frozen=True)
@@ -23,13 +23,25 @@ def compute_edge(
     fee_bps: float,
     slippage_bps: float,
 ) -> dict[str, float]:
-    fee = max(0.0, fee_bps + slippage_bps) / 10_000.0
+    fee = max(0.0, fee_bps) / 10_000.0
+    slippage = max(0.0, slippage_bps) / 10_000.0
     edge_buy_raw_bps = (fair_yes_prob - best_ask_yes) * 10_000.0
     edge_sell_raw_bps = (best_bid_yes - fair_yes_prob) * 10_000.0
+    edge_buy_after_costs_bps = (
+        fair_yes_prob - (best_ask_yes * (1.0 + slippage)) - fee
+    ) * 10_000.0
+    edge_sell_after_costs_bps = (
+        (best_bid_yes * (1.0 - slippage)) - fair_yes_prob - fee
+    ) * 10_000.0
     return {
         "edge_buy_raw_bps": edge_buy_raw_bps,
         "edge_sell_raw_bps": edge_sell_raw_bps,
-        "edge_after_costs_bps": max(edge_buy_raw_bps, edge_sell_raw_bps) - (fee * 10_000.0),
+        "edge_buy_after_costs_bps": edge_buy_after_costs_bps,
+        "edge_sell_after_costs_bps": edge_sell_after_costs_bps,
+        "edge_after_costs_bps": max(
+            edge_buy_after_costs_bps,
+            edge_sell_after_costs_bps,
+        ),
     }
 
 
@@ -66,10 +78,13 @@ def opportunity_from_prices(
     best_bid_yes: float,
     best_ask_yes: float,
     fillable_size: float,
+    buy_yes_fillable_size: float | None = None,
+    sell_yes_fillable_size: float | None = None,
     confidence: float,
     fee_bps: float = 0.0,
     slippage_bps: float = 0.0,
     blocked_reason: str | None = None,
+    blocked_reasons: tuple[str, ...] | list[str] | None = None,
 ) -> Opportunity:
     edge = compute_edge(
         fair_yes_prob,
@@ -78,7 +93,22 @@ def opportunity_from_prices(
         fee_bps,
         slippage_bps,
     )
-    side = "buy_yes" if edge["edge_buy_raw_bps"] >= edge["edge_sell_raw_bps"] else "sell_yes"
+    normalized_blocked_reasons = normalize_blocked_reasons(
+        blocked_reason,
+        blocked_reasons,
+    )
+    side = (
+        "buy_yes"
+        if edge["edge_buy_after_costs_bps"] >= edge["edge_sell_after_costs_bps"]
+        else "sell_yes"
+    )
+    selected_fillable_size = (
+        buy_yes_fillable_size
+        if side == "buy_yes" and buy_yes_fillable_size is not None
+        else sell_yes_fillable_size
+        if side == "sell_yes" and sell_yes_fillable_size is not None
+        else fillable_size
+    )
     return Opportunity(
         market_id=market_id,
         side=side,
@@ -87,8 +117,13 @@ def opportunity_from_prices(
         best_ask_yes=best_ask_yes,
         edge_buy_bps=round(edge["edge_buy_raw_bps"], 4),
         edge_sell_bps=round(edge["edge_sell_raw_bps"], 4),
+        edge_buy_after_costs_bps=round(edge["edge_buy_after_costs_bps"], 4),
+        edge_sell_after_costs_bps=round(edge["edge_sell_after_costs_bps"], 4),
         edge_after_costs_bps=round(edge["edge_after_costs_bps"], 4),
-        fillable_size=fillable_size,
+        fillable_size=max(0.0, selected_fillable_size),
         confidence=confidence,
-        blocked_reason=blocked_reason,
+        blocked_reasons=normalized_blocked_reasons,
+        blocked_reason=(
+            normalized_blocked_reasons[0] if normalized_blocked_reasons else None
+        ),
     )

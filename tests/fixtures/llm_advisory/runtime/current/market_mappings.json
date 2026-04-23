@@ -1,0 +1,9 @@
+{
+  "pm-1|sb-1": {
+    "polymarket_market_id": "pm-1",
+    "sportsbook_event_id": "sb-1",
+    "match_confidence": 0.99,
+    "resolution_risk": 0.01,
+    "is_active": true
+  }
+}

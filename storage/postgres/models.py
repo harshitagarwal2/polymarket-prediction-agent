@@ -68,6 +68,11 @@ class MarketMappingRecord:
     match_confidence: float
     resolution_risk: float
     mismatch_reason: str | None
+    event_key: str | None = None
+    sport: str | None = None
+    series: str | None = None
+    game_id: str | None = None
+    blocked_reason: str | None = None
     is_active: bool = True
 
 
@@ -83,6 +88,7 @@ class FairValueRecord:
     source_count: int
     model_name: str
     model_version: str
+    calibrated_fair_yes_prob: float | None = None
 
 
 @dataclass(frozen=True)
@@ -90,11 +96,19 @@ class OpportunityRecord:
     market_id: str
     as_of: str
     side: str
+    fair_yes_prob: float
+    best_bid_yes: float
+    best_ask_yes: float
+    edge_buy_bps: float
+    edge_sell_bps: float
+    edge_buy_after_costs_bps: float
+    edge_sell_after_costs_bps: float
     edge_after_costs_bps: float
     fillable_size: float
     confidence: float
     blocked_reason: str | None
     fair_value_ref: str
+    blocked_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

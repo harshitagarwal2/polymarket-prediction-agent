@@ -101,7 +101,7 @@ Resume only when venue truth looks healthy again and the clean resume check has 
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-fair-value-age-seconds 900 \
   --max-cycles 1
 ```
@@ -120,7 +120,7 @@ Use this until the following are boring and explainable:
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-fair-value-age-seconds 900 \
   --interval-seconds 15 \
   --max-cycles 100
@@ -134,7 +134,7 @@ Only after stage 2 is stable and well understood:
 run-agent-loop \
   --venue polymarket \
   --mode run \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --max-fair-value-age-seconds 900 \
   --interval-seconds 15 \
   --max-cycles 10
@@ -150,7 +150,7 @@ If you want repeatable runtime behavior, pass `--policy-file`.
 run-agent-loop \
   --venue polymarket \
   --mode preview \
-  --fair-values-file runtime/fair_values.json \
+  --fair-values-file runtime/data/current/fair_value_manifest.json \
   --policy-file runtime/policy.json
 ```
 
@@ -172,7 +172,8 @@ Before any continuous run:
 - `uv sync --locked`
 - `uv sync --locked --extra polymarket` for Polymarket operation
 - `uv sync --locked --extra kalshi` for Kalshi operation
-- `runtime/fair_values.json` exists
+- `runtime/data/current/fair_value_manifest.json` exists
+- if you just ran `build-mappings`, `runtime/data/current/market_mappings.json` should exist for runtime selection and `runtime/data/current/market_mapping_manifest.json` should exist for structured mapping review/debugging
 - chosen state file path exists or can be created
 - chosen journal path exists or can be created
 - required venue credentials are present
@@ -182,7 +183,8 @@ For Polymarket run mode:
 
 - `POLYMARKET_PRIVATE_KEY` must be present
 - optional `POLYMARKET_FUNDER` and `POLYMARKET_ACCOUNT_ADDRESS` can be set when needed
-- optional `POLYMARKET_LIVE_USER_MARKETS` can be set to the condition IDs you want the user stream to follow
+- live user-stream condition IDs are derived from the configured fair-value manifest when available
+- optional `POLYMARKET_LIVE_USER_MARKETS` can override those derived condition IDs when you need to pin the user stream manually
 - optional `POLYMARKET_USER_WS_HOST` can override the default user websocket endpoint
 
 `run-agent-loop` fails fast when the fair-values file, policy file, or required credentials are missing.
@@ -235,6 +237,34 @@ Status can show:
 - latest runtime summary for the most recent cycle, skip, truth block, or lifecycle batch
 - venue snapshot and truth drift when `--venue` is supplied
 - Polymarket live-state and market-state overlay health
+
+### Advisory sidecar
+
+If you have offline contract-review rows, build the advisory artifact first:
+
+```bash
+operator-cli build-llm-advisory \
+  --llm-input runtime/llm_contract_rows.json \
+  --opportunity-root runtime/data \
+  --output runtime/data/current/llm_advisory.json
+```
+
+Inspect it in structured or human-readable form:
+
+```bash
+operator-cli show-llm-advisory \
+  --llm-advisory-file runtime/data/current/llm_advisory.json
+
+operator-cli show-llm-advisory \
+  --llm-advisory-file runtime/data/current/llm_advisory.json \
+  --format markdown
+
+operator-cli status --state-file runtime/safety-state.json --llm-advisory-file runtime/data/current/llm_advisory.json
+```
+
+`runtime/data/current/llm_advisory.json` is a sidecar artifact for operator review and dashboards. It does not drive `run-agent-loop`, risk checks, or execution-policy decisions.
+
+If the runtime is using a non-default policy file, pass the same `--policy-file` to `build-llm-advisory` so the preview proposal/blocking context matches the live thresholds and freeze rules.
 
 ### Pause and unpause
 

@@ -10,11 +10,13 @@ from typing import Any, Literal
 from adapters.types import Contract, OutcomeSide, Venue
 from adapters.types import MarketSummary, deserialize_market_summary
 from research.calibration import HistogramCalibrator, load_calibration_artifact
+from research.fair_value_manifest import FairValueManifestBuild
+from research.manifest_schema import FAIR_VALUE_MANIFEST_SCHEMA_VERSION
+from research.manifest_validation import validate_manifest_payload
 
 
 DevigMethod = Literal["multiplicative", "power"]
 BookAggregation = Literal["independent", "best-line"]
-FAIR_VALUE_MANIFEST_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -37,45 +39,6 @@ class SportsbookFairValueRow:
     source_bookmaker: str | None = None
     source_captured_at: datetime | None = None
     market_match_strategy: str | None = None
-
-
-@dataclass(frozen=True)
-class FairValueManifestBuild:
-    schema_version: int
-    generated_at: datetime
-    source: str
-    max_age_seconds: float | None
-    values: dict[str, dict[str, object]]
-    skipped_groups: list[dict[str, object]]
-    metadata: dict[str, object] | None = None
-
-    def _metadata_payload(self) -> dict[str, object] | None:
-        if not isinstance(self.metadata, dict):
-            return None
-
-        payload = dict(self.metadata)
-        coverage_payload = payload.get("coverage")
-        coverage = dict(coverage_payload) if isinstance(coverage_payload, dict) else {}
-        coverage["value_count"] = len(self.values)
-        coverage["skipped_group_count"] = len(self.skipped_groups)
-        payload["coverage"] = coverage
-        return payload
-
-    def to_payload(self) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "schema_version": self.schema_version,
-            "generated_at": self.generated_at.isoformat().replace("+00:00", "Z"),
-            "source": self.source,
-            "values": self.values,
-        }
-        metadata = self._metadata_payload()
-        if metadata:
-            payload["metadata"] = metadata
-        if self.max_age_seconds is not None:
-            payload["max_age_seconds"] = self.max_age_seconds
-        if self.skipped_groups:
-            payload["skipped_groups"] = self.skipped_groups
-        return payload
 
 
 def _serialize_timestamp(value: datetime) -> str:
@@ -717,7 +680,7 @@ def build_fair_value_manifest(
             "positive_rate": round(calibrator.positive_rate, 8),
             "applied_field": "fair_value",
         }
-    return FairValueManifestBuild(
+    result = FairValueManifestBuild(
         schema_version=FAIR_VALUE_MANIFEST_SCHEMA_VERSION,
         generated_at=generated_at,
         source=source,
@@ -726,3 +689,5 @@ def build_fair_value_manifest(
         skipped_groups=skipped_groups,
         metadata=metadata,
     )
+    validate_manifest_payload(result.to_payload())
+    return result
