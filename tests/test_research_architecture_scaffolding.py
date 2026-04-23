@@ -112,10 +112,10 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
                 loaded_poly.markets[0].start_time,
                 datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc),
             )
-            self.assertAlmostEqual(
-                loaded_sports.rows[0].implied_probability,
-                1 / 1.80,
-            )
+            implied_probability = loaded_sports.rows[0].implied_probability
+            if implied_probability is None:
+                self.fail("expected implied_probability to be populated")
+            self.assertAlmostEqual(float(implied_probability), 1 / 1.80)
             self.assertEqual(
                 loaded_sports.rows[0].start_time,
                 datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc),
@@ -152,10 +152,10 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
         self.assertEqual(market_features["time_to_start_minutes"], 120.0)
         self.assertEqual(merged["home_team"], "A")
         self.assertEqual(sports_features["selection_is_home"], 1.0)
-        self.assertAlmostEqual(
-            sports_features["selection_implied_probability"],
-            1 / 1.8,
-        )
+        selection_implied_probability = sports_features["selection_implied_probability"]
+        if not isinstance(selection_implied_probability, float):
+            self.fail("expected selection_implied_probability to be a float")
+        self.assertAlmostEqual(float(selection_implied_probability), 1 / 1.8)
         self.assertEqual(sports_features["time_to_start_minutes"], 120.0)
         self.assertGreater(blend_probability(0.6, 0.7, model_weight=0.5), 0.6)
 
@@ -204,7 +204,10 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         metadata = rows[0].metadata
-        self.assertAlmostEqual(metadata["selection_implied_probability"], 1 / 1.8)
+        selection_implied_probability = metadata["selection_implied_probability"]
+        if not isinstance(selection_implied_probability, float):
+            self.fail("expected selection_implied_probability metadata to be a float")
+        self.assertAlmostEqual(float(selection_implied_probability), 1 / 1.8)
         self.assertEqual(metadata["market_quoted_liquidity"], 30.0)
         self.assertEqual(metadata["market_market_count"], 1.0)
         self.assertEqual(metadata["market_time_to_start_minutes"], 180.0)

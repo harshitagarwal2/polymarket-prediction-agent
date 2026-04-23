@@ -24,6 +24,11 @@ DOCS_WITH_POLICY_GUIDANCE = (
     REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
     REPO_ROOT / "docs" / "FORECASTING_PLATFORM.md",
 )
+DOCS_WITH_DATASET_COMMANDS = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "docs" / "GETTING_STARTED.md",
+    REPO_ROOT / "docs" / "VERIFICATION_SPORTS_POLYMARKET.md",
+)
 
 
 class DocsSyncTests(unittest.TestCase):
@@ -59,6 +64,14 @@ class DocsSyncTests(unittest.TestCase):
         text = (REPO_ROOT / "README.md").read_text()
         self.assertIn("Run advisory and docs contract regressions", text)
         self.assertIn("compileall", text)
+
+    def test_dataset_materialization_commands_are_documented(self):
+        for path in DOCS_WITH_DATASET_COMMANDS:
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("build-inference-dataset", text)
+                self.assertIn("build-training-dataset", text)
+                self.assertIn("historical-training-dataset", text)
 
 
 if __name__ == "__main__":
