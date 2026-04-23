@@ -1468,6 +1468,39 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertIn('"preview_order_proposal_count": 0', rendered)
         self.assertIn("market within pre-start freeze window", rendered)
 
+    def test_build_preview_order_proposals_uses_current_state_read_adapter(self):
+        current_state_adapter = object()
+        preview_context = SimpleNamespace(
+            preview_order_proposals=({"market_id": "pm-1"},),
+            blocked_preview_orders=({"market_id": "pm-2"},),
+        )
+
+        with (
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=current_state_adapter,
+            ) as build_read_adapter,
+            patch.object(
+                run_agent_loop,
+                "build_preview_runtime_context",
+                return_value=preview_context,
+            ) as build_preview_context,
+        ):
+            proposals, blocked = run_agent_loop._build_preview_order_proposals(
+                SimpleNamespace(opportunity_root="runtime/data"),
+                None,
+            )
+
+        self.assertEqual(proposals, [{"market_id": "pm-1"}])
+        self.assertEqual(blocked, [{"market_id": "pm-2"}])
+        build_read_adapter.assert_called_once_with("runtime/data")
+        build_preview_context.assert_called_once_with(
+            "runtime/data",
+            policy=None,
+            read_adapter=current_state_adapter,
+        )
+
     def test_main_preview_blocks_when_current_bbo_is_stale(self):
         adapter = FakeAdapter()
         fake_engine = SimpleNamespace(

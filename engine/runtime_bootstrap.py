@@ -8,6 +8,10 @@ from typing import TYPE_CHECKING, Any
 from adapters.base import TradingAdapter
 from adapters.kalshi import KalshiAdapter, KalshiConfig
 from adapters.polymarket import PolymarketAdapter, PolymarketConfig
+from storage.current_read_adapter import (
+    CurrentStateReadAdapter,
+    FileCurrentStateReadAdapter,
+)
 
 if TYPE_CHECKING:
     from engine.runtime_policy import RuntimePolicy
@@ -43,6 +47,14 @@ def _load_manifest_condition_ids(path: str | None) -> list[str] | None:
         if normalized not in condition_ids:
             condition_ids.append(normalized)
     return condition_ids or None
+
+
+def build_current_state_read_adapter(
+    opportunity_root: str | Path | None,
+) -> CurrentStateReadAdapter | None:
+    if opportunity_root in (None, ""):
+        return None
+    return FileCurrentStateReadAdapter.from_opportunity_root(opportunity_root)
 
 
 def build_adapter(
@@ -84,4 +96,8 @@ def build_adapter(
     raise ValueError(f"unsupported venue: {venue_name}")
 
 
-__all__ = ["build_adapter", "parse_comma_separated"]
+__all__ = [
+    "build_adapter",
+    "build_current_state_read_adapter",
+    "parse_comma_separated",
+]
