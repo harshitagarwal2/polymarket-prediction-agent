@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Mapping, Sequence, Union
 
@@ -20,6 +20,14 @@ from research.baselines import (
     evaluate_replay_baselines,
 )
 from research.attribution import TradeAttribution, attribute_replay_result
+from research.attribution.pnl_attribution import (
+    ReplayAttributionSummary,
+    summarize_trade_attributions,
+)
+from research.eval.execution_metrics import (
+    ExecutionMetricsSummary,
+    summarize_execution_metrics,
+)
 from research.fair_values import build_fair_value_manifest, resolve_rows_to_markets
 from research.paper import PaperBroker, PaperExecutionConfig
 from research.replay import ReplayResult, ReplayRunner
@@ -187,6 +195,8 @@ class ReplayBenchmarkReport:
     mark_prices: dict[str, float]
     replay_result: ReplayResult
     trade_attributions: tuple[TradeAttribution, ...] = ()
+    execution_metrics: ExecutionMetricsSummary | None = None
+    attribution_summary: ReplayAttributionSummary | None = None
     baselines: tuple[ReplayBaselineReport, ...] = ()
 
     def to_payload(self) -> dict[str, object]:
@@ -198,11 +208,18 @@ class ReplayBenchmarkReport:
             "ending_portfolio_value": self.replay_result.ending_portfolio_value,
             "net_pnl": self.replay_result.net_pnl,
         }
+        if self.replay_result.execution_ledger:
+            payload["execution_ledger"] = [
+                trade.to_payload() for trade in self.replay_result.execution_ledger
+            ]
         if self.trade_attributions:
             payload["trade_attributions"] = [
-                attribution.to_record().__dict__
-                for attribution in self.trade_attributions
+                attribution.to_payload() for attribution in self.trade_attributions
             ]
+        if self.execution_metrics is not None:
+            payload["execution_metrics"] = self.execution_metrics.to_payload()
+        if self.attribution_summary is not None:
+            payload["attribution_summary"] = self.attribution_summary.to_payload()
         if self.baselines:
             payload["baselines"] = [
                 baseline.to_payload() for baseline in self.baselines
@@ -554,6 +571,32 @@ def _resolve_prefit_calibrator(
     return load_calibration_artifact(prefit_calibration)
 
 
+def _extract_report_fair_values(
+    report: FairValueBenchmarkReport | None,
+) -> dict[str, float]:
+    if report is None:
+        return {}
+    fair_values = {
+        row.market_key: float(row.fair_value)
+        for row in report.evaluation_rows
+        if row.fair_value is not None
+    }
+    manifest_values = report.manifest.get("values")
+    if isinstance(manifest_values, dict):
+        for market_key, payload in manifest_values.items():
+            if not isinstance(market_key, str):
+                continue
+            if isinstance(payload, (int, float)):
+                fair_values.setdefault(market_key, float(payload))
+                continue
+            if isinstance(payload, dict) and isinstance(
+                payload.get("fair_value"),
+                (int, float),
+            ):
+                fair_values.setdefault(market_key, float(payload["fair_value"]))
+    return fair_values
+
+
 def run_fair_value_benchmark(
     case: FairValueBenchmarkCase,
     *,
@@ -574,17 +617,19 @@ def run_fair_value_benchmark(
         max_age_seconds=case.max_age_seconds,
         aggregation=case.book_aggregation,
     )
+    manifest_values = dict(manifest.values or {})
+    skipped_groups = list(manifest.skipped_groups or [])
     if skipped_rows:
-        manifest.skipped_groups.extend(skipped_rows)
+        skipped_groups.extend(skipped_rows)
+        manifest = replace(manifest, skipped_groups=skipped_groups)
     manifest_payload = manifest.to_payload()
-    resolved_market_keys = tuple(sorted(manifest.values.keys()))
+    resolved_market_keys = tuple(sorted(manifest_values.keys()))
     missing_market_keys = _ensure_required_market_keys(
         expected_market_keys=case.expected_market_keys,
         resolved_market_keys=resolved_market_keys,
     )
-    skipped_groups = list(manifest.skipped_groups)
 
-    manifest_probabilities = _manifest_probability_map(manifest.values)
+    manifest_probabilities = _manifest_probability_map(manifest_values)
     model_market_probabilities = _build_model_market_probabilities(
         case,
         resolved_market_keys,
@@ -663,7 +708,7 @@ def run_fair_value_benchmark(
 
     if case.outcome_labels:
         evaluation_rows = _build_fair_value_evaluation_rows(
-            manifest_values=manifest.values,
+            manifest_values=manifest_values,
             outcome_labels=case.outcome_labels,
             model_market_probabilities=model_market_probabilities,
             blended_market_probabilities=blended_market_probabilities,
@@ -685,7 +730,11 @@ def run_fair_value_benchmark(
     )
 
 
-def run_replay_benchmark(case: ReplayBenchmarkCase) -> ReplayBenchmarkReport:
+def run_replay_benchmark(
+    case: ReplayBenchmarkCase,
+    *,
+    fair_value_by_market: Mapping[str, float] | None = None,
+) -> ReplayBenchmarkReport:
     runner = ReplayRunner(
         strategy=FairValueBandStrategy(
             quantity=case.strategy.quantity,
@@ -714,16 +763,27 @@ def run_replay_benchmark(case: ReplayBenchmarkCase) -> ReplayBenchmarkReport:
                     case.broker.resting_max_fill_ratio_per_step
                 ),
                 resting_fill_delay_steps=case.broker.resting_fill_delay_steps,
+                stale_after_steps=case.broker.stale_after_steps,
+                price_move_bps_per_step=case.broker.price_move_bps_per_step,
             ),
         ),
     )
     result = runner.run(case.materialize_steps())
+    execution_ledger_payloads = [
+        trade.to_payload() for trade in result.execution_ledger
+    ]
+    trade_attributions = attribute_replay_result(
+        result,
+        fair_value_by_market=fair_value_by_market,
+    )
     return ReplayBenchmarkReport(
         score=score_replay_result(result),
         ending_positions=dict(result.ending_positions),
         mark_prices=dict(result.mark_prices),
         replay_result=result,
-        trade_attributions=attribute_replay_result(result),
+        trade_attributions=trade_attributions,
+        execution_metrics=summarize_execution_metrics(execution_ledger_payloads),
+        attribution_summary=summarize_trade_attributions(trade_attributions),
         baselines=evaluate_replay_baselines(case),
     )
 
@@ -733,19 +793,23 @@ def run_benchmark_case(
     *,
     prefit_calibration: CalibrationArtifactSource | None = None,
 ) -> SportsBenchmarkReport:
+    fair_value_report = (
+        run_fair_value_benchmark(
+            case.fair_value_case,
+            prefit_calibration=prefit_calibration,
+        )
+        if case.fair_value_case is not None
+        else None
+    )
     return SportsBenchmarkReport(
         case_name=case.name,
         description=case.description,
-        fair_value_report=(
-            run_fair_value_benchmark(
-                case.fair_value_case,
-                prefit_calibration=prefit_calibration,
-            )
-            if case.fair_value_case is not None
-            else None
-        ),
+        fair_value_report=fair_value_report,
         replay_report=(
-            run_replay_benchmark(case.replay_case)
+            run_replay_benchmark(
+                case.replay_case,
+                fair_value_by_market=_extract_report_fair_values(fair_value_report),
+            )
             if case.replay_case is not None
             else None
         ),

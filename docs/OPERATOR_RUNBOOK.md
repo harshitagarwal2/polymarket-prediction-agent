@@ -174,6 +174,7 @@ Before any continuous run:
 - `uv sync --locked --extra kalshi` for Kalshi operation
 - `runtime/data/current/fair_value_manifest.json` exists
 - if you just ran `build-mappings`, `runtime/data/current/market_mappings.json` should exist for runtime selection and `runtime/data/current/market_mapping_manifest.json` should exist for structured mapping review/debugging
+- if you are using the research dataset builders, `runtime/data/processed/inference/joined_inference_dataset.jsonl` and/or `runtime/data/processed/training/historical_training_dataset.jsonl` should exist, with matching versioned snapshots under `runtime/data/datasets`
 - chosen state file path exists or can be created
 - chosen journal path exists or can be created
 - required venue credentials are present

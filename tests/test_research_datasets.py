@@ -35,7 +35,9 @@ class ResearchDatasetTests(unittest.TestCase):
 
             self.assertEqual(paths.root.name, "data")
             for path in expected_paths:
-                self.assertTrue(path.exists(), msg=f"expected directory to exist: {path}")
+                self.assertTrue(
+                    path.exists(), msg=f"expected directory to exist: {path}"
+                )
 
     def test_inference_quality_checks_collect_blocked_reasons(self):
         result = evaluate_inference_quality(
@@ -113,6 +115,59 @@ class ResearchDatasetTests(unittest.TestCase):
             registry_payload["datasets"]["sports-rows"]["latest_version"],
             "v2",
         )
+
+    def test_rows_snapshot_can_round_trip_empty_dataset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")
+            manifest = registry.write_rows_snapshot(
+                "empty-rows",
+                [],
+                version="v1",
+                metadata={"source": "test"},
+            )
+            rows = registry.read_rows("empty-rows", version="v1")
+            registry_payload = json.loads(registry.registry_path.read_text())
+
+        self.assertEqual(manifest.record_count, 0)
+        self.assertEqual(manifest.records, ())
+        self.assertEqual(rows, [])
+        self.assertEqual(
+            registry_payload["datasets"]["empty-rows"]["versions"]["v1"][
+                "record_count"
+            ],
+            0,
+        )
+
+    def test_rows_snapshot_rejects_dataset_dir_path_escape(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "datasets"
+            registry = _datasets_module().DatasetRegistry(root)
+            registry.registry_path.write_text(
+                json.dumps(
+                    {
+                        "datasets": {
+                            "sports-rows": {
+                                "dataset_name": "sports-rows",
+                                "dataset_dir": "../../escape",
+                                "latest_version": "v1",
+                                "versions": {},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset_dir must stay within the dataset registry root",
+            ):
+                registry.write_rows_snapshot(
+                    "sports-rows",
+                    [{"record_id": "row-1", "recorded_at": "2026-04-01T12:00:00Z"}],
+                    version="v1",
+                    record_id_field="record_id",
+                )
 
     def test_generate_walk_forward_splits_over_dated_row_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:

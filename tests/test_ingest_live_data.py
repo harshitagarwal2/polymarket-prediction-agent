@@ -2118,6 +2118,170 @@ class IngestLiveDataTests(unittest.TestCase):
         )
         self.assertEqual(latest_rows[0]["metadata"]["market_market_count"], 1.0)
 
+    def test_build_inference_dataset_supports_empty_runtime_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+
+            result = ingest_live_data.main(
+                ["build-inference-dataset", "--root", str(root), "--quiet"]
+            )
+
+            latest_rows_path = (
+                root / "processed" / "inference" / "joined_inference_dataset.jsonl"
+            )
+            latest_rows = latest_rows_path.read_text(encoding="utf-8")
+            registry = DatasetRegistry(root / "datasets")
+            manifest = registry.load_snapshot("joined-inference-dataset")
+            snapshot_rows = registry.read_rows("joined-inference-dataset")
+            source_health = json.loads(
+                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(latest_rows, "")
+        self.assertEqual(manifest.record_count, 0)
+        self.assertEqual(snapshot_rows, [])
+        self.assertEqual(source_health["joined_inference_dataset"]["status"], "ok")
+        self.assertEqual(
+            source_health["joined_inference_dataset"]["details"]["row_count"], 0
+        )
+
+    def test_build_training_dataset_supports_empty_rows_payload(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            training_input = Path(temp_dir) / "sports-inputs.json"
+            training_input.write_text(
+                json.dumps(
+                    {
+                        "source": "sports-inputs",
+                        "captured_at": "2026-04-21T18:00:00Z",
+                        "rows": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = ingest_live_data.main(
+                [
+                    "build-training-dataset",
+                    "--input",
+                    str(training_input),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+            latest_rows_path = (
+                root / "processed" / "training" / "historical_training_dataset.jsonl"
+            )
+            latest_rows = latest_rows_path.read_text(encoding="utf-8")
+            registry = DatasetRegistry(root / "datasets")
+            manifest = registry.load_snapshot("historical-training-dataset")
+            snapshot_rows = registry.read_rows("historical-training-dataset")
+            source_health = json.loads(
+                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(latest_rows, "")
+        self.assertEqual(manifest.record_count, 0)
+        self.assertEqual(snapshot_rows, [])
+        self.assertEqual(source_health["historical_training_dataset"]["status"], "ok")
+        self.assertEqual(
+            source_health["historical_training_dataset"]["details"]["row_count"],
+            0,
+        )
+
+    def test_build_training_dataset_keeps_fixed_schema_and_unique_record_ids(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            training_input = Path(temp_dir) / "sports-inputs.json"
+            captured_at = "2026-04-21T18:00:00Z"
+            training_input.write_text(
+                json.dumps(
+                    {
+                        "source": "sports-inputs",
+                        "captured_at": captured_at,
+                        "rows": [
+                            {
+                                "home_team": "Home Team",
+                                "away_team": "Away Team",
+                                "label": 0,
+                                "event_key": "event-1",
+                                "game_id": "game-1",
+                                "sport": "nba",
+                                "series": "playoffs",
+                                "sports_market_type": "moneyline",
+                                "selection_name": "Home Team",
+                                "bookmaker": "book-a",
+                                "decimal_odds": 1.8,
+                                "start_time": "2026-04-21T20:00:00Z",
+                            },
+                            {
+                                "home_team": "Home Team",
+                                "away_team": "Away Team",
+                                "label": 1,
+                                "event_key": "event-1",
+                                "game_id": "game-1",
+                                "sport": "nba",
+                                "series": "playoffs",
+                                "sports_market_type": "moneyline",
+                                "selection_name": "Home Team",
+                                "bookmaker": "book-b",
+                                "decimal_odds": 1.9,
+                                "start_time": "2026-04-21T20:00:00Z",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = ingest_live_data.main(
+                [
+                    "build-training-dataset",
+                    "--input",
+                    str(training_input),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+            latest_rows_path = (
+                root / "processed" / "training" / "historical_training_dataset.jsonl"
+            )
+            latest_rows = [
+                json.loads(line)
+                for line in latest_rows_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(result, 0)
+        self.assertEqual([row["label"] for row in latest_rows], [0, 1])
+        self.assertEqual(len({row["record_id"] for row in latest_rows}), 2)
+        expected_keys = {
+            "home_team",
+            "away_team",
+            "label",
+            "record_id",
+            "recorded_at",
+            "event_key",
+            "sport",
+            "series",
+            "game_id",
+            "sports_market_type",
+            "source",
+            "market_key",
+            "condition_id",
+            "metadata",
+        }
+        for row in latest_rows:
+            self.assertEqual(set(row.keys()), expected_keys)
+            self.assertIsNone(row["market_key"])
+            self.assertIsNone(row["condition_id"])
+
     def test_build_opportunities_uses_current_fair_values_over_history_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"

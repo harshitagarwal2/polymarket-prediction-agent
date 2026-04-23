@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 import os
 import tempfile
@@ -93,7 +94,9 @@ def _run_refresh_cycle_impl(args) -> dict[str, object]:
         aggregation=args.book_aggregation,
     )
     if skipped_rows:
-        manifest.skipped_groups.extend(skipped_rows)
+        skipped_groups = list(manifest.skipped_groups or [])
+        skipped_groups.extend(skipped_rows)
+        manifest = replace(manifest, skipped_groups=skipped_groups)
     _atomic_write_json(args.output, manifest.to_payload())
     status_payload = {
         "ok": True,
@@ -103,7 +106,7 @@ def _run_refresh_cycle_impl(args) -> dict[str, object]:
         "market_count": len(markets),
         "row_count": len(rows),
         "resolved_row_count": len(resolved_rows),
-        "skipped_group_count": len(manifest.skipped_groups),
+        "skipped_group_count": len(manifest.skipped_groups or []),
         "output": str(Path(args.output)),
         "book_aggregation": args.book_aggregation,
         "devig_method": args.devig_method,

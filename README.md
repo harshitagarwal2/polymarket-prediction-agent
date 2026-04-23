@@ -170,9 +170,23 @@ python -m scripts.ingest_live_data build-fair-values \
   --root runtime/data \
   --consensus-artifact runtime/consensus_artifact.json \
   --calibration-artifact runtime/calibration_artifact.json
+
+python -m scripts.ingest_live_data build-inference-dataset \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-training-dataset \
+  --input runtime/sports_inputs_labeled.json \
+  --polymarket-input runtime/polymarket_markets.json \
+  --root runtime/data
+
+python -m scripts.train_models \
+  --model elo \
+  --training-dataset historical-training-dataset \
+  --dataset-root runtime/data/datasets \
+  --output runtime/elo_artifact.json
 ```
 
-That live path keeps sportsbook event identity (`event_key` / `game_id`) in the current-state mapping flow and lets the consensus artifact configure the deterministic fair-value snapshot builder. `build-mappings` still writes the flat selector-facing snapshot to `runtime/data/current/market_mappings.json`, and now also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, identity metadata, and rule semantics for each mapped Polymarket market. If you also pass a calibration artifact, the live snapshot keeps raw `fair_yes_prob` in `runtime/data/current/fair_values.json`, adds sibling `calibrated_fair_yes_prob`, and projects `calibrated_fair_value` plus calibration metadata into `runtime/data/current/fair_value_manifest.json`. The standalone `build-fair-values` entrypoint above remains the research/manifest builder.
+That live path keeps sportsbook event identity (`event_key` / `game_id`) in the current-state mapping flow and lets the consensus artifact configure the deterministic fair-value snapshot builder. `build-mappings` still writes the flat selector-facing snapshot to `runtime/data/current/market_mappings.json`, and now also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, identity metadata, and rule semantics for each mapped Polymarket market. If you also pass a calibration artifact, the live snapshot keeps raw `fair_yes_prob` in `runtime/data/current/fair_values.json`, adds sibling `calibrated_fair_yes_prob`, and projects `calibrated_fair_value` plus calibration metadata into `runtime/data/current/fair_value_manifest.json`. `build-inference-dataset` materializes the latest joined inference rows at `runtime/data/processed/inference/joined_inference_dataset.jsonl` and also registers a versioned `joined-inference-dataset` snapshot under `runtime/data/datasets`. `build-training-dataset` does the same for labeled training rows at `runtime/data/processed/training/historical_training_dataset.jsonl` and the `historical-training-dataset` snapshot that `train-models --training-dataset ...` can now consume directly.
 
 The checked-in sample league configs now carry those live defaults too, so the same flow can be driven with fewer flags:
 
@@ -204,6 +218,17 @@ ingest-live-data \
 train-models \
   --config-file configs/sports_nba.yaml \
   --training-data runtime/sports_inputs_labeled.json \
+  --output runtime/elo_artifact.json
+
+python -m scripts.ingest_live_data build-training-dataset \
+  --input runtime/sports_inputs_labeled.json \
+  --polymarket-input runtime/polymarket_markets.json \
+  --root runtime/data
+
+train-models \
+  --model elo \
+  --training-dataset historical-training-dataset \
+  --dataset-root runtime/data/datasets \
   --output runtime/elo_artifact.json
 
 build-fair-values \
@@ -309,11 +334,12 @@ The benchmark stack is useful when you want a reproducible offline slice of the 
 
 ## CI
 
-`.github/workflows/python-ci.yml` currently does four things on pushes and pull requests:
+`.github/workflows/python-ci.yml` currently does five things on pushes and pull requests:
 
 - checks that `uv.lock` matches the dependency declarations
 - installs the package from the committed lockfile
-- compiles the key runtime and research modules with `py_compile`
+- compiles the key runtime and research modules with `python -m compileall -q`
+- runs the focused **Run advisory and docs contract regressions** unittest step
 - runs `python -m unittest discover -s tests -p "test_*.py"`
 
 ## Citation and release metadata

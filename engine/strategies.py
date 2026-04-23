@@ -28,6 +28,9 @@ class FairValueBandStrategy:
         best_bid = context.book.best_bid
         best_ask = context.book.best_ask
 
+        if best_bid is not None and best_ask is not None and best_bid >= best_ask:
+            return intents
+
         if best_ask is not None and fair_value >= best_ask + self.edge_threshold:
             buy_price = (
                 best_ask

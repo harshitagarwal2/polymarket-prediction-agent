@@ -174,9 +174,23 @@ python -m scripts.ingest_live_data build-fair-values \
   --root runtime/data \
   --consensus-artifact runtime/consensus_artifact.json \
   --calibration-artifact runtime/calibration_artifact.json
+
+python -m scripts.ingest_live_data build-inference-dataset \
+  --root runtime/data
+
+python -m scripts.ingest_live_data build-training-dataset \
+  --input runtime/sports_inputs_labeled.json \
+  --polymarket-input runtime/polymarket_markets.json \
+  --root runtime/data
+
+python -m scripts.train_models \
+  --model elo \
+  --training-dataset historical-training-dataset \
+  --dataset-root runtime/data/datasets \
+  --output runtime/elo_artifact.json
 ```
 
-The `--event-map-file` input enriches live sportsbook events with stable identity fields such as `event_key` and `game_id`. `build-mappings` now fails closed if that upstream identity is missing, keeps the flat runtime selector snapshot in `runtime/data/current/market_mappings.json`, and also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, event identity, and rule-semantics details for each mapping decision. `build-fair-values --consensus-artifact ...` uses the consensus artifact as deterministic inference configuration for the current-state fair-value snapshot builder, and the optional `--calibration-artifact ...` overlay adds sibling `calibrated_fair_yes_prob` / `calibrated_fair_value` outputs without changing the raw baseline fields.
+The `--event-map-file` input enriches live sportsbook events with stable identity fields such as `event_key` and `game_id`. `build-mappings` now fails closed if that upstream identity is missing, keeps the flat runtime selector snapshot in `runtime/data/current/market_mappings.json`, and also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, event identity, and rule-semantics details for each mapping decision. `build-fair-values --consensus-artifact ...` uses the consensus artifact as deterministic inference configuration for the current-state fair-value snapshot builder, and the optional `--calibration-artifact ...` overlay adds sibling `calibrated_fair_yes_prob` / `calibrated_fair_value` outputs without changing the raw baseline fields. `build-inference-dataset` then writes the latest joined inference rows to `runtime/data/processed/inference/joined_inference_dataset.jsonl` and registers a versioned `joined-inference-dataset` snapshot. `build-training-dataset` writes `runtime/data/processed/training/historical_training_dataset.jsonl`, registers a versioned `historical-training-dataset` snapshot, and enables `train-models --training-dataset historical-training-dataset --dataset-root runtime/data/datasets` for downstream model fitting.
 
 The checked-in sample configs now include `capture.sport_key`, `runtime.sportsbook_market`, `runtime.event_map_file`, `runtime.consensus_artifact`, and an optional `runtime.calibration_artifact` key, so the live/current-state flow can also be driven from config defaults:
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from research.benchmark_suite import BenchmarkSuiteReport
 
 
@@ -7,6 +9,12 @@ def _format_float(value: float | None, digits: int = 6) -> str:
     if value is None:
         return "n/a"
     return f"{value:.{digits}f}"
+
+
+def _escape_markdown_text(value: object) -> str:
+    text = html.escape(str(value), quote=False)
+    text = text.replace("|", "\\|")
+    return " ".join(text.splitlines())
 
 
 def _format_confidence_interval(payload: object) -> str:
@@ -55,7 +63,19 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
             f"- Average calibrated ECE improvement: {_format_float(aggregate.average_calibrated_expected_calibration_error_improvement)}",
             f"- Average replay net PnL: {_format_float(aggregate.average_replay_net_pnl, 4)}",
             f"- Average replay return %: {_format_float(aggregate.average_replay_return_pct, 4)}",
+            f"- Average replay fill rate: {_format_float(aggregate.average_replay_fill_rate, 4)}",
+            f"- Average replay complete-fill rate: {_format_float(aggregate.average_replay_complete_fill_rate, 4)}",
+            f"- Average replay partial-fill rate: {_format_float(aggregate.average_replay_partial_fill_rate, 4)}",
+            f"- Average replay fill ratio: {_format_float(aggregate.average_replay_fill_ratio, 4)}",
+            f"- Average replay wait steps: {_format_float(aggregate.average_replay_wait_steps, 4)}",
+            f"- Average replay slippage (bps): {_format_float(aggregate.average_replay_slippage_bps, 4)}",
+            f"- Replay stale rows: {aggregate.replay_stale_data_count}",
+            f"- Average signal edge (bps): {_format_float(aggregate.average_signal_edge_bps, 4)}",
+            f"- Average execution drag (bps): {_format_float(aggregate.average_execution_drag_bps, 4)}",
+            f"- Average model residual (bps): {_format_float(aggregate.average_model_residual_bps, 4)}",
+            f"- Average closing edge (bps): {_format_float(aggregate.average_closing_edge_bps, 4)}",
             f"- Edge ledger rows: {aggregate.edge_ledger_row_count}",
+            f"- Execution ledger rows: {aggregate.execution_ledger_row_count}",
             "",
         ]
     )
@@ -85,7 +105,7 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
         )
         lines.append(
             "| {case_name} | {brier} | {log_loss} | {net_pnl} | {return_pct} |".format(
-                case_name=case.report.case_name,
+                case_name=_escape_markdown_text(case.report.case_name),
                 brier=_format_float(
                     fair_value_score.brier_score
                     if fair_value_score is not None
@@ -136,7 +156,7 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
             metric_delta = calibration.get("metric_delta")
             lines.append(
                 "| {case_name} | {raw_brier} | {calibrated_brier} | {brier_improvement} | {raw_log_loss} | {calibrated_log_loss} | {log_loss_improvement} | {raw_ece} | {calibrated_ece} | {ece_improvement} |".format(
-                    case_name=case.report.case_name,
+                    case_name=_escape_markdown_text(case.report.case_name),
                     raw_brier=_format_float(raw_score.brier_score),
                     calibrated_brier=_format_float(calibrated_score.brier_score),
                     brier_improvement=_format_float(
@@ -175,7 +195,7 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
         )
         for name, payload in sorted(aggregate.fair_value_baseline_deltas.items()):
             lines.append(
-                f"| {name} | {payload['case_count']} | {_format_float(payload['average_brier_delta'])} | {_format_float(payload['average_log_loss_delta'])} |"
+                f"| {_escape_markdown_text(name)} | {payload['case_count']} | {_format_float(payload['average_brier_delta'])} | {_format_float(payload['average_log_loss_delta'])} |"
             )
         lines.append("")
 
@@ -202,7 +222,7 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
                     continue
                 lines.append(
                     "| {comparison} | {metric} | {case_count} | {row_count} | {mean_diff} | {confidence_interval} | {test_statistic} | {p_value} |".format(
-                        comparison=name,
+                        comparison=_escape_markdown_text(name),
                         metric=metric_name,
                         case_count=case_count,
                         row_count=row_count,
@@ -246,14 +266,89 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
         )
         for name, payload in sorted(aggregate.replay_baseline_deltas.items()):
             lines.append(
-                f"| {name} | {payload['case_count']} | {_format_float(payload['average_net_pnl_delta'], 4)} | {_format_float(payload['average_return_pct_delta'], 4)} |"
+                f"| {_escape_markdown_text(name)} | {payload['case_count']} | {_format_float(payload['average_net_pnl_delta'], 4)} | {_format_float(payload['average_return_pct_delta'], 4)} |"
+            )
+        lines.append("")
+
+    replay_cases_with_metrics = [
+        case
+        for case in report.case_results
+        if case.report.replay_report is not None
+        and case.report.replay_report.execution_metrics is not None
+    ]
+    if replay_cases_with_metrics:
+        lines.extend(
+            [
+                "## Replay execution realism",
+                "",
+                "| Case | Fill Rate | Complete Fill Rate | Partial Fill Rate | Avg Fill Ratio | Avg Wait Steps | Avg Slippage (bps) | Stale Rows |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for case in replay_cases_with_metrics:
+            replay_report = case.report.replay_report
+            if replay_report is None or replay_report.execution_metrics is None:
+                continue
+            metrics = replay_report.execution_metrics
+            lines.append(
+                "| {case_name} | {fill_rate} | {complete_fill_rate} | {partial_fill_rate} | {fill_ratio} | {wait_steps} | {slippage} | {stale_rows} |".format(
+                    case_name=_escape_markdown_text(case.report.case_name),
+                    fill_rate=_format_float(metrics.fill_rate, 4),
+                    complete_fill_rate=_format_float(metrics.complete_fill_rate, 4),
+                    partial_fill_rate=_format_float(metrics.partial_fill_rate, 4),
+                    fill_ratio=_format_float(metrics.average_fill_ratio, 4),
+                    wait_steps=_format_float(metrics.average_wait_steps, 4),
+                    slippage=_format_float(metrics.average_realized_slippage_bps, 4),
+                    stale_rows=metrics.stale_data_count,
+                )
+            )
+        lines.append("")
+
+    replay_cases_with_attribution = [
+        case
+        for case in report.case_results
+        if case.report.replay_report is not None
+        and case.report.replay_report.attribution_summary is not None
+    ]
+    if replay_cases_with_attribution:
+        lines.extend(
+            [
+                "## Replay attribution summary",
+                "",
+                "| Case | Trades | Avg Signal Edge (bps) | Avg Execution Drag (bps) | Avg Model Residual (bps) | Avg Closing Edge (bps) | Total PnL |",
+                "|---|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for case in replay_cases_with_attribution:
+            replay_report = case.report.replay_report
+            if replay_report is None or replay_report.attribution_summary is None:
+                continue
+            summary = replay_report.attribution_summary
+            lines.append(
+                "| {case_name} | {trade_count} | {signal_edge} | {execution_drag} | {model_residual} | {closing_edge} | {total_pnl} |".format(
+                    case_name=_escape_markdown_text(case.report.case_name),
+                    trade_count=summary.trade_count,
+                    signal_edge=_format_float(summary.average_signal_edge_bps, 4),
+                    execution_drag=_format_float(
+                        summary.average_execution_drag_bps,
+                        4,
+                    ),
+                    model_residual=_format_float(
+                        summary.average_model_residual_bps,
+                        4,
+                    ),
+                    closing_edge=_format_float(summary.average_closing_edge_bps, 4),
+                    total_pnl=_format_float(summary.total_pnl, 4),
+                )
             )
         lines.append("")
 
     if report.failures:
         lines.extend(["## Failures", ""])
         for failure in report.failures:
-            lines.append(f"- `{failure.case_path}` — {failure.error}")
+            lines.append(
+                f"- `{_escape_markdown_text(failure.case_path)}` — {_escape_markdown_text(failure.error)}"
+            )
         lines.append("")
 
     return "\n".join(lines).strip() + "\n"

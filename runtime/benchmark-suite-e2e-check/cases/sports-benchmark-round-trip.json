@@ -2,10 +2,127 @@
   "case_name": "sports-benchmark-round-trip",
   "description": "Replay-only benchmark case that performs a round-trip trade and compares against a no-trade baseline.",
   "replay": {
+    "attribution_summary": {
+      "average_closing_edge_bps": 700.0,
+      "average_execution_drag_bps": 0.0,
+      "average_fill_ratio": 1.0,
+      "average_model_residual_bps": -250.0,
+      "average_realized_edge_bps": 950.0,
+      "average_signal_edge_bps": 950.0,
+      "average_value_capture_bps": 950.0,
+      "resting_trade_count": 0,
+      "stale_data_count": 0,
+      "total_pnl": 0.7,
+      "trade_count": 2
+    },
+    "baselines": [
+      {
+        "description": "No-trade replay baseline for strategy comparison.",
+        "name": "noop_strategy",
+        "score": {
+          "buy_trade_count": 0,
+          "ending_cash": 100.0,
+          "ending_portfolio_value": 100.0,
+          "event_count": 2,
+          "filled_trade_count": 0,
+          "net_pnl": 0.0,
+          "rejection_count": 0,
+          "return_pct": 0.0,
+          "sell_trade_count": 0,
+          "trade_count": 0
+        }
+      }
+    ],
     "ending_cash": 100.7,
     "ending_portfolio_value": 100.7,
     "ending_positions": {
       "token-round-trip:yes": 0.0
+    },
+    "execution_ledger": [
+      {
+        "action": "buy",
+        "decision_best_ask": 0.5,
+        "decision_best_bid": 0.45,
+        "decision_fair_value": 0.6,
+        "decision_midpoint": 0.475,
+        "decision_reference_price": 0.5,
+        "expected_edge_bps": 1000.0,
+        "fill_ratio": 1.0,
+        "fill_step": 1,
+        "filled": true,
+        "filled_quantity": 5.0,
+        "levels_consumed": 1,
+        "limit_price": 0.5,
+        "market_id": "token-round-trip:yes",
+        "metadata": {
+          "replay_step_index": 0
+        },
+        "order_id": "paper-1",
+        "partial_fill": false,
+        "price": 0.5,
+        "price_move_bps": 0.0,
+        "realized_edge_bps": 1000.0,
+        "reason": "book crossed",
+        "remaining_quantity": 0.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "submitted_step": 1,
+        "visible_quantity": 5.0,
+        "wait_steps": 0
+      },
+      {
+        "action": "sell",
+        "decision_best_ask": 0.66,
+        "decision_best_bid": 0.64,
+        "decision_fair_value": 0.55,
+        "decision_midpoint": 0.65,
+        "decision_reference_price": 0.64,
+        "expected_edge_bps": 900.0,
+        "fill_ratio": 1.0,
+        "fill_step": 2,
+        "filled": true,
+        "filled_quantity": 5.0,
+        "levels_consumed": 1,
+        "limit_price": 0.64,
+        "market_id": "token-round-trip:yes",
+        "metadata": {
+          "replay_step_index": 1
+        },
+        "order_id": "paper-2",
+        "partial_fill": false,
+        "price": 0.64,
+        "price_move_bps": 0.0,
+        "realized_edge_bps": 900.0,
+        "reason": "book crossed",
+        "remaining_quantity": 0.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "submitted_step": 2,
+        "visible_quantity": 10.0,
+        "wait_steps": 0
+      }
+    ],
+    "execution_metrics": {
+      "average_expected_edge_bps": 950.0,
+      "average_fill_ratio": 1.0,
+      "average_filled_quantity": 5.0,
+      "average_realized_edge_bps": 950.0,
+      "average_realized_slippage_bps": 0.0,
+      "average_requested_quantity": 5.0,
+      "average_visible_fill_ratio": 0.75,
+      "average_wait_steps": 0.0,
+      "complete_fill_count": 2,
+      "complete_fill_rate": 1.0,
+      "fill_rate": 1.0,
+      "filled_trade_count": 2,
+      "partial_fill_count": 0,
+      "partial_fill_rate": 0.0,
+      "stale_data_count": 0,
+      "trade_count": 2
     },
     "mark_prices": {
       "token-round-trip:yes": 0.65
@@ -22,6 +139,60 @@
       "return_pct": 0.7000000000000028,
       "sell_trade_count": 1,
       "trade_count": 2
-    }
+    },
+    "trade_attributions": [
+      {
+        "closing_edge_bps": 1500.0,
+        "execution_drag_bps": 0.0,
+        "expected_edge_bps": 1000.0,
+        "fill_ratio": 1.0,
+        "filled_quantity": 5.0,
+        "mapping_risk": 0.0,
+        "market_id": "token-round-trip:yes",
+        "model_error": 0.0,
+        "model_residual_bps": 500.0,
+        "notes": {
+          "fill_step": 1,
+          "reason": "book crossed",
+          "submitted_step": 1
+        },
+        "pnl": 0.75,
+        "realized_edge_bps": 1000.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "signal_edge_bps": 1000.0,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "trade_id": "paper-1:fill-1:0",
+        "value_capture_bps": 1000.0,
+        "wait_steps": 0
+      },
+      {
+        "closing_edge_bps": -100.0,
+        "execution_drag_bps": 0.0,
+        "expected_edge_bps": 900.0,
+        "fill_ratio": 1.0,
+        "filled_quantity": 5.0,
+        "mapping_risk": 0.0,
+        "market_id": "token-round-trip:yes",
+        "model_error": 0.0,
+        "model_residual_bps": -1000.0,
+        "notes": {
+          "fill_step": 2,
+          "reason": "book crossed",
+          "submitted_step": 2
+        },
+        "pnl": -0.05,
+        "realized_edge_bps": 900.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "signal_edge_bps": 900.0,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "trade_id": "paper-2:fill-2:1",
+        "value_capture_bps": 900.0,
+        "wait_steps": 0
+      }
+    ]
   }
 }

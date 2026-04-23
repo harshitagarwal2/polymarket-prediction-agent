@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from research.data.schemas import TrainingSetRow
 from research.models.elo import fit_elo_model, fit_elo_model_from_rows
@@ -19,9 +20,12 @@ def write_elo_artifact(
 
 
 def write_elo_artifact_from_rows(
-    rows: list[TrainingSetRow], output_path: str | Path
+    rows: list[TrainingSetRow] | list[dict[str, Any]], output_path: str | Path
 ) -> Path:
-    artifact = fit_elo_model_from_rows([row.to_payload() for row in rows])
+    payload_rows = [
+        row.to_payload() if isinstance(row, TrainingSetRow) else row for row in rows
+    ]
+    artifact = fit_elo_model_from_rows(payload_rows)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(artifact.to_payload(), indent=2, sort_keys=True))

@@ -38,11 +38,13 @@ Walk-forward dataset runs can also generate `model_fair_value` internally with `
 4. **Run the replay lane**
    - replay `FairValueBandStrategy` over the case steps
    - simulate fills with `PaperBroker`
+   - emit an execution ledger with decision-time quote context, wait steps, and fill telemetry
    - compare against replay baselines such as `noop_strategy`
 5. **Aggregate suite artifacts**
    - write per-case reports
    - write aggregate JSON and Markdown summaries
-   - write a suite-level edge ledger across fair-value evaluation rows
+    - write a suite-level edge ledger across fair-value evaluation rows
+   - write a suite-level execution ledger across replay fills and fill attempts
 
 ## Baselines
 
@@ -114,6 +116,7 @@ The suite currently writes:
 - `benchmark_suite_summary.json`
 - `benchmark_suite_summary.md`
 - `benchmark_suite_edge_ledger.json`
+- `benchmark_suite_execution_ledger.json`
 - `cases/<safe-case-name>.json`
 
 Walk-forward runs additionally write:
@@ -122,6 +125,7 @@ Walk-forward runs additionally write:
 - `splits/<split-id>/benchmark_suite_summary.json`
 - `splits/<split-id>/benchmark_suite_summary.md`
 - `splits/<split-id>/benchmark_suite_edge_ledger.json`
+- `splits/<split-id>/benchmark_suite_execution_ledger.json`
 - `splits/<split-id>/cases/<safe-case-name>.json`
 
 `walk_forward_benchmark_summary.json` includes:
@@ -137,6 +141,7 @@ Walk-forward runs additionally write:
 - `case_results`
 - `failures`
 - `edge_ledger`
+- `execution_ledger`
 
 The aggregate section includes:
 
@@ -146,6 +151,9 @@ The aggregate section includes:
 - fair-value baseline deltas
 - replay baseline deltas
 - edge-ledger row count
+- execution-ledger row count
+
+Replay execution metrics are derived from execution-ledger rows. A partially filled order can therefore contribute multiple replay rows when it fills across levels or across later resting-book advances.
 
 ## Manifest contract
 

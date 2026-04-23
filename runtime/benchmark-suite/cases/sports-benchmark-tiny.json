@@ -56,7 +56,11 @@
           "mean_prediction": 0.5,
           "positive_rate": 0.5
         },
-        "name": "bookmaker_multiplicative_independent"
+        "name": "bookmaker_multiplicative_independent",
+        "prediction_map": {
+          "token-home:no": 0.425,
+          "token-home:yes": 0.575
+        }
       },
       {
         "description": "Bookmaker de-vig baseline with power method and independent grouping.",
@@ -111,7 +115,11 @@
           "mean_prediction": 0.5,
           "positive_rate": 0.5
         },
-        "name": "bookmaker_power_independent"
+        "name": "bookmaker_power_independent",
+        "prediction_map": {
+          "token-home:no": 0.42244999,
+          "token-home:yes": 0.57755001
+        }
       },
       {
         "description": "Bookmaker de-vig baseline with multiplicative method and best-line aggregation.",
@@ -166,12 +174,26 @@
           "mean_prediction": 0.5,
           "positive_rate": 0.5
         },
-        "name": "bookmaker_multiplicative_best_line"
+        "name": "bookmaker_multiplicative_best_line",
+        "prediction_map": {
+          "token-home:no": 0.425,
+          "token-home:yes": 0.575
+        }
       },
       {
         "description": "Market midpoint baseline derived from provided market snapshots.",
         "name": "market_midpoint",
         "skipped_reason": "market snapshots do not provide complete midpoint coverage"
+      },
+      {
+        "description": "Model-only baseline derived from case-provided model fair values.",
+        "name": "model_fair_value",
+        "skipped_reason": "case does not define model fair values"
+      },
+      {
+        "description": "Logit blend of sportsbook fair values and case-provided model fair values.",
+        "name": "blended_fair_value",
+        "skipped_reason": "case does not define model blend weight"
       }
     ],
     "evaluation_rows": [
@@ -299,6 +321,7 @@
           "devig_method": "multiplicative"
         }
       },
+      "schema_version": 1,
       "source": "fixture-sports-benchmark",
       "values": {
         "token-home:no": {
@@ -340,6 +363,19 @@
     "skipped_group_count": 0
   },
   "replay": {
+    "attribution_summary": {
+      "average_closing_edge_bps": 1000.0,
+      "average_execution_drag_bps": 0.0,
+      "average_fill_ratio": 1.0,
+      "average_model_residual_bps": 0.0,
+      "average_realized_edge_bps": 1000.0,
+      "average_signal_edge_bps": 1000.0,
+      "average_value_capture_bps": 1000.0,
+      "resting_trade_count": 0,
+      "stale_data_count": 0,
+      "total_pnl": 0.5,
+      "trade_count": 1
+    },
     "baselines": [
       {
         "description": "No-trade replay baseline for strategy comparison.",
@@ -363,6 +399,59 @@
     "ending_positions": {
       "token-home:yes": 5.0
     },
+    "execution_ledger": [
+      {
+        "action": "buy",
+        "decision_best_ask": 0.5,
+        "decision_best_bid": 0.45,
+        "decision_fair_value": 0.6,
+        "decision_midpoint": 0.475,
+        "decision_reference_price": 0.5,
+        "expected_edge_bps": 1000.0,
+        "fill_ratio": 1.0,
+        "fill_step": 1,
+        "filled": true,
+        "filled_quantity": 5.0,
+        "levels_consumed": 1,
+        "limit_price": 0.5,
+        "market_id": "token-home:yes",
+        "metadata": {
+          "replay_step_index": 0
+        },
+        "order_id": "paper-1",
+        "partial_fill": false,
+        "price": 0.5,
+        "price_move_bps": 0.0,
+        "realized_edge_bps": 1000.0,
+        "reason": "book crossed",
+        "remaining_quantity": 0.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "submitted_step": 1,
+        "visible_quantity": 5.0,
+        "wait_steps": 0
+      }
+    ],
+    "execution_metrics": {
+      "average_expected_edge_bps": 1000.0,
+      "average_fill_ratio": 1.0,
+      "average_filled_quantity": 5.0,
+      "average_realized_edge_bps": 1000.0,
+      "average_realized_slippage_bps": 0.0,
+      "average_requested_quantity": 5.0,
+      "average_visible_fill_ratio": 1.0,
+      "average_wait_steps": 0.0,
+      "complete_fill_count": 1,
+      "complete_fill_rate": 1.0,
+      "fill_rate": 1.0,
+      "filled_trade_count": 1,
+      "partial_fill_count": 0,
+      "partial_fill_rate": 0.0,
+      "stale_data_count": 0,
+      "trade_count": 1
+    },
     "mark_prices": {
       "token-home:yes": 0.6
     },
@@ -378,6 +467,34 @@
       "return_pct": 0.5,
       "sell_trade_count": 0,
       "trade_count": 1
-    }
+    },
+    "trade_attributions": [
+      {
+        "closing_edge_bps": 1000.0,
+        "execution_drag_bps": 0.0,
+        "expected_edge_bps": 1000.0,
+        "fill_ratio": 1.0,
+        "filled_quantity": 5.0,
+        "mapping_risk": 0.0,
+        "market_id": "token-home:yes",
+        "model_error": 0.0,
+        "model_residual_bps": 0.0,
+        "notes": {
+          "fill_step": 1,
+          "reason": "book crossed",
+          "submitted_step": 1
+        },
+        "pnl": 0.5,
+        "realized_edge_bps": 1000.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "signal_edge_bps": 1000.0,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "trade_id": "paper-1:fill-1:0",
+        "value_capture_bps": 1000.0,
+        "wait_steps": 0
+      }
+    ]
   }
 }

@@ -73,10 +73,13 @@ class BenchmarkRunnerTests(unittest.TestCase):
         self.assertEqual(report.replay_report.score.trade_count, 1)
         self.assertAlmostEqual(report.replay_report.score.net_pnl, 0.5)
         self.assertEqual(len(report.replay_report.trade_attributions), 1)
+        self.assertIsNotNone(report.replay_report.execution_metrics)
+        self.assertIsNotNone(report.replay_report.attribution_summary)
         self.assertEqual(
             report.replay_report.trade_attributions[0].market_id,
             "token-home:yes",
         )
+        self.assertEqual(len(report.replay_report.replay_result.execution_ledger), 1)
 
     def test_write_benchmark_report_emits_json(self):
         report = load_and_run_benchmark_case(FIXTURE_PATH)
@@ -110,6 +113,31 @@ class BenchmarkRunnerTests(unittest.TestCase):
             self.fail("expected serialized replay baselines")
         self.assertEqual(baselines[0]["name"], "noop_strategy")
         self.assertIn("trade_attributions", payload)
+        self.assertIn("execution_metrics", payload)
+        self.assertIn("attribution_summary", payload)
+        self.assertIn("execution_ledger", payload)
+
+    def test_replay_trade_attributions_get_unique_ids_for_multi_fill_orders(self):
+        payload = json.loads(FIXTURE_PATH.read_text())
+        payload["replay_case"]["strategy"]["quantity"] = 5
+        payload["replay_case"]["steps"][0]["book"]["asks"][0]["quantity"] = 2
+        payload["replay_case"]["steps"][1]["book"]["asks"][0]["price"] = 0.50
+        payload["replay_case"]["steps"][1]["book"]["asks"][0]["quantity"] = 3
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+            report = load_and_run_benchmark_case(handle.name)
+
+        self.assertIsNotNone(report.replay_report)
+        if report.replay_report is None:
+            self.fail("expected replay report")
+        trade_ids = [
+            attribution.trade_id
+            for attribution in report.replay_report.trade_attributions
+        ]
+        self.assertGreater(len(trade_ids), 1)
+        self.assertEqual(len(set(trade_ids)), len(trade_ids))
 
     def test_missing_expected_market_keys_fail_closed(self):
         payload = json.loads(FIXTURE_PATH.read_text())
