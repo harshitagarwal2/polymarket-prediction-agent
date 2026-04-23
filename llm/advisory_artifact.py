@@ -135,17 +135,8 @@ def _sanitize_rendered_text(value: object) -> str:
     for character in (
         "`",
         "*",
-        "_",
-        "{",
-        "}",
         "[",
         "]",
-        "(",
-        ")",
-        "#",
-        "+",
-        "-",
-        "!",
         "|",
     ):
         sanitized = sanitized.replace(character, f"\\{character}")
