@@ -143,6 +143,17 @@ def _sanitize_rendered_text(value: object) -> str:
     return sanitized
 
 
+def _render_safe_markdown_block(value: object) -> list[str]:
+    text = _sanitize_rendered_text(value)
+    if not text:
+        return ["    "]
+    return [f"    {line}" for line in text.splitlines()]
+
+
+def _sanitize_inline_text(value: object) -> str:
+    return _sanitize_rendered_text(value).replace("\n", " ").replace("\t", " ")
+
+
 def _serialize_evidence_summary(summary: EvidenceMemo) -> dict[str, object]:
     return {
         "summary": summary.summary,
@@ -295,6 +306,10 @@ class LLMAdvisoryContractRow:
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> "LLMAdvisoryContractRow":
         llm_contract_payload = payload.get("llm_contract")
+        if llm_contract_payload is not None and not isinstance(
+            llm_contract_payload, Mapping
+        ):
+            raise ValueError("llm_contract must be an object")
         llm_contract = (
             parse_llm_contract_payload(dict(llm_contract_payload))
             if isinstance(llm_contract_payload, Mapping)
@@ -613,48 +628,48 @@ def render_llm_advisory_markdown(artifact: LLMAdvisoryArtifact) -> str:
             "## Summary",
             "",
             f"- Generated at: {artifact.generated_at.isoformat().replace('+00:00', 'Z')}",
-            f"- Source: {_sanitize_rendered_text(artifact.source)}",
-            f"- Provider: {_sanitize_rendered_text(artifact.provider_name)}",
-            f"- Provider model: {_sanitize_rendered_text(artifact.provider_model or 'n/a')}",
-            f"- Prompt version: {_sanitize_rendered_text(artifact.prompt_version or 'n/a')}",
+            f"- Source: {_sanitize_inline_text(artifact.source)}",
+            f"- Provider: {_sanitize_inline_text(artifact.provider_name)}",
+            f"- Provider model: {_sanitize_inline_text(artifact.provider_model or 'n/a')}",
+            f"- Prompt version: {_sanitize_inline_text(artifact.prompt_version or 'n/a')}",
             f"- Contracts: {len(artifact.contracts)}",
             f"- Preview proposals: {len(artifact.preview_order_proposals)}",
             f"- Blocked preview orders: {len(artifact.blocked_preview_orders)}",
             "",
             "## Evidence summary",
             "",
-            _sanitize_rendered_text(artifact.evidence_summary.summary),
-            "",
         ]
     )
+    lines.extend(_render_safe_markdown_block(artifact.evidence_summary.summary))
+    lines.append("")
     if artifact.evidence_summary.citations:
         lines.append(
             "Citations: "
             + ", ".join(
-                _sanitize_rendered_text(citation)
+                _sanitize_inline_text(citation)
                 for citation in artifact.evidence_summary.citations
             )
         )
         lines.append("")
-    lines.extend(
-        ["## Operator memo", "", _sanitize_rendered_text(artifact.operator_memo), ""]
-    )
+    lines.extend(["## Operator memo", ""])
+    lines.extend(_render_safe_markdown_block(artifact.operator_memo))
+    lines.append("")
     if artifact.runtime_health is not None:
         lines.extend(["## Runtime health", ""])
         for key in sorted(artifact.runtime_health):
             lines.append(
-                f"- {_sanitize_rendered_text(key)}: "
-                f"{_sanitize_rendered_text(artifact.runtime_health[key])}"
+                f"- {_sanitize_inline_text(key)}: "
+                f"{_sanitize_inline_text(artifact.runtime_health[key])}"
             )
         lines.append("")
     lines.extend(["## Contract summaries", ""])
     for row in artifact.contracts:
-        lines.append(f"### {_sanitize_rendered_text(row.contract_id)}")
+        lines.append(f"### {_sanitize_inline_text(row.contract_id)}")
         lines.append("")
         if row.question is not None:
-            lines.append(f"- Question: {_sanitize_rendered_text(row.question)}")
+            lines.append(f"- Question: {_sanitize_inline_text(row.question)}")
         if row.summary is not None:
-            lines.append(f"- Summary: {_sanitize_rendered_text(row.summary)}")
+            lines.append(f"- Summary: {_sanitize_inline_text(row.summary)}")
         if row.llm_probability is not None:
             lines.append(f"- LLM probability: {row.llm_probability:.4f}")
         if row.deterministic_probability is not None:
@@ -664,30 +679,28 @@ def render_llm_advisory_markdown(artifact: LLMAdvisoryArtifact) -> str:
         if row.ambiguity_flags:
             lines.append(
                 "- Ambiguity flags: "
-                + ", ".join(
-                    _sanitize_rendered_text(flag) for flag in row.ambiguity_flags
-                )
+                + ", ".join(_sanitize_inline_text(flag) for flag in row.ambiguity_flags)
             )
         if row.citations:
             lines.append(
                 "- Citations: "
                 + ", ".join(
-                    _sanitize_rendered_text(citation) for citation in row.citations
+                    _sanitize_inline_text(citation) for citation in row.citations
                 )
             )
         if row.preview_context is not None:
             if row.preview_context.get("blocked_reason") not in (None, ""):
                 lines.append(
                     "- Preview blocked reason: "
-                    f"{_sanitize_rendered_text(row.preview_context['blocked_reason'])}"
+                    f"{_sanitize_inline_text(row.preview_context['blocked_reason'])}"
                 )
             elif row.preview_context.get("proposal_action") not in (None, ""):
                 lines.append(
                     "- Preview proposal: "
-                    f"{_sanitize_rendered_text(row.preview_context['proposal_action'])} "
-                    f"{_sanitize_rendered_text(row.preview_context.get('proposal_side'))} "
-                    f"{_sanitize_rendered_text(row.preview_context.get('proposal_size'))} @ "
-                    f"{_sanitize_rendered_text(row.preview_context.get('proposal_price'))}"
+                    f"{_sanitize_inline_text(row.preview_context['proposal_action'])} "
+                    f"{_sanitize_inline_text(row.preview_context.get('proposal_side'))} "
+                    f"{_sanitize_inline_text(row.preview_context.get('proposal_size'))} @ "
+                    f"{_sanitize_inline_text(row.preview_context.get('proposal_price'))}"
                 )
         lines.append("")
     return "\n".join(lines).strip() + "\n"

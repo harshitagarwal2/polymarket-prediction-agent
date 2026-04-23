@@ -435,6 +435,54 @@ class LLMAdvisoryTests(unittest.TestCase):
             ):
                 load_llm_advisory_contract_rows(handle.name)
 
+    def test_load_llm_advisory_contract_rows_rejects_non_mapping_nested_contract(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(
+                {
+                    "contracts": [
+                        {
+                            "contract_id": "bad-contract",
+                            "llm_contract": "not-an-object",
+                        }
+                    ]
+                },
+                handle,
+            )
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "llm_contract must be an object",
+            ):
+                load_llm_advisory_contract_rows(handle.name)
+
+    def test_load_llm_advisory_contract_rows_rejects_nested_integer_boolean_flags(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(
+                {
+                    "contracts": [
+                        {
+                            "contract_id": "bad-contract",
+                            "llm_contract": {
+                                "includes_overtime": 1,
+                                "void_on_postponement": True,
+                                "requires_player_to_start": None,
+                                "resolution_source": "league",
+                                "ambiguity_score": 0.2,
+                            },
+                        }
+                    ]
+                },
+                handle,
+            )
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "includes_overtime must be true or false",
+            ):
+                load_llm_advisory_contract_rows(handle.name)
+
     def test_render_llm_advisory_markdown_sanitizes_untrusted_text(self):
         artifact = build_llm_advisory_artifact(
             [
@@ -468,6 +516,72 @@ class LLMAdvisoryTests(unittest.TestCase):
         self.assertIn("#danger", rendered)
         self.assertIn("contract-\\[danger\\](javascript:alert(1))", rendered)
         self.assertNotIn("[link](javascript:alert(1))", rendered)
+
+    def test_render_llm_advisory_markdown_keeps_freeform_blocks_literal(self):
+        artifact = build_llm_advisory_artifact(
+            [
+                {
+                    "contract_id": "contract-pm-1",
+                    "summary": "# danger\n- bullet\n+ plus",
+                }
+            ]
+        )
+
+        rendered = render_llm_advisory_markdown(artifact)
+
+        self.assertIn("    # danger", rendered)
+        self.assertIn("    - bullet", rendered)
+        self.assertIn("    + plus", rendered)
+
+    def test_render_llm_advisory_markdown_flattens_multiline_inline_fields(self):
+        artifact = build_llm_advisory_artifact(
+            [
+                {
+                    "contract_id": "contract-pm-1\n# injected-heading",
+                    "question": "Question line 1\n- injected bullet",
+                    "summary": "Summary line 1\n## injected heading",
+                    "citations": ["cite-1\n- injected bullet"],
+                    "preview_context": {"blocked_reason": "blocked\n# injected"},
+                }
+            ],
+            source="source\n# injected",
+            provider_name="provider\n- injected",
+            provider_model="model\n## injected",
+            prompt_version="prompt\n+ injected",
+            runtime_health={"state\n# injected": "healthy\n- injected"},
+        )
+        artifact = artifact.__class__(
+            generated_at=artifact.generated_at,
+            evidence_summary=artifact.evidence_summary.__class__(
+                summary=artifact.evidence_summary.summary,
+                citations=("cite-top\n- injected bullet",),
+                key_points=artifact.evidence_summary.key_points,
+            ),
+            operator_memo=artifact.operator_memo,
+            contracts=artifact.contracts,
+            preview_order_proposals=artifact.preview_order_proposals,
+            blocked_preview_orders=artifact.blocked_preview_orders,
+            schema_version=artifact.schema_version,
+            source=artifact.source,
+            provider_name=artifact.provider_name,
+            provider_model=artifact.provider_model,
+            prompt_version=artifact.prompt_version,
+            runtime_health=artifact.runtime_health,
+        )
+
+        rendered = render_llm_advisory_markdown(artifact)
+
+        self.assertIn("- Source: source # injected", rendered)
+        self.assertIn("- Provider: provider - injected", rendered)
+        self.assertIn("- Provider model: model ## injected", rendered)
+        self.assertIn("- Prompt version: prompt + injected", rendered)
+        self.assertIn("Citations: cite-top - injected bullet", rendered)
+        self.assertIn("- state # injected: healthy - injected", rendered)
+        self.assertIn("### contract-pm-1 # injected-heading", rendered)
+        self.assertIn("- Question: Question line 1 - injected bullet", rendered)
+        self.assertIn("- Summary: Summary line 1 ## injected heading", rendered)
+        self.assertIn("- Citations: cite-1 - injected bullet", rendered)
+        self.assertIn("- Preview blocked reason: blocked # injected", rendered)
 
     def test_write_llm_advisory_artifacts_rejects_non_finite_values(self):
         artifact = build_llm_advisory_artifact(
