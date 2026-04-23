@@ -11,6 +11,7 @@ from opportunity import (
     assess_executable_edge,
     compute_edge,
     estimate_fillability_from_market,
+    opportunity_from_prices,
 )
 from risk.freeze_windows import FreezeWindowPolicy
 
@@ -18,7 +19,9 @@ from risk.freeze_windows import FreezeWindowPolicy
 class OpportunityLayerTests(unittest.TestCase):
     def _market(self) -> MarketSummary:
         return MarketSummary(
-            contract=Contract(venue=Venue.POLYMARKET, symbol="token-1", outcome=OutcomeSide.YES),
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="token-1", outcome=OutcomeSide.YES
+            ),
             title="Will something happen?",
             best_bid=0.40,
             best_ask=0.45,
@@ -67,7 +70,60 @@ class OpportunityLayerTests(unittest.TestCase):
         )
         self.assertAlmostEqual(edge["edge_buy_raw_bps"], 200.0)
         self.assertAlmostEqual(edge["edge_sell_raw_bps"], -2000.0)
-        self.assertLess(edge["edge_after_costs_bps"], edge["edge_buy_raw_bps"])
+        self.assertAlmostEqual(edge["edge_buy_after_costs_bps"], 184.2)
+        self.assertAlmostEqual(edge["edge_sell_after_costs_bps"], -2014.0)
+        self.assertAlmostEqual(
+            edge["edge_after_costs_bps"], edge["edge_buy_after_costs_bps"]
+        )
+
+    def test_opportunity_from_prices_chooses_side_from_after_cost_edge(self):
+        opportunity = opportunity_from_prices(
+            market_id="pm-1",
+            fair_yes_prob=0.5001,
+            best_bid_yes=0.49,
+            best_ask_yes=0.51,
+            fillable_size=5.0,
+            confidence=0.98,
+            slippage_bps=200.0,
+        )
+
+        self.assertEqual(opportunity.side, "sell_yes")
+        self.assertGreater(
+            opportunity.edge_sell_after_costs_bps,
+            opportunity.edge_buy_after_costs_bps,
+        )
+
+    def test_opportunity_from_prices_preserves_structured_blocked_reasons(self):
+        opportunity = opportunity_from_prices(
+            market_id="pm-1",
+            fair_yes_prob=0.60,
+            best_bid_yes=0.50,
+            best_ask_yes=0.52,
+            fillable_size=8.0,
+            confidence=0.98,
+            blocked_reasons=("missing fair value", "missing executable bbo"),
+        )
+
+        self.assertEqual(opportunity.blocked_reason, "missing fair value")
+        self.assertEqual(
+            opportunity.blocked_reasons,
+            ("missing fair value", "missing executable bbo"),
+        )
+
+    def test_opportunity_from_prices_uses_selected_side_visible_depth(self):
+        opportunity = opportunity_from_prices(
+            market_id="pm-1",
+            fair_yes_prob=0.50,
+            best_bid_yes=0.54,
+            best_ask_yes=0.60,
+            fillable_size=2.0,
+            buy_yes_fillable_size=2.0,
+            sell_yes_fillable_size=9.0,
+            confidence=0.98,
+        )
+
+        self.assertEqual(opportunity.side, "sell_yes")
+        self.assertEqual(opportunity.fillable_size, 9.0)
 
     def test_ranker_blocks_market_inside_freeze_window(self):
         market = self._market()

@@ -46,9 +46,7 @@ class PairOpportunityRanker:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
-    freeze_window_policy: FreezeWindowPolicy = field(
-        default_factory=FreezeWindowPolicy
-    )
+    freeze_window_policy: FreezeWindowPolicy = field(default_factory=FreezeWindowPolicy)
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -82,7 +80,10 @@ class PairOpportunityRanker:
         if allowed_categories is not None:
             if not market_labels(market).intersection(allowed_categories):
                 return False
-        if self.min_volume is not None and float(market.volume or 0.0) < self.min_volume:
+        if (
+            self.min_volume is not None
+            and float(market.volume or 0.0) < self.min_volume
+        ):
             return False
         spread = market_spread(market)
         if (
@@ -127,10 +128,14 @@ class PairOpportunityRanker:
             no_market = pair.get("no")
             if yes_market is None or no_market is None:
                 continue
-            yes_fee = self._taker_fee(yes_market.best_ask)
-            no_fee = self._taker_fee(no_market.best_ask)
+            yes_price = yes_market.best_ask
+            no_price = no_market.best_ask
+            if yes_price is None or no_price is None:
+                continue
+            yes_fee = self._taker_fee(yes_price)
+            no_fee = self._taker_fee(no_price)
             total_fee = yes_fee + no_fee
-            gross_cost = yes_market.best_ask + no_market.best_ask
+            gross_cost = yes_price + no_price
             net_edge = 1.0 - gross_cost - total_fee
             if net_edge < self.edge_threshold:
                 continue
@@ -139,8 +144,8 @@ class PairOpportunityRanker:
                     market_key=group_key,
                     yes_contract=yes_market.contract,
                     no_contract=no_market.contract,
-                    yes_price=yes_market.best_ask,
-                    no_price=no_market.best_ask,
+                    yes_price=yes_price,
+                    no_price=no_price,
                     gross_cost=gross_cost,
                     total_fee=total_fee,
                     net_edge=net_edge,
@@ -175,9 +180,7 @@ class OpportunityRanker:
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
-    freeze_window_policy: FreezeWindowPolicy = field(
-        default_factory=FreezeWindowPolicy
-    )
+    freeze_window_policy: FreezeWindowPolicy = field(default_factory=FreezeWindowPolicy)
 
     def _normalize_allowed_categories(self) -> set[str] | None:
         if not self.allowed_categories:
@@ -204,7 +207,9 @@ class OpportunityRanker:
             outcome = market.contract.outcome.value
             if outcome not in {"yes", "no"}:
                 continue
-            paired_quotes.setdefault(market_group_key(market), {})[outcome] = market.best_ask
+            paired_quotes.setdefault(market_group_key(market), {})[outcome] = (
+                market.best_ask
+            )
 
         discounts: dict[str, float] = {}
         for market in markets:
@@ -239,7 +244,10 @@ class OpportunityRanker:
         if allowed_categories is not None:
             if not market_labels(market).intersection(allowed_categories):
                 return False
-        if self.min_volume is not None and float(market.volume or 0.0) < self.min_volume:
+        if (
+            self.min_volume is not None
+            and float(market.volume or 0.0) < self.min_volume
+        ):
             return False
         spread = market_spread(market)
         if (
