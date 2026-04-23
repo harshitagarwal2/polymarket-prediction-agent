@@ -240,15 +240,20 @@ If you have offline contract-evidence rows, materialize the advisory sidecar bef
 ```bash
 operator-cli build-llm-advisory \
   --llm-input runtime/llm_contract_rows.json \
+  --policy-file runtime/policy.json \
   --opportunity-root runtime/data \
   --output runtime/data/current/llm_advisory.json
 
 operator-cli show-llm-advisory \
   --llm-advisory-file runtime/data/current/llm_advisory.json \
   --format markdown
+
+operator-cli status --state-file runtime/safety-state.json --llm-advisory-file runtime/data/current/llm_advisory.json
 ```
 
 `runtime/data/current/llm_advisory.json` is a review artifact for operators and dashboards. It is not an execution input.
+
+Pass `--policy-file` when you want the advisory preview proposals and blocked reasons to match the same runtime policy that `run-agent-loop` is using.
 
 ## Runtime policy files
 

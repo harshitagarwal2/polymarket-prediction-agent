@@ -258,9 +258,13 @@ operator-cli show-llm-advisory \
 operator-cli show-llm-advisory \
   --llm-advisory-file runtime/data/current/llm_advisory.json \
   --format markdown
+
+operator-cli status --state-file runtime/safety-state.json --llm-advisory-file runtime/data/current/llm_advisory.json
 ```
 
 `runtime/data/current/llm_advisory.json` is a sidecar artifact for operator review and dashboards. It does not drive `run-agent-loop`, risk checks, or execution-policy decisions.
+
+If the runtime is using a non-default policy file, pass the same `--policy-file` to `build-llm-advisory` so the preview proposal/blocking context matches the live thresholds and freeze rules.
 
 ### Pause and unpause
 
