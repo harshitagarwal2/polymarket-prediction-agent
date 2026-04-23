@@ -12,9 +12,13 @@ class ResolutionRules:
     resolution_source: Optional[str]
 
 
-def rules_compatible(left: ResolutionRules, right: ResolutionRules) -> tuple[bool, str | None]:
+def rules_compatible(
+    left: ResolutionRules, right: ResolutionRules
+) -> tuple[bool, str | None]:
     if left.includes_overtime != right.includes_overtime:
         return False, "overtime/regulation mismatch"
+    if left.void_on_postponement != right.void_on_postponement:
+        return False, "postponement/void mismatch"
     if (
         left.requires_player_to_start is not None
         and right.requires_player_to_start is not None
