@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from execution.models import OrderProposal
-from opportunity.models import Opportunity
+from opportunity.models import Opportunity, normalize_blocked_reasons
 from risk.correlated_exposure import CorrelatedExposureDecision
 from risk.freeze_windows import FreezeWindowPolicy, freeze_reasons_for_state
 
@@ -26,6 +26,7 @@ class PlannerThresholds:
 @dataclass(frozen=True)
 class ProposalDecision:
     proposal: OrderProposal | None
+    blocked_reasons: tuple[str, ...] = ()
     blocked_reason: str | None = None
 
 
@@ -48,30 +49,23 @@ class ExecutionPlanner:
         correlated_exposure: CorrelatedExposureDecision | None = None,
         now: datetime | None = None,
     ) -> ProposalDecision:
-        if opportunity.blocked_reason:
-            return ProposalDecision(
-                proposal=None,
-                blocked_reason=opportunity.blocked_reason,
+        blocked_reasons: list[str] = list(
+            normalize_blocked_reasons(
+                opportunity.blocked_reasons,
+                opportunity.blocked_reason,
             )
+        )
         if opportunity.confidence < self.thresholds.min_match_confidence:
-            return ProposalDecision(proposal=None, blocked_reason="low match confidence")
+            blocked_reasons.append("low match confidence")
         if source_age_ms > self.thresholds.max_source_age_ms:
-            return ProposalDecision(proposal=None, blocked_reason="source data stale")
+            blocked_reasons.append("source data stale")
         if book_dispersion > self.thresholds.max_book_dispersion:
-            return ProposalDecision(
-                proposal=None,
-                blocked_reason="book dispersion exceeds threshold",
-            )
+            blocked_reasons.append("book dispersion exceeds threshold")
         if opportunity.edge_after_costs_bps < self.thresholds.entry_edge_bps:
-            return ProposalDecision(
-                proposal=None,
-                blocked_reason="edge below entry threshold",
-            )
+            blocked_reasons.append("edge below entry threshold")
         if correlated_exposure is not None and not correlated_exposure.allowed:
-            return ProposalDecision(
-                proposal=None,
-                blocked_reason=correlated_exposure.reason
-                or "cluster exposure cap exceeded",
+            blocked_reasons.append(
+                correlated_exposure.reason or "cluster exposure cap exceeded"
             )
         current = now or datetime.now(timezone.utc)
         freeze_policy = FreezeWindowPolicy(
@@ -89,9 +83,21 @@ class ExecutionPlanner:
             required_sources=required_sources,
             source_health=source_health,
         )
-        if freeze_reasons:
-            return ProposalDecision(proposal=None, blocked_reason=freeze_reasons[0])
-        price = opportunity.best_ask_yes if opportunity.side == "buy_yes" else opportunity.best_bid_yes
+        normalized_blocked_reasons = normalize_blocked_reasons(
+            blocked_reasons,
+            freeze_reasons,
+        )
+        if normalized_blocked_reasons:
+            return ProposalDecision(
+                proposal=None,
+                blocked_reasons=normalized_blocked_reasons,
+                blocked_reason=normalized_blocked_reasons[0],
+            )
+        price = (
+            opportunity.best_ask_yes
+            if opportunity.side == "buy_yes"
+            else opportunity.best_bid_yes
+        )
         return ProposalDecision(
             proposal=OrderProposal(
                 market_id=opportunity.market_id,

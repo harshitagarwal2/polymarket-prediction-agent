@@ -18,9 +18,12 @@ class ExecutionPlannerTests(unittest.TestCase):
             "best_ask_yes": 0.47,
             "edge_buy_bps": 1400.0,
             "edge_sell_bps": -1600.0,
+            "edge_buy_after_costs_bps": 1375.0,
+            "edge_sell_after_costs_bps": -1625.0,
             "edge_after_costs_bps": 175.0,
             "fillable_size": 12.0,
             "confidence": 0.98,
+            "blocked_reasons": (),
             "blocked_reason": None,
         }
         payload.update(overrides)
@@ -78,7 +81,13 @@ class ExecutionPlannerTests(unittest.TestCase):
             now=datetime(2026, 4, 22, 0, 0, tzinfo=timezone.utc),
         )
         self.assertIsNone(decision.proposal)
-        self.assertEqual(decision.blocked_reason, "source polymarket_market_channel unhealthy")
+        self.assertEqual(
+            decision.blocked_reason, "source polymarket_market_channel unhealthy"
+        )
+        self.assertEqual(
+            decision.blocked_reasons,
+            ("source polymarket_market_channel unhealthy",),
+        )
 
     def test_planner_blocks_pre_expiry_window(self):
         planner = ExecutionPlanner()
@@ -92,7 +101,9 @@ class ExecutionPlannerTests(unittest.TestCase):
             market_end_time=datetime.now(timezone.utc) + timedelta(minutes=20),
         )
         self.assertIsNone(decision.proposal)
-        self.assertEqual(decision.blocked_reason, "market within pre-expiry freeze window")
+        self.assertEqual(
+            decision.blocked_reason, "market within pre-expiry freeze window"
+        )
 
     def test_planner_blocks_cluster_exposure_decision(self):
         decision = ExecutionPlanner().evaluate(
@@ -110,3 +121,50 @@ class ExecutionPlannerTests(unittest.TestCase):
         )
         self.assertIsNone(decision.proposal)
         self.assertEqual(decision.blocked_reason, "cluster exposure cap exceeded")
+
+    def test_planner_evaluate_accumulates_blocked_reasons_in_order(self):
+        current = datetime(2026, 4, 22, 0, 0, tzinfo=timezone.utc)
+        decision = ExecutionPlanner().evaluate(
+            self._opportunity(
+                confidence=0.80,
+                edge_after_costs_bps=40.0,
+                blocked_reasons=("mapping mismatch",),
+                blocked_reason="mapping mismatch",
+            ),
+            source_age_ms=9000,
+            book_dispersion=0.10,
+            event_start_time=current + timedelta(minutes=5),
+            source_health={
+                "polymarket_market_channel": {
+                    "status": "red",
+                    "last_success_at": "2026-04-22T00:00:00+00:00",
+                    "stale_after_ms": 4000,
+                }
+            },
+            required_sources=("polymarket_market_channel",),
+            correlated_exposure=CorrelatedExposureDecision(
+                allowed=False,
+                cluster_key="event:event-1",
+                current_cluster_exposure=2.0,
+                projected_cluster_exposure=3.0,
+                max_cluster_exposure=2.0,
+                reason="cluster exposure cap exceeded",
+            ),
+            now=current,
+        )
+
+        self.assertIsNone(decision.proposal)
+        self.assertEqual(decision.blocked_reason, "mapping mismatch")
+        self.assertEqual(
+            decision.blocked_reasons,
+            (
+                "mapping mismatch",
+                "low match confidence",
+                "source data stale",
+                "book dispersion exceeds threshold",
+                "edge below entry threshold",
+                "cluster exposure cap exceeded",
+                "market within pre-start freeze window",
+                "source polymarket_market_channel unhealthy",
+            ),
+        )
