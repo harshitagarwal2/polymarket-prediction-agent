@@ -323,6 +323,24 @@ def main() -> int:
     )
     if args.opportunity_root is None and isinstance(configured_opportunity_root, str):
         args.opportunity_root = configured_opportunity_root
+    configured_interval_seconds = nested_config_value(
+        config, "runtime", "interval_seconds"
+    )
+    if isinstance(configured_interval_seconds, (int, float)):
+        args.interval_seconds = float(configured_interval_seconds)
+    configured_max_cycles = nested_config_value(config, "runtime", "max_cycles")
+    if isinstance(configured_max_cycles, int):
+        args.max_cycles = configured_max_cycles
+    configured_max_fair_value_age = nested_config_value(
+        config, "runtime", "max_fair_value_age_seconds"
+    )
+    if isinstance(configured_max_fair_value_age, (int, float)):
+        args.max_fair_value_age_seconds = float(configured_max_fair_value_age)
+    configured_reload_seconds = nested_config_value(
+        config, "runtime", "fair_values_reload_seconds"
+    )
+    if isinstance(configured_reload_seconds, (int, float)):
+        args.fair_values_reload_seconds = float(configured_reload_seconds)
     configured_preview_only = nested_config_value(config, "runtime", "preview_only")
     if args.mode == "preview" and isinstance(configured_preview_only, bool):
         args.mode = "preview" if configured_preview_only else "run"

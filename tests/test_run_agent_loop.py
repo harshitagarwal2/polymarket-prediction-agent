@@ -374,6 +374,76 @@ class RunAgentLoopTests(unittest.TestCase):
         validated_args = validate_runtime.call_args.args[0]
         self.assertEqual(validated_args.venue, "polymarket")
 
+    def test_main_can_apply_runtime_timing_defaults_from_config_file(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as fair_values,
+            tempfile.NamedTemporaryFile("w+", suffix=".yaml") as config_file,
+        ):
+            json.dump({"token-1:yes": 0.6}, fair_values)
+            fair_values.flush()
+            config_file.write(
+                "venue: polymarket\n"
+                "runtime:\n"
+                f"  fair_values_file: {fair_values.name}\n"
+                "  max_fair_value_age_seconds: 900\n"
+                "  fair_values_reload_seconds: 30\n"
+                "  interval_seconds: 15\n"
+                "  max_cycles: 100\n"
+            )
+            config_file.flush()
+
+            with patch.dict(
+                "os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=False
+            ):
+                with (
+                    patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+                    patch.object(
+                        run_agent_loop, "validate_runtime"
+                    ) as validate_runtime,
+                    patch.object(
+                        run_agent_loop,
+                        "build_fair_value_provider",
+                        return_value=SimpleNamespace(),
+                    ),
+                    patch.object(
+                        run_agent_loop,
+                        "TradingEngine",
+                        return_value=fake_engine,
+                    ),
+                    patch.object(run_agent_loop, "AgentOrchestrator"),
+                    patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+                ):
+                    polling_loop.return_value.run.return_value = [fake_cycle]
+
+                    with patch(
+                        "sys.argv",
+                        [
+                            "run_agent_loop.py",
+                            "--config-file",
+                            config_file.name,
+                            "--quiet",
+                        ],
+                    ):
+                        result = run_agent_loop.main()
+
+        self.assertEqual(result, 0)
+        validated_args = validate_runtime.call_args.args[0]
+        self.assertEqual(validated_args.max_fair_value_age_seconds, 900.0)
+        self.assertEqual(validated_args.fair_values_reload_seconds, 30.0)
+        self.assertEqual(validated_args.interval_seconds, 15.0)
+        self.assertEqual(validated_args.max_cycles, 100)
+
     def test_build_adapter_parses_polymarket_live_user_markets(self):
         args = SimpleNamespace(
             polymarket_live_user_markets="cond-1, cond-2",
