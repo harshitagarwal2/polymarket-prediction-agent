@@ -42,6 +42,17 @@ If you have offline contract evidence, pass it as a JSON file:
 python -m scripts.render_model_vs_market_dashboard   --input runtime/forecasting/politics/forecast_output.json   --output-dir runtime/forecasting/politics   --llm-contract-evidence runtime/forecasting/politics/llm_contract_evidence.json
 ```
 
+The operator CLI can also build the same style of sidecar at `runtime/data/current/llm_advisory.json`:
+
+```bash
+operator-cli build-llm-advisory \
+  --llm-input runtime/llm_contract_rows.json \
+  --opportunity-root runtime/data \
+  --output runtime/data/current/llm_advisory.json
+```
+
+Because that file reuses the `ContractEvidence` row keys, you can pass `runtime/data/current/llm_advisory.json` directly to `render-model-vs-market-dashboard --llm-contract-evidence ...`.
+
 Evidence is optional. When the file is omitted or a contract has no LLM probability, the dashboard records a deterministic fallback consistency surface instead of failing closed. That keeps market-vs-model review available even when LLM support is absent or incomplete.
 
 ## Non-sports pipeline scaffolding

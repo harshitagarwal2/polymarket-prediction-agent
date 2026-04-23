@@ -272,15 +272,20 @@ operator-cli status --state-file runtime/safety-state.json --journal runtime/eve
 ```bash
 operator-cli build-llm-advisory \
   --llm-input runtime/llm_contract_rows.json \
+  --policy-file runtime/policy.json \
   --opportunity-root runtime/data \
   --output runtime/data/current/llm_advisory.json
 
 operator-cli show-llm-advisory \
   --llm-advisory-file runtime/data/current/llm_advisory.json \
   --format markdown
+
+operator-cli status --state-file runtime/safety-state.json --llm-advisory-file runtime/data/current/llm_advisory.json
 ```
 
 `runtime/data/current/llm_advisory.json` is an operator-side sidecar artifact. It stays off the deterministic runtime path and can also be passed to `render-model-vs-market-dashboard --llm-contract-evidence ...` for contract review.
+
+Pass `--policy-file` when you want the advisory preview proposals and blocked reasons to use the same thresholds and freeze rules as `run-agent-loop`.
 
 ## Runtime safety model
 
