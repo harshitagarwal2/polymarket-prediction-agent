@@ -20,7 +20,7 @@ uv run --locked python -m unittest \
 Observed result:
 
 ```text
-Ran 39 tests in 0.045s
+Ran 82 tests in 1.107s
 
 OK
 ```
@@ -36,7 +36,7 @@ uv run --locked python -m unittest discover -s tests -p "test_*.py"
 Observed result:
 
 ```text
-Ran 330 tests in 1.749s
+Ran 511 tests in 3.181s
 
 OK
 ```
@@ -60,6 +60,32 @@ Observed output excerpt:
   "source": "sportsbook-devig:multiplicative:best-line"
 }
 ```
+
+## Manual QA — live current-state fair-value build with consensus artifact
+
+## Manual QA — dedicated sportsbook capture worker
+
+Command shape:
+
+```bash
+uv sync --extra postgres
+export PREDICTION_MARKET_POSTGRES_DSN=postgresql://...
+
+python -m scripts.run_sportsbook_capture \
+  --sport basketball_nba \
+  --market h2h \
+  --event-map-file <odds_event_map.json> \
+  --root <runtime_root> \
+  --max-cycles 1
+```
+
+Observed behavior:
+
+- continuous sportsbook capture no longer has to run through the monolithic `ingest_live_data` orchestration path
+- each cycle replaces `current/sportsbook_events.json` and `current/sportsbook_odds.json` with the latest snapshot rather than accumulating stale rows forever
+- append-only sportsbook quote rows are still written to the postgres-layer `sportsbook_odds` store
+- each normalized quote row preserves bookmaker-facing `source`, upstream `provider`, `source_ts`, `capture_ts`, and `source_age_ms`
+- `source_health` is mirrored into both `current/source_health.json` and `postgres/source_health.json`
 
 ## Manual QA — live current-state fair-value build with consensus artifact
 

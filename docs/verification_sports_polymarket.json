@@ -1,11 +1,11 @@
 {
   "focused_tests": {
     "command": "uv run --locked python -m unittest tests.test_build_sports_fair_values tests.test_run_agent_loop tests.test_research_architecture_scaffolding tests.test_ingest_live_data tests.test_polymarket_ws_sports",
-    "result": "Ran 39 tests in 0.045s\n\nOK"
+    "result": "Ran 82 tests in 1.107s\n\nOK"
   },
   "full_suite": {
     "command": "uv run --locked python -m unittest discover -s tests -p \"test_*.py\"",
-    "result": "Ran 330 tests in 1.749s\n\nOK"
+    "result": "Ran 511 tests in 3.181s\n\nOK"
   },
   "manual_qa": {
     "config_driven_build_fair_values": {
@@ -16,12 +16,14 @@
       }
     },
     "live_current_state_build_fair_values": {
-      "command": "python -m scripts.train_models --model consensus --output <consensus_artifact.json> && python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> && python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root> && python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json>",
+      "command": "python -m scripts.train_models --model consensus --output <consensus_artifact.json> && python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> && python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root> && python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json> && python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>",
       "observed": {
         "event_map_file_supported": true,
         "consensus_artifact_supported": true,
         "fair_values_source_health_status": "ok",
-        "missing_identity_blocked": true
+        "missing_identity_blocked": true,
+        "joined_inference_dataset_written": true,
+        "joined_inference_dataset_registered": true
       }
     },
     "live_current_state_build_fair_values_with_calibration": {
@@ -46,6 +48,14 @@
       "observed": {
         "model_generator": "elo",
         "training_match_count": 1
+      }
+    },
+    "materialized_training_dataset_and_model_training": {
+      "command": "python -m scripts.ingest_live_data build-training-dataset --input <sports_inputs_labeled.json> --polymarket-input <polymarket_markets.json> --root <runtime_root> && python -m scripts.train_models --model elo --training-dataset historical-training-dataset --dataset-root <runtime_root>/datasets --output <elo_artifact.json>",
+      "observed": {
+        "historical_training_dataset_written": true,
+        "historical_training_dataset_registered": true,
+        "dataset_backed_training_supported": true
       }
     }
   },

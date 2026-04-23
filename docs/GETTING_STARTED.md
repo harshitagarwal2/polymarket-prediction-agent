@@ -190,6 +190,24 @@ python -m scripts.train_models \
   --output runtime/elo_artifact.json
 ```
 
+If you want continuous sportsbook polling without keeping the whole end-to-end ingest script in the loop, run the dedicated capture worker instead:
+
+```bash
+uv sync --extra postgres
+
+# Export a DSN or write one to <runtime_root>/postgres/postgres.dsn first.
+export PREDICTION_MARKET_POSTGRES_DSN=postgresql://...
+
+python -m scripts.run_sportsbook_capture \
+  --sport basketball_nba \
+  --market h2h \
+  --event-map-file runtime/odds_event_map.json \
+  --root runtime/data \
+  --refresh-interval-seconds 60
+```
+
+That command keeps replacing `runtime/data/current/sportsbook_events.json` and `runtime/data/current/sportsbook_odds.json` with the latest snapshot for downstream selectors, appends sportsbook quote events through the postgres-layer capture store, and mirrors `source_health` into both `runtime/data/current/source_health.json` and `runtime/data/postgres/source_health.json`. Because it uses the Postgres repository layer directly, the worker needs the optional `postgres` dependency set plus a resolvable DSN from `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under the configured runtime root.
+
 The `--event-map-file` input enriches live sportsbook events with stable identity fields such as `event_key` and `game_id`. `build-mappings` now fails closed if that upstream identity is missing, keeps the flat runtime selector snapshot in `runtime/data/current/market_mappings.json`, and also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, event identity, and rule-semantics details for each mapping decision. `build-fair-values --consensus-artifact ...` uses the consensus artifact as deterministic inference configuration for the current-state fair-value snapshot builder, and the optional `--calibration-artifact ...` overlay adds sibling `calibrated_fair_yes_prob` / `calibrated_fair_value` outputs without changing the raw baseline fields. `build-inference-dataset` then writes the latest joined inference rows to `runtime/data/processed/inference/joined_inference_dataset.jsonl` and registers a versioned `joined-inference-dataset` snapshot. `build-training-dataset` writes `runtime/data/processed/training/historical_training_dataset.jsonl`, registers a versioned `historical-training-dataset` snapshot, and enables `train-models --training-dataset historical-training-dataset --dataset-root runtime/data/datasets` for downstream model fitting.
 
 The checked-in sample configs now include `capture.sport_key`, `runtime.sportsbook_market`, `runtime.event_map_file`, `runtime.consensus_artifact`, and an optional `runtime.calibration_artifact` key, so the live/current-state flow can also be driven from config defaults:
@@ -406,7 +424,7 @@ Note that this config-driven helper path is for offline research captures. The l
 
 ## CI and local validation expectations
 
-GitHub Actions currently checks that `uv.lock` matches the dependency declarations, installs the package from the lockfile, compiles key modules with `py_compile`, and runs `python -m unittest discover -s tests -p "test_*.py"`.
+GitHub Actions currently checks that `uv.lock` matches the dependency declarations, installs the package from the lockfile, compiles key modules with `python -m compileall -q`, runs the focused **Run advisory and docs contract regressions** unittest step, runs `python -m unittest discover -s tests -p "test_*.py"`, and also runs the separate reproducibility job.
 
 If you are changing runtime or research behavior, that test suite is the baseline contract.
 

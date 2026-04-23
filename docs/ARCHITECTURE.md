@@ -235,6 +235,8 @@ On Polymarket, the adapter also performs order-book depth admission based on pol
 Current commands:
 
 - `status`
+- `build-llm-advisory`
+- `show-llm-advisory`
 - `pause`
 - `unpause`
 - `hold-new-orders`
@@ -268,9 +270,12 @@ The benchmark layer does not claim live execution realism. It is useful for rela
 
 It:
 
+- checks that `uv.lock` matches the dependency declarations
 - installs the package on Python 3.10
-- compiles key runtime and research modules
+- compiles key runtime and research modules with `python -m compileall -q`
+- runs the focused **Run advisory and docs contract regressions** unittest step
 - runs the unittest suite under `tests/`
+- runs the separate reproducibility job
 
 ## Current maturity boundaries
 
