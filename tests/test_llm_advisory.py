@@ -462,11 +462,11 @@ class LLMAdvisoryTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", rendered)
         self.assertIn("&lt;b&gt;red&lt;/b&gt;", rendered)
         self.assertIn("&lt;unsafe&gt;", rendered)
-        self.assertIn("source\\-\\[danger\\]\\(javascript:alert\\(1\\)\\)", rendered)
+        self.assertIn("source-\\[danger\\](javascript:alert(1))", rendered)
         self.assertIn("provider\\*\\*danger\\*\\*", rendered)
         self.assertIn("model\\`danger\\`", rendered)
-        self.assertIn("\\#danger", rendered)
-        self.assertIn("contract\\-\\[danger\\]\\(javascript:alert\\(1\\)\\)", rendered)
+        self.assertIn("#danger", rendered)
+        self.assertIn("contract-\\[danger\\](javascript:alert(1))", rendered)
         self.assertNotIn("[link](javascript:alert(1))", rendered)
 
     def test_write_llm_advisory_artifacts_rejects_non_finite_values(self):
