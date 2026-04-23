@@ -45,6 +45,25 @@ class StrategyAndReplayTests(unittest.TestCase):
         self.assertEqual(intents[0].action, OrderAction.BUY)
         self.assertEqual(intents[0].price, 0.50)
 
+    def test_fair_value_strategy_skips_crossed_books(self):
+        contract = make_contract()
+        strategy = FairValueBandStrategy(quantity=2, edge_threshold=0.03)
+        context = StrategyContext(
+            contract=contract,
+            book=OrderBookSnapshot(
+                contract=contract,
+                bids=[PriceLevel(price=0.64, quantity=10)],
+                asks=[PriceLevel(price=0.50, quantity=10)],
+            ),
+            position=PositionSnapshot(contract=contract, quantity=5),
+            balance=BalanceSnapshot(venue=Venue.POLYMARKET, available=100, total=100),
+            fair_value=0.55,
+        )
+
+        intents = strategy.generate_intents(context)
+
+        self.assertEqual(intents, [])
+
     def test_replay_runner_generates_trades(self):
         contract = make_contract()
         strategy = FairValueBandStrategy(quantity=5, edge_threshold=0.03)
@@ -73,6 +92,47 @@ class StrategyAndReplayTests(unittest.TestCase):
         self.assertIn(contract.market_key, result.ending_positions)
         self.assertGreater(result.ending_portfolio_value, 0)
         self.assertIn(contract.market_key, result.mark_prices)
+        self.assertEqual(len(result.execution_ledger), 1)
+        self.assertEqual(result.execution_ledger[0].decision_fair_value, 0.60)
+        self.assertEqual(result.events[0].approved[0].metadata["fair_value"], 0.60)
+        self.assertEqual(result.events[0].approved[0].metadata["replay_step_index"], 0)
+
+    def test_replay_runner_does_not_submit_same_side_duplicate_while_resting(self):
+        contract = make_contract()
+        strategy = FairValueBandStrategy(quantity=5, edge_threshold=0.03)
+        runner = ReplayRunner(
+            strategy=strategy,
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+            broker=PaperBroker(cash=100),
+        )
+        steps = [
+            ReplayStep(
+                book=OrderBookSnapshot(
+                    contract=contract,
+                    bids=[PriceLevel(price=0.45, quantity=10)],
+                    asks=[PriceLevel(price=0.50, quantity=2)],
+                ),
+                fair_value=0.60,
+            ),
+            ReplayStep(
+                book=OrderBookSnapshot(
+                    contract=contract,
+                    bids=[PriceLevel(price=0.45, quantity=10)],
+                    asks=[PriceLevel(price=0.50, quantity=3)],
+                ),
+                fair_value=0.60,
+            ),
+        ]
+
+        result = runner.run(steps)
+
+        filled_trades = [trade for trade in result.execution_ledger if trade.filled]
+        self.assertEqual(len(filled_trades), 2)
+        self.assertEqual(
+            [trade.order_id for trade in filled_trades], ["paper-1", "paper-1"]
+        )
 
     def test_replay_runner_passes_step_fair_value_and_metadata_to_strategy(self):
         contract = make_contract()
