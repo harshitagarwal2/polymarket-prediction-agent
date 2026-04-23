@@ -32,7 +32,7 @@ from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
 from execution import ExecutionPlanner
 from forecasting.fair_value_engine import ManifestFairValueProvider
-from opportunity.models import Opportunity
+from opportunity.models import Opportunity, normalize_blocked_reasons
 from risk.limits import RiskEngine, RiskLimits
 from storage import best_mapping_by_market
 from storage.journal import EventJournal
@@ -198,6 +198,30 @@ def _build_preview_order_proposals(
         )
         if source_name in source_health
     )
+
+    def _snapshot_payload(
+        opportunity: Opportunity,
+        *,
+        blocked_reason: str | None,
+        blocked_reasons: tuple[str, ...],
+    ) -> dict[str, object]:
+        return {
+            "market_id": opportunity.market_id,
+            "side": opportunity.side,
+            "fair_yes_prob": opportunity.fair_yes_prob,
+            "best_bid_yes": opportunity.best_bid_yes,
+            "best_ask_yes": opportunity.best_ask_yes,
+            "edge_buy_bps": opportunity.edge_buy_bps,
+            "edge_sell_bps": opportunity.edge_sell_bps,
+            "edge_buy_after_costs_bps": opportunity.edge_buy_after_costs_bps,
+            "edge_sell_after_costs_bps": opportunity.edge_sell_after_costs_bps,
+            "edge_after_costs_bps": opportunity.edge_after_costs_bps,
+            "fillable_size": opportunity.fillable_size,
+            "confidence": opportunity.confidence,
+            "blocked_reason": blocked_reason,
+            "blocked_reasons": list(blocked_reasons),
+        }
+
     for row in opportunities.values():
         if not isinstance(row, dict):
             continue
@@ -206,15 +230,12 @@ def _build_preview_order_proposals(
         fair_value = fair_values.get(market_id)
         mapping = mapping_by_market.get(market_id, {})
         market_row = polymarket_markets.get(market_id)
-        if not isinstance(bbo, dict):
-            continue
-        blocked_reason = row.get("blocked_reason")
         fair_value_age_ms = (
             int(fair_value.get("data_age_ms", 0)) if isinstance(fair_value, dict) else 0
         )
         bbo_source_age_ms = (
             int(bbo.get("source_age_ms", 0))
-            if bbo.get("source_age_ms") not in (None, "")
+            if isinstance(bbo, dict) and bbo.get("source_age_ms") not in (None, "")
             else 0
         )
         source_age_ms = max(fair_value_age_ms, bbo_source_age_ms)
@@ -224,16 +245,33 @@ def _build_preview_order_proposals(
             else 0.0
         )
         side = str(row.get("side") or "buy_yes")
-        limit_price = (
-            bbo.get("best_ask_yes") if side == "buy_yes" else bbo.get("best_bid_yes")
+        blocked_reasons = list(
+            normalize_blocked_reasons(
+                row.get("blocked_reasons"),
+                row.get("blocked_reason"),
+            )
         )
+        if isinstance(bbo, dict):
+            limit_price = (
+                bbo.get("best_ask_yes")
+                if side == "buy_yes"
+                else bbo.get("best_bid_yes")
+            )
+        else:
+            limit_price = None
         if limit_price in (None, ""):
-            blocked_reason = blocked_reason or "missing executable bbo"
+            blocked_reasons = list(
+                normalize_blocked_reasons(blocked_reasons, "missing executable bbo")
+            )
         current_fillable_size = (
             _float_or_none(bbo.get("best_ask_yes_size"))
-            if side == "buy_yes" and bbo.get("best_ask_yes_size") not in (None, "")
+            if isinstance(bbo, dict)
+            and side == "buy_yes"
+            and bbo.get("best_ask_yes_size") not in (None, "")
             else _float_or_none(bbo.get("best_bid_yes_size"))
-            if side != "buy_yes" and bbo.get("best_bid_yes_size") not in (None, "")
+            if isinstance(bbo, dict)
+            and side != "buy_yes"
+            and bbo.get("best_bid_yes_size") not in (None, "")
             else None
         )
         fillable_size = float(row.get("fillable_size") or 0.0)
@@ -244,7 +282,9 @@ def _build_preview_order_proposals(
                 else min(fillable_size, current_fillable_size)
             )
         if fillable_size <= 0.0:
-            blocked_reason = blocked_reason or "insufficient visible depth"
+            blocked_reasons = list(
+                normalize_blocked_reasons(blocked_reasons, "insufficient visible depth")
+            )
         sportsbook_event = sportsbook_events.get(
             str(mapping.get("sportsbook_event_id") or "")
         )
@@ -267,18 +307,45 @@ def _build_preview_order_proposals(
             market_id=market_id,
             side=side,
             fair_yes_prob=(
-                float(fair_value.get("fair_yes_prob", 0.0))
-                if isinstance(fair_value, dict)
-                else 0.0
+                _float_or_none(row.get("fair_yes_prob"))
+                or (
+                    _float_or_none(fair_value.get("fair_yes_prob"))
+                    if isinstance(fair_value, dict)
+                    else None
+                )
+                or 0.0
             ),
-            best_bid_yes=float(bbo.get("best_bid_yes") or 0.0),
-            best_ask_yes=float(bbo.get("best_ask_yes") or 0.0),
-            edge_buy_bps=0.0,
-            edge_sell_bps=0.0,
+            best_bid_yes=(
+                _float_or_none(row.get("best_bid_yes"))
+                or (
+                    _float_or_none(bbo.get("best_bid_yes"))
+                    if isinstance(bbo, dict)
+                    else None
+                )
+                or 0.0
+            ),
+            best_ask_yes=(
+                _float_or_none(row.get("best_ask_yes"))
+                or (
+                    _float_or_none(bbo.get("best_ask_yes"))
+                    if isinstance(bbo, dict)
+                    else None
+                )
+                or 0.0
+            ),
+            edge_buy_bps=float(row.get("edge_buy_bps") or 0.0),
+            edge_sell_bps=float(row.get("edge_sell_bps") or 0.0),
+            edge_buy_after_costs_bps=float(
+                row.get("edge_buy_after_costs_bps") or row.get("edge_buy_bps") or 0.0
+            ),
+            edge_sell_after_costs_bps=float(
+                row.get("edge_sell_after_costs_bps") or row.get("edge_sell_bps") or 0.0
+            ),
             edge_after_costs_bps=float(row.get("edge_after_costs_bps") or 0.0),
             fillable_size=fillable_size,
             confidence=float(row.get("confidence") or 0.0),
-            blocked_reason=str(blocked_reason) if blocked_reason else None,
+            blocked_reasons=tuple(blocked_reasons),
+            blocked_reason=blocked_reasons[0] if blocked_reasons else None,
         )
         decision = planner.evaluate(
             opportunity,
@@ -292,15 +359,23 @@ def _build_preview_order_proposals(
             required_sources=required_sources,
         )
         if decision.proposal is None:
-            blocked.append(
-                {
-                    "market_id": market_id,
-                    "side": opportunity.side,
-                    "blocked_reason": decision.blocked_reason,
-                }
+            blocked_payload = _snapshot_payload(
+                opportunity,
+                blocked_reason=decision.blocked_reason,
+                blocked_reasons=decision.blocked_reasons,
             )
+            blocked_payload["price"] = limit_price
+            blocked.append(blocked_payload)
             continue
-        proposals.append(decision.proposal.__dict__.copy())
+        proposal_payload = decision.proposal.__dict__.copy()
+        proposal_payload.update(
+            _snapshot_payload(
+                opportunity,
+                blocked_reason=decision.blocked_reason,
+                blocked_reasons=decision.blocked_reasons,
+            )
+        )
+        proposals.append(proposal_payload)
     return proposals, blocked
 
 

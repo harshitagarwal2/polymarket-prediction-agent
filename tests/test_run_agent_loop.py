@@ -858,9 +858,17 @@ class RunAgentLoopTests(unittest.TestCase):
                         "pm-1|buy_yes": {
                             "market_id": "pm-1",
                             "side": "buy_yes",
+                            "fair_yes_prob": 0.6,
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "edge_buy_bps": 1300.0,
+                            "edge_sell_bps": -1500.0,
+                            "edge_buy_after_costs_bps": 1285.0,
+                            "edge_sell_after_costs_bps": -1515.0,
                             "edge_after_costs_bps": 220.0,
                             "fillable_size": 5.0,
                             "confidence": 0.99,
+                            "blocked_reasons": [],
                             "blocked_reason": None,
                         }
                     }
@@ -939,9 +947,15 @@ class RunAgentLoopTests(unittest.TestCase):
                 ):
                     run_agent_loop.main()
 
-        rendered = "".join(call.args[0] for call in stdout.write.call_args_list)
-        self.assertIn('"preview_order_proposal_count": 1', rendered)
-        self.assertIn('"market_id": "pm-1"', rendered)
+        payload = json.loads(
+            "".join(call.args[0] for call in stdout.write.call_args_list)
+        )
+        self.assertEqual(payload["preview_order_proposal_count"], 1)
+        proposal = payload["preview_order_proposals"][0]
+        self.assertEqual(proposal["market_id"], "pm-1")
+        self.assertEqual(proposal["edge_buy_after_costs_bps"], 1285.0)
+        self.assertEqual(proposal["edge_sell_after_costs_bps"], -1515.0)
+        self.assertEqual(proposal["blocked_reasons"], [])
 
     def test_main_preview_prefers_best_mapping_per_market(self):
         adapter = FakeAdapter()
@@ -965,9 +979,17 @@ class RunAgentLoopTests(unittest.TestCase):
                         "pm-1|buy_yes": {
                             "market_id": "pm-1",
                             "side": "buy_yes",
+                            "fair_yes_prob": 0.6,
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "edge_buy_bps": 1300.0,
+                            "edge_sell_bps": -1500.0,
+                            "edge_buy_after_costs_bps": 1285.0,
+                            "edge_sell_after_costs_bps": -1515.0,
                             "edge_after_costs_bps": 220.0,
                             "fillable_size": 5.0,
                             "confidence": 0.99,
+                            "blocked_reasons": [],
                             "blocked_reason": None,
                         }
                     }
@@ -1088,9 +1110,17 @@ class RunAgentLoopTests(unittest.TestCase):
                         "pm-1|buy_yes": {
                             "market_id": "pm-1",
                             "side": "buy_yes",
+                            "fair_yes_prob": 0.6,
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "edge_buy_bps": 1300.0,
+                            "edge_sell_bps": -1500.0,
+                            "edge_buy_after_costs_bps": 1285.0,
+                            "edge_sell_after_costs_bps": -1515.0,
                             "edge_after_costs_bps": 220.0,
                             "fillable_size": 5.0,
                             "confidence": 0.99,
+                            "blocked_reasons": [],
                             "blocked_reason": None,
                         }
                     }
@@ -1198,9 +1228,17 @@ class RunAgentLoopTests(unittest.TestCase):
                         "pm-1|buy_yes": {
                             "market_id": "pm-1",
                             "side": "buy_yes",
+                            "fair_yes_prob": 0.6,
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "edge_buy_bps": 1300.0,
+                            "edge_sell_bps": -1500.0,
+                            "edge_buy_after_costs_bps": 1285.0,
+                            "edge_sell_after_costs_bps": -1515.0,
                             "edge_after_costs_bps": 220.0,
                             "fillable_size": 5.0,
                             "confidence": 0.99,
+                            "blocked_reasons": [],
                             "blocked_reason": None,
                         }
                     }
@@ -1309,9 +1347,17 @@ class RunAgentLoopTests(unittest.TestCase):
                         "pm-1|buy_yes": {
                             "market_id": "pm-1",
                             "side": "buy_yes",
+                            "fair_yes_prob": 0.6,
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "edge_buy_bps": 1300.0,
+                            "edge_sell_bps": -1500.0,
+                            "edge_buy_after_costs_bps": 1285.0,
+                            "edge_sell_after_costs_bps": -1515.0,
                             "edge_after_costs_bps": 220.0,
                             "fillable_size": 5.0,
                             "confidence": 0.99,
+                            "blocked_reasons": [],
                             "blocked_reason": None,
                         }
                     }
@@ -1416,10 +1462,20 @@ class RunAgentLoopTests(unittest.TestCase):
                 (runtime_root / "runtime_metrics.json").read_text()
             )
 
-        rendered = "".join(call.args[0] for call in stdout.write.call_args_list)
-        self.assertIn('"preview_order_proposal_count": 0', rendered)
-        self.assertIn('"preview_order_blocked_count": 1', rendered)
-        self.assertIn("source polymarket_market_channel unhealthy", rendered)
+        payload = json.loads(
+            "".join(call.args[0] for call in stdout.write.call_args_list)
+        )
+        self.assertEqual(payload["preview_order_proposal_count"], 0)
+        self.assertEqual(payload["preview_order_blocked_count"], 1)
+        blocked = payload["preview_order_blocked"][0]
+        self.assertEqual(
+            blocked["blocked_reason"], "source polymarket_market_channel unhealthy"
+        )
+        self.assertEqual(
+            blocked["blocked_reasons"],
+            ["source polymarket_market_channel unhealthy"],
+        )
+        self.assertEqual(blocked["edge_buy_after_costs_bps"], 1285.0)
         self.assertIn("run_agent_loop:preview_proposals", metrics_payload["metrics"])
 
     def test_main_uses_policy_file_for_thresholds_and_manifest_event_registry(self):
