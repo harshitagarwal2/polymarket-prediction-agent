@@ -42,7 +42,11 @@ class SportsInputCaptureEnvelope:
 
 
 def _coerce_label(item: dict[str, object]) -> int | None:
-    raw_label = item.get("label") or item.get("outcome_label") or item.get("home_win")
+    raw_label = None
+    for field_name in ("label", "outcome_label", "home_win"):
+        if field_name in item and item[field_name] not in (None, ""):
+            raw_label = item[field_name]
+            break
     if raw_label in (None, ""):
         return None
     if isinstance(raw_label, bool):
@@ -189,10 +193,12 @@ def load_sports_input_capture(path: str | Path) -> SportsInputCaptureEnvelope:
     payload = json.loads(Path(path).read_text())
     if not isinstance(payload, dict):
         raise RuntimeError("sports input capture must be a JSON object")
-    raw_rows = payload.get("rows") or payload.get("records")
+    if "rows" in payload:
+        raw_rows = payload["rows"]
+    else:
+        raw_rows = payload.get("records")
     if not isinstance(raw_rows, list):
         raise RuntimeError("sports input capture must contain a rows list")
-    resolved_captured_at = _utc_now()
     rows = [
         _row_from_payload(
             item,
