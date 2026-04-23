@@ -101,6 +101,16 @@ This layer owns fair value and forecast evaluation.
 
 `research/calibration.py` and forecast-scoring pieces of `research/scoring.py` remain compatibility facades for the older sports benchmark path.
 
+### `llm/`
+
+This layer owns operator-facing advisory helpers and sidecar artifacts.
+
+- `llm/advisory_artifact.py` validates and writes the structured advisory sidecar at `runtime/data/current/llm_advisory.json`
+- `llm/evidence_summarizer.py` and `llm/operator_memo.py` keep summary/memo rendering deterministic
+- `contracts/llm_parser.py` still owns the nested rule/ambiguity parser for contract-specific LLM outputs
+
+That `runtime/data/current/llm_advisory.json` artifact is for operator review and dashboards only. It does not participate in order placement, sizing, risk limits, or execution-policy gating.
+
 ### `opportunity/`
 
 This layer sits between fair value and execution.
