@@ -47,6 +47,8 @@ def _required_env_vars(venue_name: str) -> list[str]:
 
 
 def validate_runtime(args) -> None:
+    if args.venue in (None, ""):
+        raise RuntimeError("venue must be provided")
     if args.fair_values_file in (None, ""):
         raise RuntimeError("fair values file must be provided")
     fair_values_path = Path(args.fair_values_file)
@@ -82,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the prediction-market polling loop"
     )
-    parser.add_argument("--venue", choices=["polymarket", "kalshi"], required=True)
+    parser.add_argument("--venue", choices=["polymarket", "kalshi"], default=None)
     parser.add_argument("--config-file", default=None)
     parser.add_argument(
         "--mode",
@@ -305,6 +307,9 @@ def _build_preview_order_proposals(
 def main() -> int:
     args = build_parser().parse_args()
     config = load_config_file(args.config_file) if args.config_file else {}
+    configured_venue = config.get("venue")
+    if args.venue is None and isinstance(configured_venue, str):
+        args.venue = configured_venue
     configured_fair_values_file = nested_config_value(
         config, "runtime", "fair_values_file"
     )
