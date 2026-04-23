@@ -245,7 +245,6 @@ The sample sports configs can also set runtime defaults:
 
 ```bash
 run-agent-loop \
-  --venue polymarket \
   --config-file configs/sports_nba.yaml
 ```
 

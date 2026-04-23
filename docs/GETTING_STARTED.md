@@ -210,7 +210,6 @@ If you want the sample runtime defaults from `configs/sports_nba.yaml`, you can 
 
 ```bash
 run-agent-loop \
-  --venue polymarket \
   --config-file configs/sports_nba.yaml
 ```
 
