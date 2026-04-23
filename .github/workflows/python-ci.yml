@@ -46,6 +46,14 @@ jobs:
           storage
           tests
 
+      - name: Run advisory and docs contract regressions
+        run: >-
+          uv run python -m unittest
+          tests.test_llm_advisory
+          tests.test_operator_advisory_cli
+          tests.test_docs_sync
+          tests.test_fair_value_loader
+
       - name: Run unittest suite
         run: uv run python -m unittest discover -s tests -p "test_*.py"
 
