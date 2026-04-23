@@ -65,7 +65,7 @@ class CurrentProjectionTests(unittest.TestCase):
     def test_load_current_state_tables_matches_projected_adapter_payload_shape(self):
         payloads = {
             "opportunities": {
-                "market-1|2024-01-01T00:00:00+00:00|buy_yes": {
+                "market-1|buy_yes": {
                     "market_id": "market-1",
                     "as_of": "2024-01-01T00:00:00+00:00",
                     "side": "buy_yes",
@@ -85,7 +85,7 @@ class CurrentProjectionTests(unittest.TestCase):
                 }
             },
             "market_mappings": {
-                "0": {
+                "market-1|event-1": {
                     "polymarket_market_id": "market-1",
                     "sportsbook_event_id": "event-1",
                     "sportsbook_market_type": "h2h",
@@ -98,7 +98,7 @@ class CurrentProjectionTests(unittest.TestCase):
                 }
             },
             "fair_values": {
-                "market-1|2024-01-01T00:00:00+00:00|model|v1": {
+                "market-1": {
                     "market_id": "market-1",
                     "as_of": "2024-01-01T00:00:00+00:00",
                     "fair_yes_prob": 0.55,

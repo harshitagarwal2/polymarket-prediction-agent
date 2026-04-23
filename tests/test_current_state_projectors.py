@@ -259,6 +259,18 @@ class CurrentStateProjectorTests(unittest.TestCase):
                     }
                 }
             ),
+            sportsbook_odds=_StubRepository(
+                {
+                    "0": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "book-a",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.8,
+                        "quote_ts": "2026-04-21T20:00:00+00:00",
+                    }
+                }
+            ),
             source_health=_StubRepository(
                 {
                     "sportsbook_odds": {
@@ -290,15 +302,21 @@ class CurrentStateProjectorTests(unittest.TestCase):
         )
         source_health = adapter.read_table("source_health")
         polymarket_markets = adapter.read_table("polymarket_markets")
+        sportsbook_odds = adapter.read_table("sportsbook_odds")
         self.assertIsInstance(source_health, dict)
         self.assertIsInstance(polymarket_markets, dict)
+        self.assertIsInstance(sportsbook_odds, dict)
         sportsbook_odds_health = cast(dict[str, Any], source_health["sportsbook_odds"])
         polymarket_market = cast(dict[str, Any], polymarket_markets["pm-1"])
+        current_quote = cast(
+            dict[str, Any], sportsbook_odds["sb-1|book-a|h2h|Home Team"]
+        )
         self.assertEqual(sportsbook_odds_health["status"], "ok")
         self.assertEqual(
             polymarket_market["title"],
             "Market 1",
         )
+        self.assertEqual(current_quote["price_decimal"], 1.8)
 
 
 if __name__ == "__main__":
