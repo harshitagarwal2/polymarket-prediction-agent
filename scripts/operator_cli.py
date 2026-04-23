@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -33,7 +34,9 @@ from engine import (
     OrderLifecyclePolicy,
     summarize_fill_state,
 )
+from engine.cli_output import add_quiet_flag, emit_json, emit_lines
 from engine.interfaces import NoopStrategy
+from engine.runtime_policy import load_runtime_policy
 from engine.runtime_bootstrap import build_adapter as _build_adapter
 from engine.runner import TradingEngine
 from engine.safety_state import (
@@ -48,8 +51,20 @@ from storage.journal import (
     summarize_recent_runtime,
     summarize_scan_cycle_events,
 )
+from llm import (
+    advisory_summary_payload,
+    build_llm_advisory_artifact,
+    load_llm_advisory_artifact,
+    load_llm_advisory_contract_rows,
+    render_llm_advisory_markdown,
+    write_llm_advisory_artifacts,
+)
+from llm.advisory_context import build_preview_runtime_context
 from risk.cleanup import CleanupCoordinator
 from risk.limits import RiskEngine, RiskLimits
+
+
+DEFAULT_LLM_ADVISORY_PATH = "runtime/data/current/llm_advisory.json"
 
 
 def _normalize_payload(value: Any) -> Any:
@@ -218,6 +233,38 @@ def _runtime_health_payload(state: EngineSafetyState) -> dict[str, Any]:
                 and not open_recovery_items
             ),
         }
+    )
+
+
+def _filtered_advisory_artifact(artifact, contract_id: str | None):
+    if contract_id in (None, ""):
+        return artifact
+    selected = tuple(
+        row for row in artifact.contracts if row.contract_id == contract_id
+    )
+    if not selected:
+        raise ValueError(f"contract not found in advisory artifact: {contract_id}")
+    selected_market_ids = {
+        row.market_id for row in selected if row.market_id is not None
+    }
+    return build_llm_advisory_artifact(
+        selected,
+        preview_order_proposals=[
+            proposal
+            for proposal in artifact.preview_order_proposals
+            if proposal.market_id in selected_market_ids
+        ],
+        blocked_preview_orders=[
+            blocked
+            for blocked in artifact.blocked_preview_orders
+            if blocked.market_id in selected_market_ids
+        ],
+        source=artifact.source,
+        provider_name=artifact.provider_name,
+        provider_model=artifact.provider_model,
+        prompt_version=artifact.prompt_version,
+        runtime_health=artifact.runtime_health,
+        generated_at=artifact.generated_at,
     )
 
 
@@ -390,6 +437,56 @@ def _reconciliation_payload(report) -> dict:
     }
 
 
+def cmd_build_llm_advisory(args) -> int:
+    policy = load_runtime_policy(args.policy_file) if args.policy_file else None
+    state = _load_store(args.state_file).load()
+    preview_context = build_preview_runtime_context(
+        args.opportunity_root, policy=policy
+    )
+    artifact = build_llm_advisory_artifact(
+        load_llm_advisory_contract_rows(args.llm_input),
+        preview_order_proposals=preview_context.preview_order_proposals,
+        blocked_preview_orders=preview_context.blocked_preview_orders,
+        source="operator_cli",
+        provider_name=args.provider_name,
+        provider_model=args.provider_model,
+        prompt_version=args.prompt_version,
+        runtime_health=_runtime_health_payload(state),
+    )
+    json_path, markdown_path = write_llm_advisory_artifacts(artifact, args.output)
+    summary = advisory_summary_payload(artifact)
+    _journal_action(
+        args,
+        "operator_build_llm_advisory",
+        {
+            "output": str(json_path),
+            "markdown_output": str(markdown_path),
+            **summary,
+        },
+    )
+    emit_json(
+        {
+            "json_output": str(json_path),
+            "markdown_output": str(markdown_path),
+            **summary,
+        },
+        quiet=args.quiet,
+    )
+    return 0
+
+
+def cmd_show_llm_advisory(args) -> int:
+    artifact = _filtered_advisory_artifact(
+        load_llm_advisory_artifact(args.llm_advisory_file),
+        args.contract_id,
+    )
+    if args.format == "markdown":
+        emit_lines(render_llm_advisory_markdown(artifact), quiet=args.quiet)
+    else:
+        emit_json(artifact.to_payload(), quiet=args.quiet)
+    return 0
+
+
 def cmd_status(args) -> int:
     store = _load_store(args.state_file)
     state = store.load()
@@ -441,6 +538,10 @@ def cmd_status(args) -> int:
         payload["recent_runtime"] = summarize_recent_runtime(events)
     else:
         payload["recent_runtime"] = None
+    if getattr(args, "llm_advisory_file", None):
+        payload["llm_advisory_summary"] = advisory_summary_payload(
+            load_llm_advisory_artifact(args.llm_advisory_file)
+        )
     if getattr(args, "venue", None):
         adapter = _build_adapter(args.venue)
         venue = Venue.POLYMARKET if args.venue == "polymarket" else Venue.KALSHI
@@ -679,6 +780,7 @@ def build_parser() -> argparse.ArgumentParser:
     status = subparsers.add_parser("status")
     status.add_argument("--state-file", default="runtime/safety-state.json")
     status.add_argument("--journal", default=None)
+    status.add_argument("--llm-advisory-file", default=None)
     status.add_argument("--venue", choices=["polymarket", "kalshi"], default=None)
     status.add_argument("--symbol", default=None)
     status.add_argument(
@@ -755,6 +857,36 @@ def build_parser() -> argparse.ArgumentParser:
     cancel_stale.add_argument("--journal", default=None)
     cancel_stale.add_argument("--state-file", default="runtime/safety-state.json")
     cancel_stale.set_defaults(func=cmd_cancel_stale)
+
+    build_llm_advisory = subparsers.add_parser("build-llm-advisory")
+    build_llm_advisory.add_argument("--llm-input", required=True)
+    build_llm_advisory.add_argument("--opportunity-root", default="runtime/data")
+    build_llm_advisory.add_argument("--policy-file", default=None)
+    build_llm_advisory.add_argument("--state-file", default="runtime/safety-state.json")
+    build_llm_advisory.add_argument("--journal", default=None)
+    build_llm_advisory.add_argument(
+        "--output",
+        default=DEFAULT_LLM_ADVISORY_PATH,
+    )
+    build_llm_advisory.add_argument("--provider-name", default="offline")
+    build_llm_advisory.add_argument("--provider-model", default=None)
+    build_llm_advisory.add_argument("--prompt-version", default=None)
+    add_quiet_flag(build_llm_advisory)
+    build_llm_advisory.set_defaults(func=cmd_build_llm_advisory)
+
+    show_llm_advisory = subparsers.add_parser("show-llm-advisory")
+    show_llm_advisory.add_argument(
+        "--llm-advisory-file",
+        default=DEFAULT_LLM_ADVISORY_PATH,
+    )
+    show_llm_advisory.add_argument("--contract-id", default=None)
+    show_llm_advisory.add_argument(
+        "--format",
+        choices=["json", "markdown"],
+        default="json",
+    )
+    add_quiet_flag(show_llm_advisory)
+    show_llm_advisory.set_defaults(func=cmd_show_llm_advisory)
 
     return parser
 
