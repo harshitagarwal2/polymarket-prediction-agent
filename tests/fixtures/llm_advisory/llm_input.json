@@ -1,0 +1,48 @@
+{
+  "contracts": [
+    {
+      "contract_id": "contract-pm-1",
+      "market_id": "pm-1",
+      "question": "Will Home Team beat Away Team?",
+      "llm_probability": 0.62,
+      "llm_confidence": 0.81,
+      "summary": "Home Team has the cleaner injury report and the current market still lags the latest lineup news.",
+      "citations": [
+        "injury-report-1"
+      ],
+      "deterministic_probability": 0.6,
+      "consistency_notes": [
+        "model and llm probabilities remain directionally aligned"
+      ],
+      "llm_contract": {
+        "includes_overtime": true,
+        "void_on_postponement": true,
+        "requires_player_to_start": false,
+        "resolution_source": "league official result",
+        "ambiguity_score": 0.12
+      }
+    },
+    {
+      "contract_id": "contract-pm-2",
+      "market_id": "pm-2",
+      "question": "Will Player X score 25+ points?",
+      "llm_probability": 0.44,
+      "llm_confidence": 0.54,
+      "summary": "The player-prop wording leaves the start requirement unstated and the resolution source is omitted.",
+      "citations": [
+        "contract-note-2"
+      ],
+      "deterministic_probability": 0.47,
+      "consistency_notes": [
+        "operator review recommended before acting on this contract"
+      ],
+      "llm_contract": {
+        "includes_overtime": true,
+        "void_on_postponement": true,
+        "requires_player_to_start": null,
+        "resolution_source": null,
+        "ambiguity_score": 0.38
+      }
+    }
+  ]
+}

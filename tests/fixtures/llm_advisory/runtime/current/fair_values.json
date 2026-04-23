@@ -1,0 +1,14 @@
+{
+  "pm-1": {
+    "market_id": "pm-1",
+    "fair_yes_prob": 0.6,
+    "book_dispersion": 0.01,
+    "data_age_ms": 1000
+  },
+  "pm-2": {
+    "market_id": "pm-2",
+    "fair_yes_prob": 0.47,
+    "book_dispersion": 0.01,
+    "data_age_ms": 1000
+  }
+}
