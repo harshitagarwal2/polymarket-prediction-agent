@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from adapters.types import MarketSummary, OrderBookSnapshot
+from storage.postgres.bootstrap import bootstrap_postgres, resolve_postgres_dsn
 from storage.postgres.models import (
     FairValueRecord,
     MarketMappingRecord,
@@ -18,6 +19,7 @@ from storage.postgres.models import (
 from storage.postgres.repositories import (
     BBORepository,
     FairValueRepository,
+    list_raw_capture_events,
     MappingRepository,
     MarketRepository,
     ModelRegistryRepository,
@@ -26,6 +28,9 @@ from storage.postgres.repositories import (
     SportsbookEventRepository,
     SportsbookOddsRepository,
     TradeAttributionRepository,
+    append_raw_capture_event,
+    read_capture_checkpoint,
+    upsert_capture_checkpoint,
 )
 
 
@@ -104,6 +109,7 @@ def order_book_row_from_snapshot(book: OrderBookSnapshot) -> NormalizedOrderBook
 
 __all__ = [
     "BBORepository",
+    "bootstrap_postgres",
     "FairValueRecord",
     "FairValueRepository",
     "MappingRepository",
@@ -124,6 +130,11 @@ __all__ = [
     "SportsbookOddsRepository",
     "TradeAttributionRecord",
     "TradeAttributionRepository",
+    "append_raw_capture_event",
+    "list_raw_capture_events",
     "market_row_from_summary",
     "order_book_row_from_snapshot",
+    "read_capture_checkpoint",
+    "resolve_postgres_dsn",
+    "upsert_capture_checkpoint",
 ]

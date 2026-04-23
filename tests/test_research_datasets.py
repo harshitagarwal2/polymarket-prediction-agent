@@ -169,6 +169,77 @@ class ResearchDatasetTests(unittest.TestCase):
                     record_id_field="record_id",
                 )
 
+    def test_rows_snapshot_rejects_symlinked_dataset_dir_escape(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "datasets"
+            outside_root = Path(temp_dir) / "outside-datasets"
+            outside_root.mkdir(parents=True, exist_ok=True)
+            registry = _datasets_module().DatasetRegistry(root)
+            (root / "linked-dataset").symlink_to(outside_root, target_is_directory=True)
+            registry.registry_path.write_text(
+                json.dumps(
+                    {
+                        "datasets": {
+                            "sports-rows": {
+                                "dataset_name": "sports-rows",
+                                "dataset_dir": "linked-dataset",
+                                "latest_version": "v1",
+                                "versions": {},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset_dir must stay within the dataset registry root",
+            ):
+                registry.write_rows_snapshot(
+                    "sports-rows",
+                    [{"record_id": "row-1", "recorded_at": "2026-04-01T12:00:00Z"}],
+                    version="v1",
+                    record_id_field="record_id",
+                )
+
+    def test_rows_snapshot_uses_resolved_safe_symlinked_dataset_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "datasets"
+            actual_root = root / "actual-dataset"
+            actual_root.mkdir(parents=True, exist_ok=True)
+            registry = _datasets_module().DatasetRegistry(root)
+            (root / "linked-dataset").symlink_to(actual_root, target_is_directory=True)
+            registry.registry_path.write_text(
+                json.dumps(
+                    {
+                        "datasets": {
+                            "sports-rows": {
+                                "dataset_name": "sports-rows",
+                                "dataset_dir": "linked-dataset",
+                                "latest_version": "v1",
+                                "versions": {},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = registry.write_rows_snapshot(
+                "sports-rows",
+                [{"record_id": "row-1", "recorded_at": "2026-04-01T12:00:00Z"}],
+                version="v1",
+                record_id_field="record_id",
+            )
+            loaded = registry.load_snapshot("sports-rows", version="v1")
+
+        self.assertEqual(
+            manifest.snapshot_dir,
+            (actual_root / "v1").resolve(),
+        )
+        self.assertEqual(loaded.snapshot_dir, (actual_root / "v1").resolve())
+
     def test_generate_walk_forward_splits_over_dated_row_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")
@@ -258,6 +329,140 @@ class ResearchDatasetTests(unittest.TestCase):
         self.assertEqual(
             split_report.case_results[0].report.case_name, newer_case["name"]
         )
+
+    def test_benchmark_case_paths_reject_manifest_relative_path_escape(self):
+        older_case = json.loads(
+            (FIXTURES_DIR / "sports_benchmark_tiny.json").read_text()
+        )
+        older_case["recorded_at"] = "2026-04-01T12:00:00Z"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")
+            manifest = registry.write_benchmark_case_snapshot(
+                "benchmark-cases",
+                [older_case],
+                version="v1",
+                timestamp_field="recorded_at",
+            )
+            assert manifest.snapshot_dir is not None
+            manifest_path = manifest.snapshot_dir / "manifest.json"
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest_payload["records"][0]["relative_path"] = "../escape.json"
+            manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset snapshot relative_path must stay within the dataset registry root",
+            ):
+                registry.benchmark_case_paths("benchmark-cases", version="v1")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset snapshot relative_path must stay within the dataset registry root",
+            ):
+                registry.benchmark_case_paths_by_record_ids(
+                    "benchmark-cases",
+                    [manifest_payload["records"][0]["record_id"]],
+                    version="v1",
+                )
+
+    def test_benchmark_case_paths_reject_manifest_symlink_escape(self):
+        older_case = json.loads(
+            (FIXTURES_DIR / "sports_benchmark_tiny.json").read_text()
+        )
+        older_case["recorded_at"] = "2026-04-01T12:00:00Z"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")
+            manifest = registry.write_benchmark_case_snapshot(
+                "benchmark-cases",
+                [older_case],
+                version="v1",
+                timestamp_field="recorded_at",
+            )
+            assert manifest.snapshot_dir is not None
+            outside_case = Path(temp_dir) / "outside-case.json"
+            outside_case.write_text(json.dumps(older_case), encoding="utf-8")
+            linked_case = manifest.snapshot_dir / "cases" / "linked-case.json"
+            linked_case.symlink_to(outside_case)
+            manifest_path = manifest.snapshot_dir / "manifest.json"
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest_payload["records"][0]["relative_path"] = "cases/linked-case.json"
+            manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset snapshot relative_path must stay within the snapshot directory",
+            ):
+                registry.benchmark_case_paths("benchmark-cases", version="v1")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset snapshot relative_path must stay within the snapshot directory",
+            ):
+                registry.benchmark_case_paths_by_record_ids(
+                    "benchmark-cases",
+                    [manifest_payload["records"][0]["record_id"]],
+                    version="v1",
+                )
+
+    def test_load_snapshot_rejects_manifest_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")
+            registry.write_rows_snapshot(
+                "sports-rows",
+                [{"record_id": "row-1", "recorded_at": "2026-04-01T12:00:00Z"}],
+                version="v1",
+                record_id_field="record_id",
+            )
+            snapshot_dir = registry.root_dir / "sports-rows" / "v1"
+            outside_manifest = Path(temp_dir) / "outside-manifest.json"
+            outside_manifest.write_text(
+                json.dumps(
+                    {
+                        "dataset_name": "sports-rows",
+                        "version": "v1",
+                        "kind": "rows_jsonl",
+                        "created_at": "2026-04-01T12:00:00Z",
+                        "records": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest_path = snapshot_dir / "manifest.json"
+            manifest_path.unlink()
+            manifest_path.symlink_to(outside_manifest)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset snapshot manifest must stay within the snapshot directory",
+            ):
+                registry.load_snapshot("sports-rows", version="v1")
+
+    def test_read_rows_rejects_rows_jsonl_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")
+            registry.write_rows_snapshot(
+                "sports-rows",
+                [{"record_id": "row-1", "recorded_at": "2026-04-01T12:00:00Z"}],
+                version="v1",
+                record_id_field="record_id",
+            )
+            snapshot_dir = registry.root_dir / "sports-rows" / "v1"
+            outside_rows = Path(temp_dir) / "outside-rows.jsonl"
+            outside_rows.write_text(
+                json.dumps({"record_id": "outside-row"}) + "\n",
+                encoding="utf-8",
+            )
+            rows_path = snapshot_dir / "rows.jsonl"
+            rows_path.unlink()
+            rows_path.symlink_to(outside_rows)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"dataset snapshot rows file must stay within the snapshot directory",
+            ):
+                registry.read_rows("sports-rows", version="v1")
 
     def test_walk_forward_splits_fail_when_snapshot_records_are_undated(self):
         with tempfile.TemporaryDirectory() as temp_dir:

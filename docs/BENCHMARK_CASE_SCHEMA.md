@@ -115,10 +115,20 @@ The replay schema mirrors the current `ReplayRiskConfig`, not the full live runt
 
 - `uv run --locked --extra research prediction-market-sports-benchmark --fixture ...` accepts packaged fixture names shipped with the project
 - `uv run --locked --extra research prediction-market-sports-benchmark-suite --output-dir ...` runs the packaged multi-case suite
+- `uv run --locked --extra research python3 scripts/run_replay_attribution.py --fixture sports_benchmark_tiny.json --output /tmp/replay-attribution.json` emits replay attribution rows and the attribution summary for a replay-capable benchmark case
 - `uv run --locked --extra research python3 scripts/run_sports_benchmark.py --case /path/to/case.json` runs an explicit case file
 - `uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py --fixtures-dir /path/to/cases --output-dir ...` runs a directory of case files
 - `uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py --dataset-root research/datasets --dataset-name benchmark-cases --dataset-version v1 --output-dir ...` runs a benchmark-case dataset snapshot
 - `uv run --locked --extra research python3 scripts/run_sports_benchmark_suite.py --dataset-root research/datasets --dataset-name benchmark-cases --dataset-version v1 --walk-forward --min-train-size 10 --test-size 5 --step-size 5 --output-dir ...` runs walk-forward evaluation over a dated benchmark-case snapshot
+
+The replay-attribution CLI emits a narrow JSON payload with:
+
+- `case_name`
+- optional `description`
+- `trade_attributions`
+- `attribution_summary`
+
+and raises an error when the selected benchmark case does not produce a replay report.
 
 ## Suite artifact contract
 
@@ -128,11 +138,13 @@ Suite artifacts are written as:
 - `benchmark_suite_summary.md`
 - `benchmark_suite_edge_ledger.json`
 - `benchmark_suite_execution_ledger.json`
+- `benchmark_suite_attribution_ledger.json`
 - `cases/<safe-case-name>.json`
 
 Walk-forward suite artifacts additionally include:
 
 - `walk_forward_benchmark_summary.json`
+- `walk_forward_benchmark_attribution_ledger.json`
 - `splits/<split-id>/...` per-split suite artifacts
 
 The root walk-forward summary records dataset provenance, split settings, pooled out-of-fold aggregate metrics across the split test reports, and artifact links for each split.
@@ -144,7 +156,10 @@ The suite summary JSON currently exposes:
 - `failures`
 - `edge_ledger`
 - `execution_ledger`
+- `attribution_ledger`
 
 `edge_ledger.rows` contains the per-market fair-value evaluation rows, enriched with suite context such as `case_name` and `case_path`.
 
 `execution_ledger.rows` contains replay execution rows enriched with suite context, including decision-time quote metadata, fill ratios, wait steps, and stale/partial-fill telemetry.
+
+`attribution_ledger.rows` contains per-trade replay attribution rows enriched with suite context, including expected edge, realized edge, slippage, and attribution decomposition fields.

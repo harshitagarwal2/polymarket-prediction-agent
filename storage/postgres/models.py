@@ -57,6 +57,9 @@ class SportsbookOddsRecord:
     quote_ts: str
     source_age_ms: int
     raw_json: dict
+    provider: str | None = None
+    source_ts: str | None = None
+    capture_ts: str | None = None
 
 
 @dataclass(frozen=True)

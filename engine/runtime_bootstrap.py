@@ -8,6 +8,11 @@ from typing import TYPE_CHECKING, Any
 from adapters.base import TradingAdapter
 from adapters.kalshi import KalshiAdapter, KalshiConfig
 from adapters.polymarket import PolymarketAdapter, PolymarketConfig
+from storage.current_read_adapter import (
+    CurrentStateReadAdapter,
+    FileCurrentStateReadAdapter,
+    ProjectedCurrentStateReadAdapter,
+)
 
 if TYPE_CHECKING:
     from engine.runtime_policy import RuntimePolicy
@@ -43,6 +48,26 @@ def _load_manifest_condition_ids(path: str | None) -> list[str] | None:
         if normalized not in condition_ids:
             condition_ids.append(normalized)
     return condition_ids or None
+
+
+def _has_projected_state_marker(root: str | Path) -> bool:
+    root_path = Path(root)
+    marker_dirs = (root_path, root_path / "postgres")
+    for marker_dir in marker_dirs:
+        for filename in ("postgres.dsn", ".postgres.dsn", "database_url.txt"):
+            if (marker_dir / filename).exists():
+                return True
+    return False
+
+
+def build_current_state_read_adapter(
+    opportunity_root: str | Path | None,
+) -> CurrentStateReadAdapter | None:
+    if opportunity_root in (None, ""):
+        return None
+    if _has_projected_state_marker(opportunity_root):
+        return ProjectedCurrentStateReadAdapter.from_root(opportunity_root)
+    return FileCurrentStateReadAdapter.from_opportunity_root(opportunity_root)
 
 
 def build_adapter(
@@ -84,4 +109,8 @@ def build_adapter(
     raise ValueError(f"unsupported venue: {venue_name}")
 
 
-__all__ = ["build_adapter", "parse_comma_separated"]
+__all__ = [
+    "build_adapter",
+    "build_current_state_read_adapter",
+    "parse_comma_separated",
+]

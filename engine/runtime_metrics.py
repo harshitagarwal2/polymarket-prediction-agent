@@ -107,3 +107,31 @@ class RuntimeMetricsCollector:
 
     def snapshot(self) -> dict[str, Any]:
         return self._load()
+
+
+class RuntimeProposalJournal:
+    def __init__(
+        self,
+        path: str | Path = "runtime/data/current/preview_order_context.json",
+    ) -> None:
+        self.path = Path(path)
+
+    def write_preview_snapshot(
+        self,
+        *,
+        proposals: list[dict[str, object]],
+        blocked: list[dict[str, object]],
+    ) -> Path:
+        payload = {
+            "generated_at": _utc_now(),
+            "preview_order_proposal_count": len(proposals),
+            "preview_order_proposals": proposals,
+            "preview_order_blocked_count": len(blocked),
+            "preview_order_blocked": blocked,
+        }
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return self.path

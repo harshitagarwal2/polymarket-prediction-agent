@@ -8,6 +8,7 @@ from typing import Any
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
 from forecasting import ForecastModelRegistry
+from forecasting.model_registry import build_model_registry_repository
 from research.data.build_training_set import load_training_set_rows
 from research.datasets import DatasetRegistry
 from research.schemas import load_benchmark_case
@@ -18,7 +19,6 @@ from research.train.train_consensus import (
     write_consensus_artifact_from_rows,
 )
 from research.train.train_elo import write_elo_artifact, write_elo_artifact_from_rows
-from storage.postgres import ModelRegistryRepository
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -139,7 +139,9 @@ def main() -> None:
         if args.registry_root
         else Path(path).resolve().parent / "model_registry"
     )
-    registry = ForecastModelRegistry(repository=ModelRegistryRepository(registry_root))
+    registry = ForecastModelRegistry(
+        repository=build_model_registry_repository(registry_root)
+    )
     registry.persist_artifact(
         model_name=model,
         model_version=args.model_version,

@@ -71,9 +71,12 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
             f"- Average replay slippage (bps): {_format_float(aggregate.average_replay_slippage_bps, 4)}",
             f"- Replay stale rows: {aggregate.replay_stale_data_count}",
             f"- Average signal edge (bps): {_format_float(aggregate.average_signal_edge_bps, 4)}",
+            f"- Average realized edge (bps): {_format_float(aggregate.average_realized_edge_bps, 4)}",
             f"- Average execution drag (bps): {_format_float(aggregate.average_execution_drag_bps, 4)}",
             f"- Average model residual (bps): {_format_float(aggregate.average_model_residual_bps, 4)}",
             f"- Average closing edge (bps): {_format_float(aggregate.average_closing_edge_bps, 4)}",
+            f"- Average value capture (bps): {_format_float(aggregate.average_value_capture_bps, 4)}",
+            f"- Resting replay trades: {aggregate.replay_resting_trade_count}",
             f"- Edge ledger rows: {aggregate.edge_ledger_row_count}",
             f"- Execution ledger rows: {aggregate.execution_ledger_row_count}",
             "",
@@ -315,8 +318,8 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
             [
                 "## Replay attribution summary",
                 "",
-                "| Case | Trades | Avg Signal Edge (bps) | Avg Execution Drag (bps) | Avg Model Residual (bps) | Avg Closing Edge (bps) | Total PnL |",
-                "|---|---:|---:|---:|---:|---:|---:|",
+                "| Case | Trades | Avg Signal Edge (bps) | Avg Realized Edge (bps) | Avg Execution Drag (bps) | Avg Model Residual (bps) | Avg Closing Edge (bps) | Avg Value Capture (bps) | Resting Trades | Total PnL |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
             ]
         )
         for case in replay_cases_with_attribution:
@@ -325,10 +328,11 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
                 continue
             summary = replay_report.attribution_summary
             lines.append(
-                "| {case_name} | {trade_count} | {signal_edge} | {execution_drag} | {model_residual} | {closing_edge} | {total_pnl} |".format(
+                "| {case_name} | {trade_count} | {signal_edge} | {realized_edge} | {execution_drag} | {model_residual} | {closing_edge} | {value_capture} | {resting_trades} | {total_pnl} |".format(
                     case_name=_escape_markdown_text(case.report.case_name),
                     trade_count=summary.trade_count,
                     signal_edge=_format_float(summary.average_signal_edge_bps, 4),
+                    realized_edge=_format_float(summary.average_realized_edge_bps, 4),
                     execution_drag=_format_float(
                         summary.average_execution_drag_bps,
                         4,
@@ -338,6 +342,8 @@ def render_suite_markdown(report: BenchmarkSuiteReport) -> str:
                         4,
                     ),
                     closing_edge=_format_float(summary.average_closing_edge_bps, 4),
+                    value_capture=_format_float(summary.average_value_capture_bps, 4),
+                    resting_trades=summary.resting_trade_count,
                     total_pnl=_format_float(summary.total_pnl, 4),
                 )
             )

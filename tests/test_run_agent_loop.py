@@ -985,6 +985,12 @@ class RunAgentLoopTests(unittest.TestCase):
                 ):
                     run_agent_loop.main()
 
+            preview_snapshot = json.loads(
+                (
+                    Path(temp_dir) / "data" / "current" / "preview_order_context.json"
+                ).read_text(encoding="utf-8")
+            )
+
         payload = json.loads(
             "".join(call.args[0] for call in stdout.write.call_args_list)
         )
@@ -994,6 +1000,12 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertEqual(proposal["edge_buy_after_costs_bps"], 1285.0)
         self.assertEqual(proposal["edge_sell_after_costs_bps"], -1515.0)
         self.assertEqual(proposal["blocked_reasons"], [])
+        self.assertEqual(preview_snapshot["preview_order_proposal_count"], 1)
+        self.assertEqual(preview_snapshot["preview_order_blocked_count"], 0)
+        self.assertEqual(
+            preview_snapshot["preview_order_proposals"][0]["market_id"],
+            "pm-1",
+        )
 
     def test_main_preview_prefers_best_mapping_per_market(self):
         adapter = FakeAdapter()
@@ -1468,6 +1480,39 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertIn('"preview_order_proposal_count": 0', rendered)
         self.assertIn("market within pre-start freeze window", rendered)
 
+    def test_build_preview_order_proposals_uses_current_state_read_adapter(self):
+        current_state_adapter = object()
+        preview_context = SimpleNamespace(
+            preview_order_proposals=({"market_id": "pm-1"},),
+            blocked_preview_orders=({"market_id": "pm-2"},),
+        )
+
+        with (
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=current_state_adapter,
+            ) as build_read_adapter,
+            patch.object(
+                run_agent_loop,
+                "build_preview_runtime_context",
+                return_value=preview_context,
+            ) as build_preview_context,
+        ):
+            proposals, blocked = run_agent_loop._build_preview_order_proposals(
+                SimpleNamespace(opportunity_root="runtime/data"),
+                None,
+            )
+
+        self.assertEqual(proposals, [{"market_id": "pm-1"}])
+        self.assertEqual(blocked, [{"market_id": "pm-2"}])
+        build_read_adapter.assert_called_once_with("runtime/data")
+        build_preview_context.assert_called_once_with(
+            "runtime/data",
+            policy=None,
+            read_adapter=current_state_adapter,
+        )
+
     def test_main_preview_blocks_when_current_bbo_is_stale(self):
         adapter = FakeAdapter()
         fake_engine = SimpleNamespace(
@@ -1720,6 +1765,9 @@ class RunAgentLoopTests(unittest.TestCase):
                 ):
                     run_agent_loop.main()
 
+            preview_snapshot = json.loads(
+                (runtime_root / "preview_order_context.json").read_text()
+            )
             metrics_payload = json.loads(
                 (runtime_root / "runtime_metrics.json").read_text()
             )
@@ -1738,6 +1786,12 @@ class RunAgentLoopTests(unittest.TestCase):
             ["source polymarket_market_channel unhealthy"],
         )
         self.assertEqual(blocked["edge_buy_after_costs_bps"], 1285.0)
+        self.assertEqual(preview_snapshot["preview_order_proposal_count"], 0)
+        self.assertEqual(preview_snapshot["preview_order_blocked_count"], 1)
+        self.assertEqual(
+            preview_snapshot["preview_order_blocked"][0]["blocked_reason"],
+            "source polymarket_market_channel unhealthy",
+        )
         self.assertIn("run_agent_loop:preview_proposals", metrics_payload["metrics"])
 
     def test_main_uses_policy_file_for_thresholds_and_manifest_event_registry(self):

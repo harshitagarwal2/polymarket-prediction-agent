@@ -38,6 +38,13 @@ class BenchmarkSuiteTests(unittest.TestCase):
         self.assertIsNotNone(report.aggregate.average_brier_score)
         self.assertIsNotNone(report.aggregate.average_replay_net_pnl)
         self.assertEqual(report.aggregate.edge_ledger_row_count, 4)
+        self.assertEqual(
+            report.aggregate.attribution_ledger_row_count,
+            len(report.attribution_ledger.rows),
+        )
+        self.assertIsNotNone(report.aggregate.average_realized_edge_bps)
+        self.assertIsNotNone(report.aggregate.average_value_capture_bps)
+        self.assertGreaterEqual(report.aggregate.replay_resting_trade_count, 0)
         self.assertEqual(len(report.edge_ledger.rows), 4)
         self.assertIn(
             "bookmaker_multiplicative_independent",
@@ -254,6 +261,9 @@ class BenchmarkSuiteTests(unittest.TestCase):
                 (Path(output_dir) / "benchmark_suite_execution_ledger.json").exists()
             )
             self.assertTrue(
+                (Path(output_dir) / "benchmark_suite_attribution_ledger.json").exists()
+            )
+            self.assertTrue(
                 (Path(output_dir) / "cases" / "sports-benchmark-tiny.json").exists()
             )
 
@@ -307,6 +317,45 @@ class BenchmarkSuiteTests(unittest.TestCase):
             "sports-benchmark-tiny",
         )
         self.assertIn("fill_ratio", execution_ledger_payload["rows"][0])
+
+    def test_write_suite_report_writes_attribution_ledger_payload(self):
+        report = run_benchmark_suite([FIXTURES_DIR / "sports_benchmark_tiny.json"])
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            write_suite_report(report, output_dir)
+            attribution_ledger_payload = json.loads(
+                (
+                    Path(output_dir) / "benchmark_suite_attribution_ledger.json"
+                ).read_text()
+            )
+
+        self.assertEqual(attribution_ledger_payload["row_count"], 1)
+        self.assertEqual(len(attribution_ledger_payload["rows"]), 1)
+        self.assertEqual(
+            attribution_ledger_payload["rows"][0]["case_name"],
+            "sports-benchmark-tiny",
+        )
+        self.assertIn("slippage_bps", attribution_ledger_payload["rows"][0])
+        self.assertIn("expected_edge_bps", attribution_ledger_payload["rows"][0])
+
+    def test_suite_attribution_ledger_includes_case_context_and_trade_metrics(self):
+        report = run_benchmark_suite([FIXTURES_DIR / "sports_benchmark_tiny.json"])
+
+        payload = report.to_payload()["attribution_ledger"]
+        self.assertIsInstance(payload, dict)
+        if not isinstance(payload, dict):
+            self.fail("expected suite attribution ledger payload")
+        self.assertEqual(payload["row_count"], 1)
+        rows = payload["rows"]
+        self.assertIsInstance(rows, list)
+        if not isinstance(rows, list) or not rows:
+            self.fail("expected suite attribution ledger rows")
+        first_row = rows[0]
+        self.assertEqual(first_row["case_name"], "sports-benchmark-tiny")
+        self.assertEqual(first_row["market_id"], "token-home:yes")
+        self.assertIn("case_path", first_row)
+        self.assertIn("realized_edge_bps", first_row)
+        self.assertIn("execution_drag_bps", first_row)
 
     def test_suite_edge_ledger_surfaces_model_and_blended_values_when_present(self):
         payload = json.loads((FIXTURES_DIR / "sports_benchmark_tiny.json").read_text())
@@ -373,6 +422,9 @@ class BenchmarkSuiteTests(unittest.TestCase):
         self.assertIn("## Replay execution realism", markdown)
         self.assertIn("## Replay attribution summary", markdown)
         self.assertIn("Average replay fill rate", markdown)
+        self.assertIn("Average realized edge (bps)", markdown)
+        self.assertIn("Average value capture (bps)", markdown)
+        self.assertIn("Resting replay trades", markdown)
 
     def test_write_suite_report_renders_fair_value_comparison_stats_section(self):
         payload = json.loads((FIXTURES_DIR / "sports_benchmark_tiny.json").read_text())
@@ -717,14 +769,30 @@ class BenchmarkSuiteTests(unittest.TestCase):
             split_summary_path = (
                 output_dir / payload["splits"][0]["report_artifacts"]["summary_json"]
             )
+            split_attribution_ledger_path = (
+                output_dir
+                / payload["splits"][0]["report_artifacts"]["attribution_ledger_json"]
+            )
+            pooled_attribution_ledger_path = (
+                output_dir / payload["report_artifacts"]["attribution_ledger_json"]
+            )
             self.assertTrue(split_summary_path.exists())
+            self.assertTrue(split_attribution_ledger_path.exists())
+            self.assertTrue(pooled_attribution_ledger_path.exists())
             split_summary = json.loads(split_summary_path.read_text())
+            pooled_attribution_ledger = json.loads(
+                pooled_attribution_ledger_path.read_text()
+            )
 
         self.assertEqual(
             payload["dataset"]["dataset_name"], "walk-forward-benchmark-cases"
         )
         self.assertEqual(payload["walk_forward"]["split_count"], 1)
         self.assertEqual(payload["aggregate"], split_summary["aggregate"])
+        self.assertEqual(
+            payload["aggregate"]["attribution_ledger_row_count"],
+            pooled_attribution_ledger["row_count"],
+        )
         self.assertEqual(
             payload["splits"][0]["split"]["train_record_ids"],
             ["case-000000-sports-benchmark-tiny"],

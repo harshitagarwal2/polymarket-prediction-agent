@@ -7,11 +7,13 @@ from engine.order_state import (
     OrderLifecyclePolicy,
     summarize_fill_state,
 )
+from engine.runtime_metrics import RuntimeProposalJournal
 
 __all__ = [
     "LifecycleDecision",
     "OrderFillSummary",
     "OrderLifecycleManager",
     "OrderLifecyclePolicy",
+    "RuntimeProposalJournal",
     "summarize_fill_state",
 ]

@@ -4,6 +4,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+def _parse_event_time(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def american_to_decimal(odds: int) -> float:
     if odds == 0:
         raise ValueError("american odds must not be zero")
@@ -12,7 +21,9 @@ def american_to_decimal(odds: int) -> float:
     return 1.0 + (100.0 / abs(odds))
 
 
-def implied_probability(*, american_odds: int | None = None, decimal_odds: float | None = None) -> float:
+def implied_probability(
+    *, american_odds: int | None = None, decimal_odds: float | None = None
+) -> float:
     if decimal_odds is None:
         if american_odds is None:
             raise ValueError("one of american_odds or decimal_odds is required")
@@ -30,8 +41,20 @@ def normalize_odds_event(
     captured_at: datetime | None = None,
 ) -> list[dict[str, Any]]:
     observed_at = captured_at or datetime.now(timezone.utc)
+    capture_ts = observed_at.isoformat()
     rows: list[dict[str, Any]] = []
     for bookmaker in event.get("bookmakers") or []:
+        bookmaker_name = str(
+            bookmaker.get("key") or bookmaker.get("title") or source
+        ).strip()
+        source_time = _parse_event_time(
+            bookmaker.get("last_update") or event.get("commence_time")
+        )
+        source_ts = (source_time or observed_at).isoformat()
+        source_age_ms = max(
+            0,
+            int((observed_at - (source_time or observed_at)).total_seconds() * 1000),
+        )
         for market in bookmaker.get("markets") or []:
             if market.get("key") != market_type:
                 continue
@@ -59,20 +82,24 @@ def normalize_odds_event(
                 rows.append(
                     {
                         "sportsbook_event_id": str(event.get("id") or ""),
-                        "source": source,
+                        "source": bookmaker_name,
                         "market_type": market_type,
                         "selection": outcome["selection"],
                         "price_decimal": outcome["price_decimal"],
                         "implied_prob": outcome["implied_prob"],
                         "overround": overround,
-                        "quote_ts": observed_at.isoformat(),
-                        "source_age_ms": 0,
+                        "quote_ts": capture_ts,
+                        "source_age_ms": source_age_ms,
                         "raw_json": event,
                         "sport": event.get("sport_key"),
                         "league": event.get("sport_title"),
                         "home_team": event.get("home_team"),
                         "away_team": event.get("away_team"),
                         "start_time": event.get("commence_time"),
+                        "provider": source,
+                        "bookmaker": bookmaker_name,
+                        "source_ts": source_ts,
+                        "capture_ts": capture_ts,
                     }
                 )
     return rows

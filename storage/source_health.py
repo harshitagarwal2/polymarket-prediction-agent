@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from .current_state_projectors import (  # pyright: ignore[reportMissingImports]
+    SourceHealthUpdate,
+    project_source_health_state,
+)
 
 
 @dataclass(frozen=True)
@@ -18,8 +23,20 @@ class SourceHealthRecord:
 
 
 class SourceHealthStore:
-    def __init__(self, path: str | Path = "runtime/data/current/source_health.json") -> None:
+    def __init__(
+        self, path: str | Path = "runtime/data/current/source_health.json"
+    ) -> None:
         self.path = Path(path)
+
+    def read_all(self) -> dict[str, Any]:
+        return self._load()
+
+    def write_all(self, records: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps(records, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
 
     def upsert(
         self,
@@ -31,20 +48,21 @@ class SourceHealthStore:
         success: bool = True,
         observed_at: datetime | None = None,
     ) -> SourceHealthRecord:
-        now = (observed_at or datetime.now(timezone.utc)).isoformat()
-        existing = self._load()
-        current = existing.get(source_name, {})
-        record = SourceHealthRecord(
-            source_name=source_name,
-            last_seen_at=now,
-            last_success_at=now if success else current.get("last_success_at"),
-            stale_after_ms=int(stale_after_ms),
-            status=status,
-            details=details or {},
+        projected = project_source_health_state(
+            (
+                SourceHealthUpdate(
+                    source_name=source_name,
+                    stale_after_ms=int(stale_after_ms),
+                    status=status,
+                    details=details or {},
+                    success=success,
+                    observed_at=observed_at or datetime.now(timezone.utc),
+                ),
+            ),
+            existing=self.read_all(),
         )
-        existing[source_name] = asdict(record)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(existing, indent=2, sort_keys=True), encoding="utf-8")
+        record = SourceHealthRecord(**projected[source_name])
+        self.write_all(projected)
         return record
 
     def _load(self) -> dict[str, Any]:

@@ -4,15 +4,174 @@ import io
 import json
 import tempfile
 import unittest
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from research.datasets import DatasetRegistry
+from services.capture import sportsbook as sportsbook_capture
 from scripts import ingest_live_data
 
 
+def _fake_repo_payload(row: Any) -> dict[str, Any]:
+    if is_dataclass(row) and not isinstance(row, type):
+        return asdict(row)
+    if isinstance(row, dict):
+        return dict(row)
+    raise TypeError("row must be a dataclass instance or dict")
+
+
+class _FakeJsonRepository:
+    table_name = "table"
+
+    def __init__(self, root: str | Path = "runtime/data/postgres") -> None:
+        self.root = Path(root)
+
+    @property
+    def path(self) -> Path:
+        return self.root / f"{self.table_name}.json"
+
+    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+        payload = _fake_repo_payload(row)
+        existing = self.read_all()
+        existing[str(key)] = payload
+        self.write_all(existing)
+        return payload
+
+    def write_all(self, rows: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8"
+        )
+
+    def read_all(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return {}
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+
+class _FakeMarketRepository(_FakeJsonRepository):
+    table_name = "polymarket_markets"
+
+
+class _FakeBBORepository(_FakeJsonRepository):
+    table_name = "polymarket_bbo"
+
+
+class _FakeSportsbookEventRepository(_FakeJsonRepository):
+    table_name = "sportsbook_events"
+
+
+class _FakeSportsbookOddsRepository(_FakeJsonRepository):
+    table_name = "sportsbook_odds"
+
+    def append(self, row: Any) -> dict[str, Any]:
+        payload = _fake_repo_payload(row)
+        existing = self.read_all()
+        existing[str(len(existing))] = payload
+        self.write_all(existing)
+        return payload
+
+
+class _FakeMappingRepository(_FakeJsonRepository):
+    table_name = "market_mappings"
+
+    def append(self, row: Any) -> dict[str, Any]:
+        payload = _fake_repo_payload(row)
+        existing = self.read_all()
+        existing[str(len(existing))] = payload
+        self.write_all(existing)
+        return payload
+
+
+class _FakeFairValueRepository(_FakeJsonRepository):
+    table_name = "fair_values"
+
+    def append(self, row: Any) -> dict[str, Any]:
+        payload = _fake_repo_payload(row)
+        key = "|".join(
+            [
+                str(payload["market_id"]),
+                str(payload["as_of"]),
+                str(payload["model_name"]),
+                str(payload["model_version"]),
+            ]
+        )
+        return self.upsert(key, payload)
+
+
+class _FakeOpportunityRepository(_FakeJsonRepository):
+    table_name = "opportunities"
+
+    def append(self, row: Any) -> dict[str, Any]:
+        payload = _fake_repo_payload(row)
+        key = "|".join(
+            [
+                str(payload["market_id"]),
+                str(payload["as_of"]),
+                str(payload["side"]),
+            ]
+        )
+        return self.upsert(key, payload)
+
+
+class _FakeSourceHealthRepository(_FakeJsonRepository):
+    table_name = "source_health"
+
+
 class IngestLiveDataTests(unittest.TestCase):
+    def setUp(self) -> None:
+        patchers = [
+            patch.object(ingest_live_data, "MarketRepository", _FakeMarketRepository),
+            patch.object(ingest_live_data, "BBORepository", _FakeBBORepository),
+            patch.object(
+                ingest_live_data,
+                "SportsbookEventRepository",
+                _FakeSportsbookEventRepository,
+            ),
+            patch.object(
+                ingest_live_data,
+                "SportsbookOddsRepository",
+                _FakeSportsbookOddsRepository,
+            ),
+            patch.object(ingest_live_data, "MappingRepository", _FakeMappingRepository),
+            patch.object(
+                ingest_live_data,
+                "FairValueRepository",
+                _FakeFairValueRepository,
+            ),
+            patch.object(
+                ingest_live_data,
+                "OpportunityRepository",
+                _FakeOpportunityRepository,
+            ),
+            patch.object(
+                ingest_live_data,
+                "SourceHealthRepository",
+                _FakeSourceHealthRepository,
+            ),
+            patch.object(
+                sportsbook_capture,
+                "SportsbookEventRepository",
+                _FakeSportsbookEventRepository,
+            ),
+            patch.object(
+                sportsbook_capture,
+                "SportsbookOddsRepository",
+                _FakeSportsbookOddsRepository,
+            ),
+            patch.object(
+                sportsbook_capture,
+                "SourceHealthRepository",
+                _FakeSourceHealthRepository,
+            ),
+        ]
+        for patcher in patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def _write_json(self, path: Path, payload: object) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
@@ -323,6 +482,78 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(len(payload["markets"]), 2)
         self.assertEqual(payload["markets"][0]["sports_market_type"], "moneyline")
         self.assertIsNotNone(payload["markets"][0]["contract"])
+
+    def test_polymarket_ingest_preserves_raw_fallback_without_postgres_dsn(self):
+        event_start = datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc)
+        market_payload = [
+            {
+                "id": "pm-1",
+                "conditionId": "condition-1",
+                "question": "Will Home Team beat Away Team?",
+                "sport": "nba",
+                "eventKey": "event-1",
+                "gameId": "game-1",
+                "sports_market_type": "moneyline",
+                "active": True,
+                "gameStartTime": event_start.isoformat(),
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            bbo_path = Path(temp_dir) / "bbo.json"
+            bbo_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "market_id": "pm-1",
+                            "best_bid": 0.5,
+                            "best_bid_size": 10,
+                            "best_ask": 0.52,
+                            "best_ask_size": 8,
+                            "timestamp": int(event_start.timestamp() * 1000),
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                ingest_live_data.PolymarketMarketCatalogClient,
+                "fetch_open_markets",
+                return_value=market_payload,
+            ):
+                ingest_live_data.main(
+                    [
+                        "polymarket-markets",
+                        "--sport",
+                        "nba",
+                        "--root",
+                        str(root),
+                        "--quiet",
+                    ]
+                )
+
+            ingest_live_data.main(
+                [
+                    "polymarket-bbo",
+                    "--input",
+                    str(bbo_path),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+            raw_market_files = list(
+                (root / "raw" / "polymarket" / "market_catalog").rglob("*.jsonl.gz")
+            )
+            raw_bbo_files = list(
+                (root / "raw" / "polymarket" / "market_channel").rglob("*.jsonl.gz")
+            )
+
+        self.assertEqual(len(raw_market_files), 1)
+        self.assertEqual(len(raw_bbo_files), 1)
 
     def test_live_pipeline_subcommands_build_fair_values_and_opportunities(self):
         event_start = datetime.now(timezone.utc) + timedelta(hours=2)
@@ -683,6 +914,88 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertTrue(
             source_health["fair_values"]["details"]["calibration_artifact_configured"]
         )
+
+    def test_sportsbook_odds_failure_returns_sanitized_json_without_traceback(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stdout = io.StringIO()
+            with (
+                patch.object(
+                    ingest_live_data.TheOddsApiClient,
+                    "fetch_upcoming",
+                    side_effect=RuntimeError("https://example.com/?apiKey=secret"),
+                ),
+                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
+                patch("sys.stdout", stdout),
+            ):
+                result = ingest_live_data.main(
+                    [
+                        "sportsbook-odds",
+                        "--sport",
+                        "basketball_nba",
+                        "--market",
+                        "h2h",
+                        "--root",
+                        str(root),
+                    ]
+                )
+
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "RuntimeError during sportsbook capture",
+        )
+        self.assertNotIn("apiKey=secret", json.dumps(payload, sort_keys=True))
+
+    def test_sportsbook_odds_failure_survives_failure_recording_errors(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stdout = io.StringIO()
+            with (
+                patch.object(
+                    ingest_live_data.TheOddsApiClient,
+                    "fetch_upcoming",
+                    side_effect=RuntimeError("https://example.com/?apiKey=secret"),
+                ),
+                patch.object(
+                    ingest_live_data,
+                    "record_sportsbook_capture_failure",
+                    side_effect=RuntimeError(
+                        "psycopg is required for Postgres storage"
+                    ),
+                ),
+                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
+                patch("sys.stdout", stdout),
+            ):
+                result = ingest_live_data.main(
+                    [
+                        "sportsbook-odds",
+                        "--sport",
+                        "basketball_nba",
+                        "--market",
+                        "h2h",
+                        "--root",
+                        str(root),
+                    ]
+                )
+
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "RuntimeError during sportsbook capture",
+        )
+        self.assertEqual(payload["health_error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["health_error_message"],
+            "RuntimeError during sportsbook capture",
+        )
+        self.assertNotIn("apiKey=secret", json.dumps(payload, sort_keys=True))
 
     def test_build_mappings_persists_research_identity_metadata(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1900,8 +2213,8 @@ class IngestLiveDataTests(unittest.TestCase):
             )
 
             with patch.object(
-                ingest_live_data.SourceHealthStore,
-                "upsert",
+                ingest_live_data,
+                "materialize_source_health_state",
                 side_effect=RuntimeError("health failed"),
             ):
                 result = ingest_live_data.main(
@@ -2281,6 +2594,125 @@ class IngestLiveDataTests(unittest.TestCase):
             self.assertEqual(set(row.keys()), expected_keys)
             self.assertIsNone(row["market_key"])
             self.assertIsNone(row["condition_id"])
+
+    def test_build_training_dataset_skips_ambiguous_polymarket_market_links(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            training_input = Path(temp_dir) / "sports-inputs.json"
+            polymarket_input = Path(temp_dir) / "polymarket-markets.json"
+            captured_at = "2026-04-21T18:00:00Z"
+            training_input.write_text(
+                json.dumps(
+                    {
+                        "source": "sports-inputs",
+                        "captured_at": captured_at,
+                        "rows": [
+                            {
+                                "home_team": "Home Team",
+                                "away_team": "Away Team",
+                                "label": 1,
+                                "event_key": "event-1",
+                                "game_id": "game-1",
+                                "sport": "nba",
+                                "series": "playoffs",
+                                "sports_market_type": "moneyline",
+                                "selection_name": "Home Team",
+                                "decimal_odds": 1.8,
+                                "start_time": "2026-04-21T20:00:00Z",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            polymarket_input.write_text(
+                json.dumps(
+                    {
+                        "layer": "gamma",
+                        "captured_at": captured_at,
+                        "markets": [
+                            {
+                                "conditionId": "condition-1",
+                                "eventKey": "event-1",
+                                "sportsMarketType": "moneyline",
+                                "question": "Will Home Team beat Away Team?",
+                                "tokens": [
+                                    {
+                                        "token_id": "token-home",
+                                        "outcome": "Yes",
+                                        "midpoint": 0.6,
+                                    },
+                                    {
+                                        "token_id": "token-away",
+                                        "outcome": "No",
+                                        "midpoint": 0.4,
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = ingest_live_data.main(
+                [
+                    "build-training-dataset",
+                    "--input",
+                    str(training_input),
+                    "--polymarket-input",
+                    str(polymarket_input),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+            latest_rows_path = (
+                root / "processed" / "training" / "historical_training_dataset.jsonl"
+            )
+            latest_rows = [
+                json.loads(line)
+                for line in latest_rows_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(latest_rows), 1)
+        self.assertIsNone(latest_rows[0]["market_key"])
+        self.assertIsNone(latest_rows[0]["condition_id"])
+        self.assertNotIn("market_market_count", latest_rows[0]["metadata"])
+
+    def test_read_current_table_prefers_projected_state_when_postgres_authoritative(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            current_store = ingest_live_data.FileBackedCurrentStateStore(
+                root / "current"
+            )
+            current_store.write_table(
+                "fair_values",
+                {"stale-market": {"market_id": "stale-market", "fair_yes_prob": 0.12}},
+            )
+
+            class _Projected:
+                def read_table(self, table: str):
+                    self.table = table
+                    return {"pm-1": {"market_id": "pm-1", "fair_yes_prob": 0.61}}
+
+            projected = _Projected()
+            rows = ingest_live_data._read_current_table(
+                {
+                    "projected_authoritative": True,
+                    "current": current_store,
+                    "current_read": projected,
+                },
+                "fair_values",
+            )
+
+        self.assertEqual(projected.table, "fair_values")
+        self.assertEqual(list(rows.keys()), ["pm-1"])
 
     def test_build_opportunities_uses_current_fair_values_over_history_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:

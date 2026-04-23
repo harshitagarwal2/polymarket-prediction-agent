@@ -65,6 +65,8 @@ Polymarket-specific runtime details that matter today:
 - market-state overlay support
 - depth-admission settings applied from runtime policy
 
+The dedicated Phase-1 worker path now surfaces through `scripts/run_polymarket_capture.py`, which uses the Polymarket websocket/catalog adapters plus the Postgres-backed capture stores to append raw/normalized market or user events without going through the monolithic ingest CLI.
+
 `adapters/polymarket/ws_sports.py` is currently a real websocket transport boundary helper, but not yet a full live ingestion orchestrator on its own.
 
 ### `engine/`
@@ -127,6 +129,17 @@ This layer makes runtime and capture storage explicit.
 - `storage/postgres/` builds normalized market/order-book row payloads for relational persistence
 - `storage/parquet/` owns local parquet writers and partition helpers
 - `storage/journal.py` holds runtime JSONL journaling and operator summary helpers
+
+The current-state projection seam is now explicit: `services/projection/` and `scripts/run_current_projection.py` replay raw Postgres capture events into projected current-state tables and the compatibility snapshots under `runtime/data/current/` that older runtime/research selectors still read.
+
+The sportsbook capture split now has two explicit storage modes:
+
+- the dedicated `run-sportsbook-capture` worker is Postgres-backed and expects the optional `postgres` dependency set plus a resolvable DSN / `postgres.dsn` marker
+- generic temp-root research and ingest helper commands can still fall back to local JSON persistence when no DSN is configured
+- dedicated `run-polymarket-capture` workers append authoritative raw market/user capture events plus checkpoints/source-health into Postgres-backed storage
+- the dedicated `run-current-projection` worker replays raw Postgres capture events into selector-facing current tables and compatibility snapshots under `runtime/data/current/`
+
+With a resolvable Postgres marker, JSON under `runtime/data/current/` is now treated as a compatibility export rather than the source of truth. Runtime and ingest read boundaries prefer the projected Postgres-backed current-state adapter when that marker exists.
 
 ### `risk/`
 
@@ -235,6 +248,8 @@ On Polymarket, the adapter also performs order-book depth admission based on pol
 Current commands:
 
 - `status`
+- `build-llm-advisory`
+- `show-llm-advisory`
 - `pause`
 - `unpause`
 - `hold-new-orders`
@@ -268,9 +283,12 @@ The benchmark layer does not claim live execution realism. It is useful for rela
 
 It:
 
+- checks that `uv.lock` matches the dependency declarations
 - installs the package on Python 3.10
-- compiles key runtime and research modules
+- compiles key runtime and research modules with `python -m compileall -q`
+- runs the focused **Run advisory and docs contract regressions** unittest step
 - runs the unittest suite under `tests/`
+- runs the separate reproducibility job
 
 ## Current maturity boundaries
 

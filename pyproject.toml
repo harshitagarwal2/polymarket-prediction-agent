@@ -22,6 +22,9 @@ dependencies = [
 research = [
   "duckdb>=0.10",
 ]
+postgres = [
+  "psycopg[binary]>=3.2",
+]
 polymarket = [
   "httpx>=0.27",
   "websockets>=12",
@@ -49,6 +52,11 @@ prediction-market-sports-benchmark = "scripts.run_sports_benchmark:main"
 prediction-market-sports-benchmark-suite = "scripts.run_sports_benchmark_suite:main"
 render-model-vs-market-dashboard = "scripts.render_model_vs_market_dashboard:main"
 scaffold-forecasting-pipeline = "scripts.scaffold_forecasting_pipeline:main"
+bootstrap-postgres = "storage.postgres.bootstrap:main"
+run-sportsbook-capture = "scripts.run_sportsbook_capture:main"
+run-polymarket-capture = "scripts.run_polymarket_capture:main"
+run-current-projection = "scripts.run_current_projection:main"
+run-replay-attribution = "scripts.run_replay_attribution:main"
 
 [tool.setuptools]
 include-package-data = true
@@ -57,4 +65,4 @@ include-package-data = true
 research = ["fixtures/*.json"]
 
 [tool.setuptools.packages.find]
-include = ["adapters*", "contracts*", "engine*", "execution*", "forecasting*", "llm*", "opportunity*", "risk*", "research*", "scripts*", "storage*"]
+include = ["adapters*", "contracts*", "engine*", "execution*", "forecasting*", "llm*", "opportunity*", "risk*", "research*", "scripts*", "services*", "storage*"]
