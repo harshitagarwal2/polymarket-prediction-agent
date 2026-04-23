@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from research.datasets import DatasetRegistry
 from scripts import ingest_live_data
 
 
@@ -519,6 +520,7 @@ class IngestLiveDataTests(unittest.TestCase):
             bbo_path = Path(temp_dir) / "bbo.json"
             event_map_path = Path(temp_dir) / "event_map.json"
             consensus_artifact_path = Path(temp_dir) / "consensus.json"
+            calibration_artifact_path = Path(temp_dir) / "calibration.json"
             config_path = Path(temp_dir) / "sports.json"
 
             event_map_path.write_text(
@@ -546,6 +548,21 @@ class IngestLiveDataTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            calibration_artifact_path.write_text(
+                json.dumps(
+                    {
+                        "row_count": 4,
+                        "rows": [
+                            {"fair_value": 0.42, "outcome_label": 0},
+                            {"fair_value": 0.45, "outcome_label": 0},
+                            {"fair_value": 0.55, "outcome_label": 1},
+                            {"fair_value": 0.58, "outcome_label": 1},
+                        ],
+                        "bin_count": 2,
+                    }
+                ),
+                encoding="utf-8",
+            )
             config_path.write_text(
                 json.dumps(
                     {
@@ -555,6 +572,7 @@ class IngestLiveDataTests(unittest.TestCase):
                             "sportsbook_market": "h2h",
                             "event_map_file": str(event_map_path),
                             "consensus_artifact": str(consensus_artifact_path),
+                            "calibration_artifact": str(calibration_artifact_path),
                         },
                     }
                 ),
@@ -655,8 +673,15 @@ class IngestLiveDataTests(unittest.TestCase):
 
         self.assertEqual(list(mappings.keys()), ["pm-1|sb-1"])
         self.assertEqual(fair_values["pm-1"]["model_name"], "consensus")
+        self.assertAlmostEqual(
+            fair_values["pm-1"]["calibrated_fair_yes_prob"],
+            1.0,
+        )
         self.assertTrue(
             source_health["fair_values"]["details"]["consensus_artifact_configured"]
+        )
+        self.assertTrue(
+            source_health["fair_values"]["details"]["calibration_artifact_configured"]
         )
 
     def test_build_mappings_persists_research_identity_metadata(self):
@@ -721,6 +746,62 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(
             persisted["blocked_reason"],
             "market within pre-start freeze window",
+        )
+        self.assertEqual(
+            persisted["blocked_reasons"],
+            ["market within pre-start freeze window"],
+        )
+        self.assertIn("edge_buy_after_costs_bps", persisted)
+        self.assertIn("edge_sell_after_costs_bps", persisted)
+
+    def test_build_opportunities_persists_all_known_blocked_reasons_in_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(minutes=4),
+                source_health_overrides={
+                    "sportsbook_odds": {"status": "red"},
+                },
+            )
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "pm-1|sb-1": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "mismatch_reason": "event key mismatch",
+                        "blocked_reason": "event key mismatch",
+                        "is_active": False,
+                    }
+                },
+            )
+            self._write_json(root / "current" / "fair_values.json", {})
+            self._write_json(root / "postgres" / "polymarket_bbo.json", {})
+
+            ingest_live_data.main(
+                ["build-opportunities", "--root", str(root), "--quiet"]
+            )
+
+            opportunities = json.loads(
+                (root / "current" / "opportunities.json").read_text()
+            )
+
+        persisted = next(iter(opportunities.values()))
+        self.assertEqual(persisted["blocked_reason"], "event key mismatch")
+        self.assertEqual(
+            persisted["blocked_reasons"],
+            [
+                "event key mismatch",
+                "market within pre-start freeze window",
+                "source sportsbook_odds unhealthy",
+                "missing fair value",
+                "missing executable bbo",
+            ],
         )
 
     def test_build_opportunities_persists_unhealthy_source_reason(self):
@@ -830,6 +911,125 @@ class IngestLiveDataTests(unittest.TestCase):
 
         persisted = next(iter(opportunities.values()))
         self.assertIsNone(persisted["blocked_reason"])
+
+    def test_build_opportunities_replaces_stale_current_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(hours=2),
+            )
+            self._write_json(
+                root / "current" / "fair_values.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "as_of": "2026-04-21T18:00:00+00:00",
+                        "fair_yes_prob": 0.40,
+                        "lower_prob": 0.38,
+                        "upper_prob": 0.42,
+                        "book_dispersion": 0.01,
+                        "data_age_ms": 250,
+                        "source_count": 2,
+                        "model_name": "deterministic_consensus",
+                        "model_version": "v1",
+                    }
+                },
+            )
+            self._write_json(
+                root / "postgres" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "opportunities.json",
+                {
+                    "pm-1|buy_yes": {
+                        "market_id": "pm-1",
+                        "side": "buy_yes",
+                    },
+                    "stale-market|buy_yes": {
+                        "market_id": "stale-market",
+                        "side": "buy_yes",
+                    },
+                },
+            )
+
+            ingest_live_data.main(
+                ["build-opportunities", "--root", str(root), "--quiet"]
+            )
+
+            opportunities = json.loads(
+                (root / "current" / "opportunities.json").read_text()
+            )
+
+        self.assertEqual(list(opportunities.keys()), ["pm-1|sell_yes"])
+
+    def test_build_opportunities_uses_executable_side_visible_depth(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=datetime.now(timezone.utc) + timedelta(hours=2),
+            )
+            self._write_json(
+                root / "current" / "fair_values.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "as_of": "2026-04-21T18:00:00+00:00",
+                        "fair_yes_prob": 0.40,
+                        "lower_prob": 0.38,
+                        "upper_prob": 0.42,
+                        "book_dispersion": 0.01,
+                        "data_age_ms": 250,
+                        "source_count": 2,
+                        "model_name": "deterministic_consensus",
+                        "model_version": "v1",
+                    }
+                },
+            )
+            self._write_json(
+                root / "postgres" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+
+            ingest_live_data.main(
+                ["build-opportunities", "--root", str(root), "--quiet"]
+            )
+
+            opportunities = json.loads(
+                (root / "current" / "opportunities.json").read_text()
+            )
+
+        persisted = next(iter(opportunities.values()))
+        self.assertEqual(persisted["side"], "sell_yes")
+        self.assertEqual(persisted["fillable_size"], 9.0)
 
     def test_build_fair_values_prefers_best_mapping_per_market(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1188,6 +1388,113 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(manifest_payload["values"]["pm-1"]["event_key"], "event-1")
         self.assertEqual(manifest_payload["source"], "live-current-state")
 
+    def test_build_fair_values_projects_calibrated_runtime_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            calibration_artifact_path = Path(temp_dir) / "calibration.json"
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "pm-1|sb-1": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "mismatch_reason": None,
+                        "event_key": "event-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                        "game_id": "game-1",
+                        "is_active": True,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_markets.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "condition_id": "condition-1",
+                        "raw_json": {
+                            "id": "pm-1",
+                            "conditionId": "condition-1",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_odds.json",
+                {
+                    "sb-1|book-a|h2h|Home Team": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "book-a",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.5,
+                        "implied_prob": 0.6666666667,
+                        "overround": 0.6666666667,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    }
+                },
+            )
+            calibration_artifact_path.write_text(
+                json.dumps(
+                    {
+                        "row_count": 4,
+                        "rows": [
+                            {"fair_value": 0.42, "outcome_label": 0},
+                            {"fair_value": 0.45, "outcome_label": 0},
+                            {"fair_value": 0.55, "outcome_label": 1},
+                            {"fair_value": 0.58, "outcome_label": 1},
+                        ],
+                        "bin_count": 2,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            ingest_live_data.main(
+                [
+                    "build-fair-values",
+                    "--root",
+                    str(root),
+                    "--calibration-artifact",
+                    str(calibration_artifact_path),
+                    "--quiet",
+                ]
+            )
+
+            fair_values_payload = json.loads(
+                (root / "current" / "fair_values.json").read_text()
+            )
+            manifest_payload = json.loads(
+                (root / "current" / "fair_value_manifest.json").read_text()
+            )
+
+        self.assertAlmostEqual(
+            fair_values_payload["pm-1"]["calibrated_fair_yes_prob"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            manifest_payload["values"]["pm-1"]["calibrated_fair_value"],
+            1.0,
+        )
+        metadata = manifest_payload.get("metadata")
+        self.assertIsInstance(metadata, dict)
+        if not isinstance(metadata, dict):
+            self.fail("expected manifest metadata")
+        calibration_metadata = metadata.get("calibration")
+        self.assertIsInstance(calibration_metadata, dict)
+        if not isinstance(calibration_metadata, dict):
+            self.fail("expected manifest calibration metadata")
+        self.assertEqual(calibration_metadata["method"], "histogram")
+        self.assertEqual(calibration_metadata["bin_count"], 2)
+        self.assertEqual(calibration_metadata["sample_count"], 4)
+
     def test_build_mappings_blocks_missing_upstream_event_identity(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
@@ -1226,6 +1533,79 @@ class IngestLiveDataTests(unittest.TestCase):
         persisted = next(iter(mappings.values()))
         self.assertFalse(persisted["is_active"])
         self.assertEqual(persisted["blocked_reason"], "missing upstream event identity")
+        self.assertEqual(
+            persisted["resolution_risk"],
+            round(1.0 - persisted["match_confidence"], 4),
+        )
+
+    def test_build_mappings_writes_mapping_manifest_projection(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_mapping_build_inputs(root)
+
+            ingest_live_data.main(
+                ["build-mappings", "--market", "h2h", "--root", str(root), "--quiet"]
+            )
+
+            manifest_payload = json.loads(
+                (root / "current" / "market_mapping_manifest.json").read_text()
+            )
+
+        self.assertEqual(manifest_payload["schema_version"], 1)
+        self.assertIn("pm-1", manifest_payload["values"])
+        record = manifest_payload["values"]["pm-1"]
+        self.assertEqual(record["mapping_status"], "exact_match")
+        self.assertEqual(record["target"]["sportsbook_event_id"], "sb-1")
+        self.assertEqual(record["identity"]["event_key"], "event-1")
+        self.assertEqual(record["mapping_confidence"]["band"], "high")
+        self.assertIsNone(record["blocked_reason"])
+
+    def test_build_mappings_manifest_captures_blocked_reason_structure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_mapping_build_inputs(root)
+            self._write_json(
+                root / "postgres" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+
+            ingest_live_data.main(
+                ["build-mappings", "--market", "h2h", "--root", str(root), "--quiet"]
+            )
+
+            manifest_payload = json.loads(
+                (root / "current" / "market_mapping_manifest.json").read_text()
+            )
+
+        record = manifest_payload["values"]["pm-1"]
+        self.assertEqual(record["mapping_status"], "blocked")
+        self.assertEqual(
+            record["blocked_reason"]["code"],
+            "missing_upstream_event_identity",
+        )
+        self.assertEqual(
+            record["blocked_reason"]["message"],
+            "missing upstream event identity",
+        )
+        self.assertEqual(record["mapping_confidence"]["score"], 0.59)
 
     def test_build_mappings_replaces_current_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1539,6 +1919,205 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertIn("pm-1", current_fair_values)
         self.assertEqual(len(history_fair_values), 1)
 
+    def test_build_inference_dataset_writes_processed_rows_and_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            now = datetime(2026, 4, 21, 18, 0, tzinfo=timezone.utc)
+            self._seed_opportunity_build_inputs(
+                root,
+                event_start_time=now + timedelta(hours=2),
+            )
+            self._write_json(
+                root / "current" / "market_mappings.json",
+                {
+                    "pm-1|sb-1": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "mismatch_reason": None,
+                        "blocked_reason": None,
+                        "event_key": "event-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                        "game_id": "game-1",
+                        "is_active": True,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_odds.json",
+                {
+                    "sb-1|book-a|h2h|Home Team": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "book-a",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.50,
+                        "implied_prob": 0.6666666667,
+                        "overround": 0.02,
+                        "quote_ts": now.isoformat(),
+                        "source_age_ms": 100,
+                        "raw_json": {},
+                    },
+                    "sb-1|book-b|h2h|Home Team": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "book-b",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.55,
+                        "implied_prob": 0.6451612903,
+                        "overround": 0.03,
+                        "quote_ts": now.isoformat(),
+                        "source_age_ms": 200,
+                        "raw_json": {},
+                    },
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_markets.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "condition_id": "condition-1",
+                        "title": "Will Home Team beat Away Team?",
+                        "status": "open",
+                        "end_time": (now + timedelta(hours=4)).isoformat(),
+                        "raw_json": {
+                            "id": "pm-1",
+                            "conditionId": "condition-1",
+                        },
+                    }
+                },
+            )
+
+            result = ingest_live_data.main(
+                ["build-inference-dataset", "--root", str(root), "--quiet"]
+            )
+
+            latest_rows_path = (
+                root / "processed" / "inference" / "joined_inference_dataset.jsonl"
+            )
+            latest_rows = [
+                json.loads(line)
+                for line in latest_rows_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            registry = DatasetRegistry(root / "datasets")
+            manifest = registry.load_snapshot("joined-inference-dataset")
+            snapshot_rows = registry.read_rows("joined-inference-dataset")
+
+        self.assertEqual(result, 0)
+        self.assertEqual(manifest.record_count, 1)
+        self.assertEqual(len(latest_rows), 1)
+        self.assertEqual(snapshot_rows, latest_rows)
+        self.assertEqual(latest_rows[0]["market_id"], "pm-1")
+        self.assertEqual(latest_rows[0]["sportsbook_event_id"], "sb-1")
+        self.assertEqual(latest_rows[0]["bookmaker_count"], 2)
+        self.assertTrue(latest_rows[0]["has_polymarket_book"])
+        self.assertTrue(latest_rows[0]["inference_allowed"])
+        self.assertEqual(latest_rows[0]["blocked_reasons"], [])
+        self.assertTrue(latest_rows[0]["record_id"].startswith("pm-1|sb-1|"))
+        self.assertIsNotNone(latest_rows[0]["recorded_at"])
+
+    def test_build_training_dataset_persists_rows_and_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            training_input = Path(temp_dir) / "sports-inputs.json"
+            polymarket_input = Path(temp_dir) / "polymarket-markets.json"
+            captured_at = "2026-04-21T18:00:00Z"
+            training_input.write_text(
+                json.dumps(
+                    {
+                        "source": "sports-inputs",
+                        "captured_at": captured_at,
+                        "rows": [
+                            {
+                                "home_team": "Home Team",
+                                "away_team": "Away Team",
+                                "label": 1,
+                                "event_key": "event-1",
+                                "game_id": "game-1",
+                                "sport": "nba",
+                                "series": "playoffs",
+                                "sports_market_type": "moneyline",
+                                "selection_name": "Home Team",
+                                "decimal_odds": 1.8,
+                                "start_time": "2026-04-21T20:00:00Z",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            polymarket_input.write_text(
+                json.dumps(
+                    {
+                        "layer": "gamma",
+                        "captured_at": captured_at,
+                        "markets": [
+                            {
+                                "market_key": "token-home:yes",
+                                "condition_id": "condition-1",
+                                "event_key": "event-1",
+                                "game_id": "game-1",
+                                "sport": "nba",
+                                "series": "playoffs",
+                                "sports_market_type": "moneyline",
+                                "best_bid": 0.42,
+                                "best_ask": 0.48,
+                                "best_bid_size": 20,
+                                "best_ask_size": 10,
+                                "volume": 100,
+                                "start_time": "2026-04-21T20:00:00Z",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = ingest_live_data.main(
+                [
+                    "build-training-dataset",
+                    "--input",
+                    str(training_input),
+                    "--polymarket-input",
+                    str(polymarket_input),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+            latest_rows_path = (
+                root / "processed" / "training" / "historical_training_dataset.jsonl"
+            )
+            latest_rows = [
+                json.loads(line)
+                for line in latest_rows_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            registry = DatasetRegistry(root / "datasets")
+            manifest = registry.load_snapshot("historical-training-dataset")
+            snapshot_rows = registry.read_rows("historical-training-dataset")
+
+        self.assertEqual(result, 0)
+        self.assertEqual(manifest.record_count, 1)
+        self.assertEqual(snapshot_rows, latest_rows)
+        self.assertEqual(latest_rows[0]["home_team"], "Home Team")
+        self.assertEqual(latest_rows[0]["away_team"], "Away Team")
+        self.assertEqual(latest_rows[0]["label"], 1)
+        self.assertEqual(latest_rows[0]["event_key"], "event-1")
+        self.assertEqual(latest_rows[0]["source"], "sports-inputs")
+        self.assertEqual(latest_rows[0]["recorded_at"], captured_at)
+        self.assertTrue(
+            latest_rows[0]["record_id"].startswith("sports-inputs|event-1|")
+        )
+        self.assertEqual(latest_rows[0]["metadata"]["market_market_count"], 1.0)
+
     def test_build_opportunities_uses_current_fair_values_over_history_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
@@ -1603,6 +2182,11 @@ class IngestLiveDataTests(unittest.TestCase):
 
         persisted = next(iter(opportunities.values()))
         self.assertAlmostEqual(persisted["edge_after_costs_bps"], 900.0, places=4)
+        self.assertAlmostEqual(persisted["edge_buy_after_costs_bps"], 900.0, places=4)
+        self.assertAlmostEqual(
+            persisted["edge_sell_after_costs_bps"], -1100.0, places=4
+        )
+        self.assertEqual(persisted["blocked_reasons"], [])
 
 
 if __name__ == "__main__":

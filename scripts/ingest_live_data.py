@@ -14,6 +14,13 @@ from adapters.polymarket.market_catalog import PolymarketMarketCatalogClient
 from adapters.polymarket.normalizer import normalize_bbo_event, normalize_market_row
 from adapters.sportsbooks import TheOddsApiClient, normalize_odds_event
 from adapters.types import serialize_market_summary
+from contracts import (
+    MappingManifestBuild,
+    map_contract_candidate,
+    mapping_blocked_reason,
+    semantics_from_market_type,
+    validate_mapping_manifest_payload,
+)
 from contracts.models import ContractMatch
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
@@ -43,24 +50,30 @@ from storage import (
     best_mapping_rows,
     mapping_priority,
 )
-from forecasting import FairValueEngine
+from forecasting import FairValueEngine, ForecastCalibrator
 from opportunity import opportunity_from_prices, rank_opportunities
+from opportunity.models import Opportunity, normalize_blocked_reasons
 from risk.freeze_windows import FreezeWindowPolicy, freeze_reasons_for_state
 from research.fair_value_manifest import FairValueManifestBuild
 from research.data.capture_polymarket import (
     build_polymarket_capture,
     write_polymarket_capture,
 )
+from research.data.build_training_set import load_training_set_rows
 from research.data.capture_sports_inputs import (
     build_sports_input_capture,
     write_sports_input_capture,
+)
+from research.data.derived_datasets import (
+    build_joined_inference_rows,
+    materialize_inference_dataset,
+    materialize_training_dataset,
 )
 from research.data.odds_api import (
     fetch_odds_payload,
     load_event_map,
     normalize_odds_events,
 )
-from research.features import map_contract_candidate, semantics_from_market_type
 from research.manifest_validation import validate_manifest_payload
 from research.models.book_consensus import load_book_consensus_artifact
 
@@ -137,7 +150,22 @@ def build_new_parser() -> argparse.ArgumentParser:
     fair_values.add_argument("--model-name", default="deterministic_consensus")
     fair_values.add_argument("--model-version", default="v1")
     fair_values.add_argument("--consensus-artifact", default=None)
+    fair_values.add_argument("--calibration-artifact", default=None)
     add_quiet_flag(fair_values)
+
+    inference_dataset = subparsers.add_parser("build-inference-dataset")
+    inference_dataset.add_argument("--root", default="runtime/data")
+    inference_dataset.add_argument("--max-source-age-ms", type=int, default=60_000)
+    inference_dataset.add_argument("--min-bookmaker-count", type=int, default=1)
+    inference_dataset.add_argument("--min-match-confidence", type=float, default=0.6)
+    inference_dataset.add_argument("--max-book-dispersion", type=float, default=0.1)
+    add_quiet_flag(inference_dataset)
+
+    training_dataset = subparsers.add_parser("build-training-dataset")
+    training_dataset.add_argument("--input", required=True)
+    training_dataset.add_argument("--polymarket-input", default=None)
+    training_dataset.add_argument("--root", default="runtime/data")
+    add_quiet_flag(training_dataset)
 
     opportunities = subparsers.add_parser("build-opportunities")
     opportunities.add_argument("--root", default="runtime/data")
@@ -331,8 +359,21 @@ def _resolve_consensus_artifact(
     return configured if isinstance(configured, str) and configured else None
 
 
+def _resolve_calibration_artifact(
+    value: str | None, config: dict[str, object]
+) -> str | None:
+    if value not in (None, ""):
+        return value
+    configured = nested_config_value(config, "runtime", "calibration_artifact")
+    return configured if isinstance(configured, str) and configured else None
+
+
 def _runtime_manifest_path(root: str | Path) -> Path:
     return Path(root) / "current" / "fair_value_manifest.json"
+
+
+def _runtime_mapping_manifest_path(root: str | Path) -> Path:
+    return Path(root) / "current" / "market_mapping_manifest.json"
 
 
 def _build_runtime_manifest_payload(
@@ -341,6 +382,7 @@ def _build_runtime_manifest_payload(
     mappings: dict[str, dict],
     polymarket_markets: dict[str, dict[str, object]],
     generated_at: datetime,
+    calibration_metadata: dict[str, object] | None = None,
 ) -> dict[str, object]:
     values: dict[str, dict[str, object]] = {}
     for snapshot in snapshots:
@@ -368,14 +410,32 @@ def _build_runtime_manifest_payload(
             "game_id": mapping.get("game_id"),
             "sports_market_type": mapping.get("normalized_market_type"),
         }
+        calibrated_fair_yes_prob = snapshot.get("calibrated_fair_yes_prob")
+        if calibrated_fair_yes_prob is not None:
+            values[market_id]["calibrated_fair_value"] = float(calibrated_fair_yes_prob)
+
+    provenance: dict[str, object] = {
+        "source_table": "runtime/data/current/fair_values.json",
+    }
+    if snapshots:
+        first_snapshot = snapshots[0]
+        if first_snapshot.get("model_name") not in (None, ""):
+            provenance["model_name"] = str(first_snapshot["model_name"])
+        if first_snapshot.get("model_version") not in (None, ""):
+            provenance["model_version"] = str(first_snapshot["model_version"])
+
+    metadata: dict[str, object] = {
+        "coverage": {"value_count": len(values)},
+        "provenance": provenance,
+    }
+    if calibration_metadata is not None:
+        metadata["calibration"] = calibration_metadata
+
     manifest = FairValueManifestBuild(
         generated_at=generated_at,
         source="live-current-state",
         values=values,
-        metadata={
-            "coverage": {"value_count": len(values)},
-            "provenance": {"source_table": "runtime/data/current/fair_values.json"},
-        },
+        metadata=metadata,
     )
     payload = manifest.to_payload()
     validate_manifest_payload(payload)
@@ -404,12 +464,46 @@ def _build_fair_value_engine(args) -> FairValueEngine:
     )
 
 
+def _build_fair_value_calibrator(args) -> ForecastCalibrator | None:
+    config = _load_optional_config(getattr(args, "config_file", None))
+    calibration_artifact = _resolve_calibration_artifact(
+        args.calibration_artifact,
+        config,
+    )
+    if calibration_artifact in (None, ""):
+        return None
+    return ForecastCalibrator.load(calibration_artifact)
+
+
 def _artifact_configured(args) -> bool:
     config = _load_optional_config(getattr(args, "config_file", None))
     return _resolve_consensus_artifact(args.consensus_artifact, config) not in (
         None,
         "",
     )
+
+
+def _calibration_configured(args) -> bool:
+    config = _load_optional_config(getattr(args, "config_file", None))
+    return _resolve_calibration_artifact(args.calibration_artifact, config) not in (
+        None,
+        "",
+    )
+
+
+def _build_manifest_calibration_metadata(
+    calibrator: ForecastCalibrator | None,
+) -> dict[str, object] | None:
+    if calibrator is None:
+        return None
+    artifact = calibrator.artifact
+    return {
+        "method": "histogram",
+        "bin_count": artifact.bin_count,
+        "sample_count": artifact.sample_count,
+        "positive_rate": round(artifact.positive_rate, 8),
+        "applied_field": "fair_value",
+    }
 
 
 def _safe_error_kind(exc: Exception) -> str:
@@ -681,8 +775,11 @@ def _run_build_mappings(args) -> int:
     events = stores["sb_events"].read_all()
     mappings: list[dict] = []
     current_mappings: dict[str, dict] = {}
+    mapping_manifest_values: dict[str, dict[str, object]] = {}
     for market in markets:
         best_match: MarketMappingRecord | None = None
+        best_decision = None
+        best_blocked_reason = None
         market_payload = _mapping_market_payload(market)
         pm_market_type = str(
             market_payload.get("sportsMarketType")
@@ -708,31 +805,39 @@ def _run_build_mappings(args) -> int:
             if blocked_reason is None and not _has_upstream_event_identity(
                 event_payload
             ):
-                blocked_reason = "missing upstream event identity"
+                blocked_reason = mapping_blocked_reason(
+                    "missing upstream event identity"
+                )
+            persisted_match_confidence = (
+                min(decision.match_confidence, 0.59)
+                if blocked_reason is not None
+                else decision.match_confidence
+            )
             candidate = MarketMappingRecord(
                 polymarket_market_id=decision.polymarket_market_id,
                 sportsbook_event_id=decision.sportsbook_event_id,
                 sportsbook_market_type=decision.sportsbook_market_type,
                 normalized_market_type=decision.normalized_market_type,
-                match_confidence=(
-                    min(decision.match_confidence, 0.59)
-                    if blocked_reason is not None
-                    else decision.match_confidence
+                match_confidence=persisted_match_confidence,
+                resolution_risk=round(
+                    max(0.0, 1.0 - persisted_match_confidence),
+                    4,
                 ),
-                resolution_risk=decision.resolution_risk,
-                mismatch_reason=blocked_reason,
+                mismatch_reason=(blocked_reason.message if blocked_reason else None),
                 event_key=decision.event_key,
                 sport=decision.sport,
                 series=decision.series,
                 game_id=decision.game_id,
-                blocked_reason=blocked_reason,
+                blocked_reason=(blocked_reason.message if blocked_reason else None),
                 is_active=blocked_reason is None,
             )
             if best_match is None or mapping_priority(
                 candidate.__dict__
             ) > mapping_priority(best_match.__dict__):
                 best_match = candidate
-        if best_match is None:
+                best_decision = decision
+                best_blocked_reason = blocked_reason
+        if best_match is None or best_decision is None:
             continue
         stores["mappings"].append(best_match)
         best_match_payload = best_match.__dict__.copy()
@@ -740,8 +845,35 @@ def _run_build_mappings(args) -> int:
         current_mappings[
             f"{best_match.polymarket_market_id}|{best_match.sportsbook_event_id}"
         ] = best_match_payload
+        mapping_manifest_values[best_match.polymarket_market_id] = (
+            best_decision.to_payload(
+                blocked_reason_override=best_blocked_reason,
+                confidence_score_override=best_match.match_confidence,
+                is_active=best_match.is_active,
+            )
+        )
     stores["parquet"].append_records("market_mapping_history", _utc_now(), mappings)
     stores["current"].write_table("market_mappings", current_mappings)
+    mapping_manifest_payload = MappingManifestBuild(
+        generated_at=_utc_now(),
+        source="live-current-state",
+        values=mapping_manifest_values,
+        metadata={
+            "coverage": {
+                "active_count": sum(
+                    1
+                    for value in mapping_manifest_values.values()
+                    if bool(value.get("is_active"))
+                )
+            },
+            "provenance": {"source_table": "runtime/data/current/market_mappings.json"},
+        },
+    ).to_payload()
+    validate_mapping_manifest_payload(mapping_manifest_payload)
+    _runtime_mapping_manifest_path(args.root).write_text(
+        json.dumps(mapping_manifest_payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     stores["health"].upsert("market_mappings", stale_after_ms=60_000, status="ok")
     structured_log(
         logger,
@@ -768,6 +900,7 @@ def _run_build_fair_values(args) -> int:
     stores = _stores(args.root)
     try:
         engine = _build_fair_value_engine(args)
+        calibrator = _build_fair_value_calibrator(args)
         persisted_history = stores["fair_values"].read_all()
         current_odds_rows = stores["current"].read_table("sportsbook_odds")
         odds_rows = (
@@ -831,6 +964,11 @@ def _run_build_fair_values(args) -> int:
                 source_count=snapshot.source_count,
                 model_name=snapshot.model_name,
                 model_version=snapshot.model_version,
+                calibrated_fair_yes_prob=(
+                    calibrator.apply(snapshot.fair_yes_prob)
+                    if calibrator is not None
+                    else None
+                ),
             )
             record_payload = record.__dict__.copy()
             history_key = "|".join(
@@ -872,6 +1010,7 @@ def _run_build_fair_values(args) -> int:
                 if isinstance(row, dict)
             },
             generated_at=_utc_now(),
+            calibration_metadata=_build_manifest_calibration_metadata(calibrator),
         )
         _runtime_manifest_path(args.root).write_text(
             json.dumps(runtime_manifest_payload, indent=2, sort_keys=True),
@@ -886,6 +1025,7 @@ def _run_build_fair_values(args) -> int:
                     "model_name": engine.model_name,
                     "model_version": engine.model_version,
                     "consensus_artifact_configured": _artifact_configured(args),
+                    "calibration_artifact_configured": _calibration_configured(args),
                 },
             )
         )
@@ -916,6 +1056,7 @@ def _run_build_fair_values(args) -> int:
                     "root": args.root,
                     "model_name": engine.model_name,
                     "model_version": engine.model_version,
+                    "calibration_applied": calibrator is not None,
                 },
                 quiet=args.quiet,
             )
@@ -930,6 +1071,7 @@ def _run_build_fair_values(args) -> int:
                 details={
                     "error_kind": _safe_error_kind(exc),
                     "consensus_artifact_configured": _artifact_configured(args),
+                    "calibration_artifact_configured": _calibration_configured(args),
                 },
                 success=False,
             )
@@ -955,6 +1097,138 @@ def _run_build_fair_values(args) -> int:
         raise
 
 
+def _run_build_inference_dataset(args) -> int:
+    trace_id = _trace_id()
+    logger = build_structured_logger("research.inference_dataset")
+    metrics = _metrics_collector(args.root)
+    stores = _stores(args.root)
+    try:
+        current_odds = stores["current"].read_table("sportsbook_odds")
+        odds_table = current_odds if current_odds else stores["sb_odds"].read_all()
+        rows = build_joined_inference_rows(
+            mappings=stores["current"].read_table("market_mappings"),
+            sportsbook_events=stores["current"].read_table("sportsbook_events"),
+            sportsbook_odds=odds_table,
+            fair_values=stores["current"].read_table("fair_values"),
+            bbo_rows=stores["bbo"].read_all(),
+            polymarket_markets=stores["current"].read_table("polymarket_markets"),
+            source_health=stores["current"].read_table("source_health"),
+            generated_at=_utc_now(),
+            max_source_age_ms=args.max_source_age_ms,
+            min_bookmaker_count=args.min_bookmaker_count,
+            min_match_confidence=args.min_match_confidence,
+            max_book_dispersion=args.max_book_dispersion,
+        )
+        latest_path, manifest = materialize_inference_dataset(
+            root=args.root,
+            rows=rows,
+        )
+        stores["health"].upsert(
+            "joined_inference_dataset",
+            stale_after_ms=60_000,
+            status="ok",
+            details={
+                "row_count": len(rows),
+                "dataset_name": manifest.dataset_name,
+                "dataset_version": manifest.version,
+            },
+        )
+        structured_log(
+            logger,
+            action="build",
+            status="ok",
+            message="built joined inference dataset",
+            trace_id=trace_id,
+        )
+        metrics.record(
+            component="research.inference_dataset",
+            action="build",
+            status="ok",
+            trace_id=trace_id,
+            row_count=len(rows),
+        )
+        emit_json(
+            {
+                "row_count": len(rows),
+                "output": str(latest_path),
+                "dataset_version": manifest.version,
+            },
+            quiet=args.quiet,
+        )
+        return 0
+    except Exception as exc:
+        _best_effort(
+            lambda: stores["health"].upsert(
+                "joined_inference_dataset",
+                stale_after_ms=60_000,
+                status="red",
+                details={"error_kind": _safe_error_kind(exc)},
+                success=False,
+            )
+        )
+        raise
+
+
+def _run_build_training_dataset(args) -> int:
+    trace_id = _trace_id()
+    logger = build_structured_logger("research.training_dataset")
+    metrics = _metrics_collector(args.root)
+    stores = _stores(args.root)
+    try:
+        rows = load_training_set_rows(
+            args.input,
+            polymarket_capture_path=args.polymarket_input,
+        )
+        latest_path, manifest = materialize_training_dataset(
+            root=args.root,
+            rows=rows,
+        )
+        stores["health"].upsert(
+            "historical_training_dataset",
+            stale_after_ms=60_000,
+            status="ok",
+            details={
+                "row_count": len(rows),
+                "dataset_name": manifest.dataset_name,
+                "dataset_version": manifest.version,
+            },
+        )
+        structured_log(
+            logger,
+            action="build",
+            status="ok",
+            message="built historical training dataset",
+            trace_id=trace_id,
+        )
+        metrics.record(
+            component="research.training_dataset",
+            action="build",
+            status="ok",
+            trace_id=trace_id,
+            row_count=len(rows),
+        )
+        emit_json(
+            {
+                "row_count": len(rows),
+                "output": str(latest_path),
+                "dataset_version": manifest.version,
+            },
+            quiet=args.quiet,
+        )
+        return 0
+    except Exception as exc:
+        _best_effort(
+            lambda: stores["health"].upsert(
+                "historical_training_dataset",
+                stale_after_ms=60_000,
+                status="red",
+                details={"error_kind": _safe_error_kind(exc)},
+                success=False,
+            )
+        )
+        raise
+
+
 def _run_build_opportunities(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("opportunity.build")
@@ -973,12 +1247,19 @@ def _run_build_opportunities(args) -> int:
     required_sources = _required_sources(source_health)
     freeze_policy = _build_opportunity_freeze_policy(args.policy_file)
     opportunities: list[OpportunityRecord] = []
+    ranked_snapshots: list[Opportunity] = []
     materialized: list[dict] = []
+    current_snapshots: dict[str, dict[str, object]] = {}
     for mapping in mapping_rows:
         market_id = str(mapping.get("polymarket_market_id") or "")
         fair_value = fair_values.get(market_id)
         bbo = bbo_rows.get(market_id)
-        blocked_reason = mapping.get("blocked_reason") or mapping.get("mismatch_reason")
+        blocked_reasons = list(
+            normalize_blocked_reasons(
+                mapping.get("blocked_reason"),
+                mapping.get("mismatch_reason"),
+            )
+        )
         sportsbook_event = sportsbook_events.get(
             str(mapping.get("sportsbook_event_id") or "")
         )
@@ -1016,87 +1297,118 @@ def _run_build_opportunities(args) -> int:
             required_sources=required_sources,
             source_health=source_health,
         )
-        if blocked_reason is None and freeze_reasons:
-            blocked_reason = freeze_reasons[0]
+        blocked_reasons = list(
+            normalize_blocked_reasons(blocked_reasons, freeze_reasons)
+        )
         if fair_value is None:
-            blocked_reason = blocked_reason or "missing fair value"
+            blocked_reasons = list(
+                normalize_blocked_reasons(blocked_reasons, "missing fair value")
+            )
         if bbo is None:
-            blocked_reason = blocked_reason or "missing executable bbo"
+            blocked_reasons = list(
+                normalize_blocked_reasons(blocked_reasons, "missing executable bbo")
+            )
+        blocked_reason = blocked_reasons[0] if blocked_reasons else None
+        confidence = _float_or_default(mapping.get("match_confidence"))
 
         if fair_value is None or bbo is None:
-            opportunity = OpportunityRecord(
+            snapshot = Opportunity(
                 market_id=market_id,
-                as_of=_utc_now().isoformat(),
                 side="buy_yes",
+                fair_yes_prob=(
+                    _float_or_default(fair_value.get("fair_yes_prob"))
+                    if isinstance(fair_value, dict)
+                    else 0.0
+                ),
+                best_bid_yes=(
+                    _float_or_default(bbo.get("best_bid_yes"))
+                    if isinstance(bbo, dict)
+                    else 0.0
+                ),
+                best_ask_yes=(
+                    _float_or_default(bbo.get("best_ask_yes"))
+                    if isinstance(bbo, dict)
+                    else 0.0
+                ),
+                edge_buy_bps=0.0,
+                edge_sell_bps=0.0,
+                edge_buy_after_costs_bps=0.0,
+                edge_sell_after_costs_bps=0.0,
                 edge_after_costs_bps=0.0,
                 fillable_size=0.0,
-                confidence=_float_or_default(mapping.get("match_confidence")),
-                blocked_reason=str(blocked_reason),
+                confidence=confidence,
+                blocked_reasons=tuple(blocked_reasons),
+                blocked_reason=blocked_reason,
+            )
+            opportunity = OpportunityRecord(
+                market_id=snapshot.market_id,
+                as_of=_utc_now().isoformat(),
+                side=snapshot.side,
+                fair_yes_prob=snapshot.fair_yes_prob,
+                best_bid_yes=snapshot.best_bid_yes,
+                best_ask_yes=snapshot.best_ask_yes,
+                edge_buy_bps=snapshot.edge_buy_bps,
+                edge_sell_bps=snapshot.edge_sell_bps,
+                edge_buy_after_costs_bps=snapshot.edge_buy_after_costs_bps,
+                edge_sell_after_costs_bps=snapshot.edge_sell_after_costs_bps,
+                edge_after_costs_bps=snapshot.edge_after_costs_bps,
+                fillable_size=snapshot.fillable_size,
+                confidence=snapshot.confidence,
+                blocked_reasons=snapshot.blocked_reasons,
+                blocked_reason=snapshot.blocked_reason,
                 fair_value_ref=str(fair_value.get("as_of"))
                 if fair_value
                 else _utc_now().isoformat(),
             )
         else:
-            fillable_size = min(
-                float(bbo.get("best_bid_yes_size") or 0.0),
-                float(bbo.get("best_ask_yes_size") or 0.0),
+            best_bid_yes_size = max(
+                _float_or_default(bbo.get("best_bid_yes_size")),
+                0.0,
+            )
+            best_ask_yes_size = max(
+                _float_or_default(bbo.get("best_ask_yes_size")),
+                0.0,
             )
             snapshot = opportunity_from_prices(
                 market_id=market_id,
                 fair_yes_prob=float(fair_value["fair_yes_prob"]),
                 best_bid_yes=float(bbo["best_bid_yes"]),
                 best_ask_yes=float(bbo["best_ask_yes"]),
-                fillable_size=max(fillable_size, 0.0),
-                confidence=_float_or_default(mapping.get("match_confidence")),
+                fillable_size=min(best_bid_yes_size, best_ask_yes_size),
+                buy_yes_fillable_size=best_ask_yes_size,
+                sell_yes_fillable_size=best_bid_yes_size,
+                confidence=confidence,
                 fee_bps=args.fee_bps,
                 slippage_bps=args.slippage_bps,
-                blocked_reason=str(blocked_reason) if blocked_reason else None,
+                blocked_reasons=tuple(blocked_reasons),
             )
             opportunity = OpportunityRecord(
                 market_id=snapshot.market_id,
                 as_of=_utc_now().isoformat(),
                 side=snapshot.side,
+                fair_yes_prob=snapshot.fair_yes_prob,
+                best_bid_yes=snapshot.best_bid_yes,
+                best_ask_yes=snapshot.best_ask_yes,
+                edge_buy_bps=snapshot.edge_buy_bps,
+                edge_sell_bps=snapshot.edge_sell_bps,
+                edge_buy_after_costs_bps=snapshot.edge_buy_after_costs_bps,
+                edge_sell_after_costs_bps=snapshot.edge_sell_after_costs_bps,
                 edge_after_costs_bps=snapshot.edge_after_costs_bps,
                 fillable_size=snapshot.fillable_size,
                 confidence=snapshot.confidence,
+                blocked_reasons=snapshot.blocked_reasons,
                 blocked_reason=snapshot.blocked_reason,
                 fair_value_ref=str(fair_value["as_of"]),
             )
         stores["opportunities"].append(opportunity)
         payload = opportunity.__dict__.copy()
-        stores["current"].upsert(
-            "opportunities",
-            f"{opportunity.market_id}|{opportunity.side}",
-            payload,
-        )
+        current_snapshots[f"{opportunity.market_id}|{opportunity.side}"] = payload
         opportunities.append(opportunity)
+        ranked_snapshots.append(snapshot)
         materialized.append(payload)
 
-    ranked = rank_opportunities(
-        [
-            opportunity_from_prices(
-                market_id=row.market_id,
-                fair_yes_prob=float(fair_values[row.market_id]["fair_yes_prob"])
-                if row.market_id in fair_values
-                else 0.0,
-                best_bid_yes=float(bbo_rows[row.market_id]["best_bid_yes"])
-                if row.market_id in bbo_rows
-                and bbo_rows[row.market_id].get("best_bid_yes") is not None
-                else 0.0,
-                best_ask_yes=float(bbo_rows[row.market_id]["best_ask_yes"])
-                if row.market_id in bbo_rows
-                and bbo_rows[row.market_id].get("best_ask_yes") is not None
-                else 0.0,
-                fillable_size=row.fillable_size,
-                confidence=row.confidence,
-                blocked_reason=row.blocked_reason,
-                fee_bps=args.fee_bps,
-                slippage_bps=args.slippage_bps,
-            )
-            for row in opportunities
-            if row.market_id in fair_values and row.market_id in bbo_rows
-        ]
-    )
+    ranked = rank_opportunities(ranked_snapshots)
+    stores["current"].write_table("opportunities", current_snapshots)
     stores["parquet"].append_records(
         "opportunities",
         _utc_now(),
@@ -1153,6 +1465,8 @@ def main(argv: list[str] | None = None) -> int:
         "sportsbook-odds",
         "build-mappings",
         "build-fair-values",
+        "build-inference-dataset",
+        "build-training-dataset",
         "build-opportunities",
     }
     if args_list and args_list[0] in commands:
@@ -1167,6 +1481,10 @@ def main(argv: list[str] | None = None) -> int:
             return _run_build_mappings(args)
         if args.command == "build-fair-values":
             return _run_build_fair_values(args)
+        if args.command == "build-inference-dataset":
+            return _run_build_inference_dataset(args)
+        if args.command == "build-training-dataset":
+            return _run_build_training_dataset(args)
         if args.command == "build-opportunities":
             return _run_build_opportunities(args)
         raise RuntimeError(f"unsupported command: {args.command}")
