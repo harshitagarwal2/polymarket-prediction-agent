@@ -1,0 +1,26 @@
+{
+  "polymarket_market_channel": {
+    "status": "green",
+    "last_seen_at": "2026-04-22T00:00:00Z",
+    "last_success_at": "2026-04-22T00:00:00Z",
+    "stale_after_ms": 999999999
+  },
+  "sportsbook_odds": {
+    "status": "green",
+    "last_seen_at": "2026-04-22T00:00:00Z",
+    "last_success_at": "2026-04-22T00:00:00Z",
+    "stale_after_ms": 999999999
+  },
+  "market_mappings": {
+    "status": "green",
+    "last_seen_at": "2026-04-22T00:00:00Z",
+    "last_success_at": "2026-04-22T00:00:00Z",
+    "stale_after_ms": 999999999
+  },
+  "fair_values": {
+    "status": "green",
+    "last_seen_at": "2026-04-22T00:00:00Z",
+    "last_success_at": "2026-04-22T00:00:00Z",
+    "stale_after_ms": 999999999
+  }
+}
