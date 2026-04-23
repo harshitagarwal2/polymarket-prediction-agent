@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -84,19 +85,24 @@ def main() -> None:
         aggregation=resolved_book_aggregation,
         calibration_artifact=calibration_artifact,
     )
+    manifest_skipped_groups = list(manifest.skipped_groups or [])
     if skipped_rows:
-        manifest.skipped_groups.extend(skipped_rows)
+        manifest_skipped_groups.extend(skipped_rows)
+        manifest = replace(manifest, skipped_groups=manifest_skipped_groups)
+    generated_at = manifest.generated_at
+    if generated_at is None:
+        raise ValueError("generated_at is required")
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(manifest.to_payload(), indent=2, sort_keys=True))
     emit_json(
         {
             "output": str(output_path),
-            "value_count": len(manifest.values),
-            "skipped_group_count": len(manifest.skipped_groups),
+            "value_count": len(manifest.values or {}),
+            "skipped_group_count": len(manifest.skipped_groups or []),
             "matched_row_count": len(rows),
             "source": manifest.source,
-            "generated_at": manifest.generated_at.isoformat(),
+            "generated_at": generated_at.isoformat(),
             "book_aggregation": resolved_book_aggregation,
             "devig_method": resolved_devig_method,
             "calibration_applied": calibration_artifact is not None,

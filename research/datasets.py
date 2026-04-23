@@ -61,6 +61,24 @@ def _slugify(value: str) -> str:
     return slug.strip("-") or "dataset"
 
 
+def _validate_relative_dataset_path(value: object, *, field_name: str) -> str:
+    candidate = Path(str(value).strip())
+    if str(candidate) in {"", "."}:
+        raise ValueError(f"{field_name} must not be empty")
+    if candidate.is_absolute() or any(
+        part in {"", ".", ".."} for part in candidate.parts
+    ):
+        raise ValueError(f"{field_name} must stay within the dataset registry root")
+    return candidate.as_posix()
+
+
+def _validate_single_path_segment(value: object, *, field_name: str) -> str:
+    normalized = _validate_relative_dataset_path(value, field_name=field_name)
+    if len(Path(normalized).parts) != 1:
+        raise ValueError(f"{field_name} must be a single path segment")
+    return normalized
+
+
 def _require_object(name: str, value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be an object")
@@ -288,11 +306,21 @@ class DatasetRegistry:
         datasets = _require_object("datasets", registry.get("datasets", {}))
         dataset_payload = datasets.get(dataset_name)
         if isinstance(dataset_payload, dict) and dataset_payload.get("dataset_dir"):
-            return str(dataset_payload["dataset_dir"])
+            return _validate_relative_dataset_path(
+                dataset_payload["dataset_dir"],
+                field_name="dataset_dir",
+            )
         return _slugify(dataset_name)
 
+    def _dataset_dir(self, dataset_name: str) -> Path:
+        return self.root_dir / self._dataset_dir_name(dataset_name)
+
     def _snapshot_dir(self, dataset_name: str, version: str) -> Path:
-        return self.root_dir / self._dataset_dir_name(dataset_name) / version
+        resolved_version = _validate_single_path_segment(
+            version,
+            field_name="dataset snapshot version",
+        )
+        return self._dataset_dir(dataset_name) / resolved_version
 
     def _update_registry(self, manifest: DatasetSnapshotManifest) -> None:
         payload = self._read_registry_payload()
@@ -353,8 +381,6 @@ class DatasetRegistry:
         record_id_field: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> DatasetSnapshotManifest:
-        if not records:
-            raise ValueError("records must not be empty")
         resolved_version = version or _default_version()
         snapshot_dir = self._snapshot_dir(dataset_name, resolved_version)
         if snapshot_dir.exists():
@@ -388,6 +414,7 @@ class DatasetRegistry:
                     row_index=index,
                     metadata={
                         "market_key": record.get("market_key"),
+                        "market_id": record.get("market_id"),
                         "event_key": record.get("event_key"),
                     },
                 )

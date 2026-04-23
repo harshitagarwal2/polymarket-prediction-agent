@@ -25,11 +25,19 @@ def evaluate_probability_calibration(
     predictions: dict[str, float] = {}
     outcomes: dict[str, int] = {}
     for index, row in enumerate(rows):
-        if row.get(probability_key) in (None, "") or row.get(label_key) in (None, ""):
+        probability_value = row.get(probability_key)
+        label_value = row.get(label_key)
+        if probability_value in (None, "") or label_value in (None, ""):
+            continue
+        if isinstance(probability_value, bool) or not isinstance(
+            probability_value, (int, float, str)
+        ):
+            continue
+        if isinstance(label_value, bool) or not isinstance(label_value, (int, str)):
             continue
         key = str(index)
-        predictions[key] = float(row[probability_key])
-        outcomes[key] = int(row[label_key])
+        predictions[key] = float(probability_value)
+        outcomes[key] = int(label_value)
     score = score_binary_forecasts(predictions, outcomes, bin_count=bin_count)
     max_gap = max((bin_.gap for bin_ in score.calibration_bins), default=0.0)
     return CalibrationSummary(
