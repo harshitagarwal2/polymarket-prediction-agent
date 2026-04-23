@@ -4,7 +4,8 @@ from research.benchmark_suite_cli import main as _main
 
 
 def main() -> int:
-    return _main()
+    result = _main()
+    return 0 if result is None else result
 
 
 if __name__ == "__main__":

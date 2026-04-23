@@ -56,7 +56,11 @@
           "mean_prediction": 0.5,
           "positive_rate": 0.5
         },
-        "name": "bookmaker_multiplicative_independent"
+        "name": "bookmaker_multiplicative_independent",
+        "prediction_map": {
+          "token-home-best-line:no": 0.5104712,
+          "token-home-best-line:yes": 0.4895288
+        }
       },
       {
         "description": "Bookmaker de-vig baseline with power method and independent grouping.",
@@ -111,7 +115,11 @@
           "mean_prediction": 0.5,
           "positive_rate": 0.5
         },
-        "name": "bookmaker_power_independent"
+        "name": "bookmaker_power_independent",
+        "prediction_map": {
+          "token-home-best-line:no": 0.51122391,
+          "token-home-best-line:yes": 0.48877609
+        }
       },
       {
         "description": "Bookmaker de-vig baseline with multiplicative method and best-line aggregation.",
@@ -166,7 +174,11 @@
           "mean_prediction": 0.5,
           "positive_rate": 0.5
         },
-        "name": "bookmaker_multiplicative_best_line"
+        "name": "bookmaker_multiplicative_best_line",
+        "prediction_map": {
+          "token-home-best-line:no": 0.49367089,
+          "token-home-best-line:yes": 0.50632911
+        }
       },
       {
         "description": "Market midpoint baseline derived from provided market snapshots.",
@@ -221,7 +233,21 @@
           "mean_prediction": 0.5,
           "positive_rate": 0.5
         },
-        "name": "market_midpoint"
+        "name": "market_midpoint",
+        "prediction_map": {
+          "token-home-best-line:no": 0.46,
+          "token-home-best-line:yes": 0.54
+        }
+      },
+      {
+        "description": "Model-only baseline derived from case-provided model fair values.",
+        "name": "model_fair_value",
+        "skipped_reason": "case does not define model fair values"
+      },
+      {
+        "description": "Logit blend of sportsbook fair values and case-provided model fair values.",
+        "name": "blended_fair_value",
+        "skipped_reason": "case does not define model blend weight"
       }
     ],
     "evaluation_rows": [
@@ -352,6 +378,7 @@
           "devig_method": "multiplicative"
         }
       },
+      "schema_version": 1,
       "source": "fixture-sports-benchmark-best-line",
       "values": {
         "token-home-best-line:no": {

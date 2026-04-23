@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Sequence
 
+from research.attribution import summarize_trade_attributions
 from research.calibration import load_calibration_artifact
 from research.benchmark_runner import (
     CalibrationArtifactSource,
@@ -20,6 +21,7 @@ from research.datasets import (
     WalkForwardSplit,
     generate_walk_forward_splits,
 )
+from research.eval.execution_metrics import summarize_execution_metrics
 from research.models.bradley_terry import (
     BradleyTerryArtifact,
     fit_bradley_terry_from_cases,
@@ -88,7 +90,19 @@ class BenchmarkSuiteAggregate:
     average_calibrated_expected_calibration_error_improvement: float | None
     average_replay_net_pnl: float | None
     average_replay_return_pct: float | None
+    average_replay_fill_rate: float | None
+    average_replay_complete_fill_rate: float | None
+    average_replay_partial_fill_rate: float | None
+    average_replay_fill_ratio: float | None
+    average_replay_wait_steps: float | None
+    average_replay_slippage_bps: float | None
+    replay_stale_data_count: int
+    average_signal_edge_bps: float | None
+    average_execution_drag_bps: float | None
+    average_model_residual_bps: float | None
+    average_closing_edge_bps: float | None
     edge_ledger_row_count: int
+    execution_ledger_row_count: int
     fair_value_baseline_deltas: dict[str, dict[str, float | int]]
     fair_value_comparison_stats: dict[str, dict[str, object]]
     replay_baseline_deltas: dict[str, dict[str, float | int]]
@@ -115,7 +129,19 @@ class BenchmarkSuiteAggregate:
             "average_calibrated_expected_calibration_error_improvement": self.average_calibrated_expected_calibration_error_improvement,
             "average_replay_net_pnl": self.average_replay_net_pnl,
             "average_replay_return_pct": self.average_replay_return_pct,
+            "average_replay_fill_rate": self.average_replay_fill_rate,
+            "average_replay_complete_fill_rate": self.average_replay_complete_fill_rate,
+            "average_replay_partial_fill_rate": self.average_replay_partial_fill_rate,
+            "average_replay_fill_ratio": self.average_replay_fill_ratio,
+            "average_replay_wait_steps": self.average_replay_wait_steps,
+            "average_replay_slippage_bps": self.average_replay_slippage_bps,
+            "replay_stale_data_count": self.replay_stale_data_count,
+            "average_signal_edge_bps": self.average_signal_edge_bps,
+            "average_execution_drag_bps": self.average_execution_drag_bps,
+            "average_model_residual_bps": self.average_model_residual_bps,
+            "average_closing_edge_bps": self.average_closing_edge_bps,
             "edge_ledger_row_count": self.edge_ledger_row_count,
+            "execution_ledger_row_count": self.execution_ledger_row_count,
             "fair_value_baseline_deltas": self.fair_value_baseline_deltas,
             "fair_value_comparison_stats": self.fair_value_comparison_stats,
             "replay_baseline_deltas": self.replay_baseline_deltas,
@@ -134,11 +160,23 @@ class BenchmarkSuiteEdgeLedger:
 
 
 @dataclass(frozen=True)
+class BenchmarkSuiteExecutionLedger:
+    rows: tuple[dict[str, object], ...]
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "row_count": len(self.rows),
+            "rows": [dict(row) for row in self.rows],
+        }
+
+
+@dataclass(frozen=True)
 class BenchmarkSuiteReport:
     case_results: tuple[BenchmarkSuiteCaseResult, ...]
     failures: tuple[BenchmarkSuiteFailure, ...]
     aggregate: BenchmarkSuiteAggregate
     edge_ledger: BenchmarkSuiteEdgeLedger
+    execution_ledger: BenchmarkSuiteExecutionLedger
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -146,6 +184,7 @@ class BenchmarkSuiteReport:
             "case_results": [case.to_payload() for case in self.case_results],
             "failures": [failure.to_payload() for failure in self.failures],
             "edge_ledger": self.edge_ledger.to_payload(),
+            "execution_ledger": self.execution_ledger.to_payload(),
         }
 
 
@@ -478,6 +517,24 @@ def _build_aggregate(
         for report in reports
         if report.replay_report is not None
     ]
+    execution_rows = [
+        trade.to_payload()
+        for report in reports
+        if report.replay_report is not None
+        for trade in report.replay_report.replay_result.execution_ledger
+    ]
+    trade_attributions = tuple(
+        attribution
+        for report in reports
+        if report.replay_report is not None
+        for attribution in report.replay_report.trade_attributions
+    )
+    pooled_execution_metrics = (
+        summarize_execution_metrics(execution_rows) if execution_rows else None
+    )
+    pooled_attribution_summary = (
+        summarize_trade_attributions(trade_attributions) if trade_attributions else None
+    )
     return BenchmarkSuiteAggregate(
         total_cases=len(case_results) + len(failures),
         successful_cases=len(case_results),
@@ -558,10 +615,70 @@ def _build_aggregate(
         average_replay_return_pct=_average(
             [score.return_pct for score in replay_scores]
         ),
+        average_replay_fill_rate=(
+            pooled_execution_metrics.fill_rate
+            if pooled_execution_metrics is not None
+            else None
+        ),
+        average_replay_complete_fill_rate=(
+            pooled_execution_metrics.complete_fill_rate
+            if pooled_execution_metrics is not None
+            else None
+        ),
+        average_replay_partial_fill_rate=(
+            pooled_execution_metrics.partial_fill_rate
+            if pooled_execution_metrics is not None
+            else None
+        ),
+        average_replay_fill_ratio=(
+            pooled_execution_metrics.average_fill_ratio
+            if pooled_execution_metrics is not None
+            else None
+        ),
+        average_replay_wait_steps=(
+            pooled_execution_metrics.average_wait_steps
+            if pooled_execution_metrics is not None
+            else None
+        ),
+        average_replay_slippage_bps=(
+            pooled_execution_metrics.average_realized_slippage_bps
+            if pooled_execution_metrics is not None
+            else None
+        ),
+        replay_stale_data_count=(
+            pooled_execution_metrics.stale_data_count
+            if pooled_execution_metrics is not None
+            else 0
+        ),
+        average_signal_edge_bps=(
+            pooled_attribution_summary.average_signal_edge_bps
+            if pooled_attribution_summary is not None
+            else None
+        ),
+        average_execution_drag_bps=(
+            pooled_attribution_summary.average_execution_drag_bps
+            if pooled_attribution_summary is not None
+            else None
+        ),
+        average_model_residual_bps=(
+            pooled_attribution_summary.average_model_residual_bps
+            if pooled_attribution_summary is not None
+            else None
+        ),
+        average_closing_edge_bps=(
+            pooled_attribution_summary.average_closing_edge_bps
+            if pooled_attribution_summary is not None
+            else None
+        ),
         edge_ledger_row_count=sum(
             len(report.fair_value_report.evaluation_rows)
             for report in reports
             if report.fair_value_report is not None
+        ),
+        execution_ledger_row_count=sum(
+            len(report.replay_report.replay_result.execution_ledger)
+            for report in reports
+            if report.replay_report is not None
         ),
         fair_value_baseline_deltas=_collect_fair_value_baseline_deltas(reports),
         fair_value_comparison_stats=_collect_fair_value_comparison_stats(reports),
@@ -611,6 +728,22 @@ def _build_edge_ledger(
     return BenchmarkSuiteEdgeLedger(rows=tuple(rows))
 
 
+def _build_execution_ledger(
+    case_results: list[BenchmarkSuiteCaseResult],
+) -> BenchmarkSuiteExecutionLedger:
+    rows: list[dict[str, object]] = []
+    for case in case_results:
+        replay_report = case.report.replay_report
+        if replay_report is None:
+            continue
+        for trade in replay_report.replay_result.execution_ledger:
+            payload = trade.to_payload()
+            payload["case_name"] = case.report.case_name
+            payload["case_path"] = case.case_path
+            rows.append(payload)
+    return BenchmarkSuiteExecutionLedger(rows=tuple(rows))
+
+
 def _build_walk_forward_root_report(
     splits: Sequence[WalkForwardBenchmarkSplitResult],
 ) -> BenchmarkSuiteReport:
@@ -624,6 +757,7 @@ def _build_walk_forward_root_report(
         failures=tuple(failures),
         aggregate=_build_aggregate(case_results, failures),
         edge_ledger=_build_edge_ledger(case_results),
+        execution_ledger=_build_execution_ledger(case_results),
     )
 
 
@@ -708,6 +842,7 @@ def run_benchmark_suite(
         failures=tuple(failures),
         aggregate=_build_aggregate(case_results, failures),
         edge_ledger=_build_edge_ledger(case_results),
+        execution_ledger=_build_execution_ledger(case_results),
     )
 
 
@@ -864,6 +999,15 @@ def write_suite_report(
             report.edge_ledger.to_payload(), indent=2, sort_keys=True, allow_nan=False
         )
     )
+    execution_ledger_path = target_dir / "benchmark_suite_execution_ledger.json"
+    execution_ledger_path.write_text(
+        json.dumps(
+            report.execution_ledger.to_payload(),
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        )
+    )
     return summary_path, markdown_path
 
 
@@ -882,11 +1026,13 @@ def write_walk_forward_suite_report(
         split_dir = splits_dir / split_result.split_id
         summary_path, markdown_path = write_suite_report(split_result.report, split_dir)
         edge_ledger_path = split_dir / "benchmark_suite_edge_ledger.json"
+        execution_ledger_path = split_dir / "benchmark_suite_execution_ledger.json"
         split_payload = dict(split_result.to_payload())
         split_payload["report_artifacts"] = {
             "summary_json": str(summary_path.relative_to(target_dir)),
             "summary_markdown": str(markdown_path.relative_to(target_dir)),
             "edge_ledger_json": str(edge_ledger_path.relative_to(target_dir)),
+            "execution_ledger_json": str(execution_ledger_path.relative_to(target_dir)),
             "cases_dir": str((split_dir / "cases").relative_to(target_dir)),
         }
         split_payloads.append(split_payload)

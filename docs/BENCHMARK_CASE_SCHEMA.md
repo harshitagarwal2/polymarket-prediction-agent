@@ -86,6 +86,8 @@ Current fields:
   - `slippage_bps`
   - `resting_max_fill_ratio_per_step`
   - `resting_fill_delay_steps`
+  - `stale_after_steps`
+  - `price_move_bps_per_step`
 - `risk_limits`
   - `max_global_contracts`
   - `max_contracts_per_market`
@@ -125,6 +127,7 @@ Suite artifacts are written as:
 - `benchmark_suite_summary.json`
 - `benchmark_suite_summary.md`
 - `benchmark_suite_edge_ledger.json`
+- `benchmark_suite_execution_ledger.json`
 - `cases/<safe-case-name>.json`
 
 Walk-forward suite artifacts additionally include:
@@ -140,5 +143,8 @@ The suite summary JSON currently exposes:
 - `case_results`
 - `failures`
 - `edge_ledger`
+- `execution_ledger`
 
 `edge_ledger.rows` contains the per-market fair-value evaluation rows, enriched with suite context such as `case_name` and `case_path`.
+
+`execution_ledger.rows` contains replay execution rows enriched with suite context, including decision-time quote metadata, fill ratios, wait steps, and stale/partial-fill telemetry.

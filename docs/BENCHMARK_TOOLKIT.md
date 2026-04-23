@@ -22,7 +22,7 @@ It lets you:
 - not a distributor of proprietary sportsbook history
 - not a claim that replay results equal live execution results
 
-Replay uses the repo's paper broker, which models slippage, fill caps, resting-order delay, and reserved capital, but it is still approximate.
+Replay uses the repo's paper broker, which models slippage, fill caps, resting-order delay, wait-time price drift, stale-snapshot flags, and reserved capital, but it is still approximate.
 
 ## Core modules
 
@@ -139,6 +139,8 @@ Current paper realism knobs in `PaperExecutionConfig`:
 - `slippage_bps`
 - `resting_max_fill_ratio_per_step`
 - `resting_fill_delay_steps`
+- `stale_after_steps`
+- `price_move_bps_per_step`
 
 Those knobs make replay more useful for relative comparison, but not production-safe on their own.
 
@@ -169,16 +171,22 @@ The replay section can include:
 - ending cash
 - ending portfolio value
 - net PnL
+- execution ledger rows
+- execution-realism metrics
+- replay attribution summary
 - replay baselines such as `noop_strategy`
+
+The execution-realism metrics are computed over execution-ledger rows, so partial fills and no-fill resting rows count as separate replay observations rather than being collapsed into one logical order metric.
 
 Suite output writes:
 
 - `benchmark_suite_summary.json`
 - `benchmark_suite_summary.md`
 - `benchmark_suite_edge_ledger.json`
+- `benchmark_suite_execution_ledger.json`
 - `cases/<safe-case-name>.json`
 
-The edge ledger is useful for later attribution, calibration fitting, and error inspection across cases.
+The edge ledger is useful for later attribution, calibration fitting, and error inspection across fair-value cases. The execution ledger captures replay-side fill attempts, partial fills, wait-time drift, and stale-row telemetry for execution realism work.
 
 ## Dataset snapshots and walk-forward splits
 

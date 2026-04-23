@@ -251,6 +251,9 @@ class BenchmarkSuiteTests(unittest.TestCase):
                 (Path(output_dir) / "benchmark_suite_edge_ledger.json").exists()
             )
             self.assertTrue(
+                (Path(output_dir) / "benchmark_suite_execution_ledger.json").exists()
+            )
+            self.assertTrue(
                 (Path(output_dir) / "cases" / "sports-benchmark-tiny.json").exists()
             )
 
@@ -287,6 +290,23 @@ class BenchmarkSuiteTests(unittest.TestCase):
         self.assertEqual(
             edge_ledger_payload["rows"][0]["case_name"], "sports-benchmark-tiny"
         )
+
+    def test_write_suite_report_writes_execution_ledger_payload(self):
+        report = run_benchmark_suite([FIXTURES_DIR / "sports_benchmark_tiny.json"])
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            write_suite_report(report, output_dir)
+            execution_ledger_payload = json.loads(
+                (Path(output_dir) / "benchmark_suite_execution_ledger.json").read_text()
+            )
+
+        self.assertEqual(execution_ledger_payload["row_count"], 1)
+        self.assertEqual(len(execution_ledger_payload["rows"]), 1)
+        self.assertEqual(
+            execution_ledger_payload["rows"][0]["case_name"],
+            "sports-benchmark-tiny",
+        )
+        self.assertIn("fill_ratio", execution_ledger_payload["rows"][0])
 
     def test_suite_edge_ledger_surfaces_model_and_blended_values_when_present(self):
         payload = json.loads((FIXTURES_DIR / "sports_benchmark_tiny.json").read_text())
@@ -342,6 +362,17 @@ class BenchmarkSuiteTests(unittest.TestCase):
 
         self.assertIn("## Calibration deltas", markdown)
         self.assertIn("Average calibrated ECE improvement", markdown)
+
+    def test_write_suite_report_includes_replay_execution_sections(self):
+        report = run_benchmark_suite([FIXTURES_DIR / "sports_benchmark_tiny.json"])
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            _, markdown_path = write_suite_report(report, output_dir)
+            markdown = markdown_path.read_text()
+
+        self.assertIn("## Replay execution realism", markdown)
+        self.assertIn("## Replay attribution summary", markdown)
+        self.assertIn("Average replay fill rate", markdown)
 
     def test_write_suite_report_renders_fair_value_comparison_stats_section(self):
         payload = json.loads((FIXTURES_DIR / "sports_benchmark_tiny.json").read_text())
@@ -407,6 +438,23 @@ class BenchmarkSuiteTests(unittest.TestCase):
 
             self.assertTrue((Path(output_dir) / "cases" / "escape.json").exists())
             self.assertFalse((Path(output_dir).parent / "escape.json").exists())
+
+    def test_write_suite_report_escapes_case_names_in_markdown(self):
+        payload = json.loads(
+            (FIXTURES_DIR / "sports_benchmark_round_trip.json").read_text()
+        )
+        payload["name"] = "evil|<script>alert(1)</script>"
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+            report = run_benchmark_suite([handle.name])
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            _, markdown_path = write_suite_report(report, output_dir)
+            markdown = markdown_path.read_text()
+
+        self.assertIn("evil\\|&lt;script&gt;alert(1)&lt;/script&gt;", markdown)
 
     def test_suite_aggregate_tracks_calibrated_metrics_when_present(self):
         case = SportsBenchmarkCase.from_payload(
