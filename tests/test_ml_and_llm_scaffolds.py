@@ -13,7 +13,10 @@ from forecasting import (
     training_rows_from_labeled_features,
 )
 from llm import build_operator_memo, summarize_evidence
-from research.attribution.pnl_attribution import attribute_trade, persist_trade_attribution
+from research.attribution.pnl_attribution import (
+    attribute_trade,
+    persist_trade_attribution,
+)
 from research.replay.exchange_sim import (
     apply_wait_time_slippage,
     cancel_effective_after_steps,
@@ -33,7 +36,11 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
                     "source_count": 2,
                     "as_of": "2026-04-22T00:00:00Z",
                 },
-                opportunity={"edge_after_costs_bps": 180, "fillable_size": 3, "confidence": 0.98},
+                opportunity={
+                    "edge_after_costs_bps": 180,
+                    "fillable_size": 3,
+                    "confidence": 0.98,
+                },
                 bbo={"best_bid_yes": 0.45, "best_ask_yes": 0.47},
                 mapping={"match_confidence": 0.98, "resolution_risk": 0.02},
             ),
@@ -45,7 +52,11 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
                     "source_count": 1,
                     "as_of": "2026-04-22T00:00:00Z",
                 },
-                opportunity={"edge_after_costs_bps": 20, "fillable_size": 1, "confidence": 0.60},
+                opportunity={
+                    "edge_after_costs_bps": 20,
+                    "fillable_size": 1,
+                    "confidence": 0.60,
+                },
                 bbo={"best_bid_yes": 0.48, "best_ask_yes": 0.52},
                 mapping={"match_confidence": 0.60, "resolution_risk": 0.30},
             ),
@@ -68,6 +79,20 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
         )
         self.assertTrue(parsed.includes_overtime)
         self.assertEqual(parsed.ambiguity_score, 0.12)
+
+    def test_llm_contract_parser_rejects_non_boolean_flags(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "includes_overtime must be true or false",
+        ):
+            parse_llm_contract_payload(
+                {
+                    "includes_overtime": "false",
+                    "void_on_postponement": True,
+                    "requires_player_to_start": False,
+                    "ambiguity_score": 0.12,
+                }
+            )
 
     def test_operator_memo_and_evidence_summary_are_deterministic(self):
         memo = summarize_evidence(
@@ -102,7 +127,9 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
             mapping_risk=0.1,
         )
         self.assertEqual(attribution.slippage_bps, -50.0)
-        self.assertEqual(simulate_fillable_quantity(10.0, 6.0, max_fill_ratio_per_step=0.5), 3.0)
+        self.assertEqual(
+            simulate_fillable_quantity(10.0, 6.0, max_fill_ratio_per_step=0.5), 3.0
+        )
         self.assertTrue(
             cancel_effective_after_steps(
                 5,
@@ -110,7 +137,9 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
                 cancel_latency_steps=2,
             )
         )
-        self.assertTrue(snapshot_is_stale(current_step=5, snapshot_step=1, stale_after_steps=3))
+        self.assertTrue(
+            snapshot_is_stale(current_step=5, snapshot_step=1, stale_after_steps=3)
+        )
         self.assertGreater(
             apply_wait_time_slippage(
                 price=0.5,
