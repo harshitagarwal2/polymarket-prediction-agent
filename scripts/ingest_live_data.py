@@ -30,6 +30,7 @@ from engine.structured_logging import build_structured_logger, structured_log
 from engine.runtime_bootstrap import build_adapter
 from storage import (
     BBORepository,
+    CurrentStateReadAdapter,
     FairValueRecord,
     FairValueRepository,
     FileBackedCurrentStateStore,
@@ -41,13 +42,19 @@ from storage import (
     ParquetStore,
     PolymarketBBORecord,
     PolymarketMarketRecord,
+    ProjectedCurrentStateReadAdapter,
     RawStore,
+    SourceHealthRepository,
+    SourceHealthUpdate,
     SourceHealthStore,
     SportsbookEventRecord,
     SportsbookEventRepository,
     SportsbookOddsRecord,
     SportsbookOddsRepository,
     best_mapping_rows,
+    materialize_polymarket_bbo_state,
+    materialize_polymarket_market_state,
+    materialize_source_health_state,
     mapping_priority,
 )
 from forecasting import FairValueEngine, ForecastCalibrator
@@ -76,6 +83,14 @@ from research.data.odds_api import (
 )
 from research.manifest_validation import validate_manifest_payload
 from research.models.book_consensus import load_book_consensus_artifact
+from services.capture import (
+    SportsbookCaptureRequest,
+    SportsbookCaptureStores,
+    TheOddsApiCaptureSource,
+    capture_sportsbook_odds_once,
+    record_sportsbook_capture_failure,
+    sanitize_capture_error,
+)
 
 
 SPORT_KEY_BY_LEAGUE = {
@@ -223,7 +238,7 @@ def _load_live_payload(args) -> object:
 
 
 def _stores(root: str):
-    return {
+    stores = {
         "raw": RawStore(Path(root) / "raw"),
         "parquet": ParquetStore(Path(root) / "parquet"),
         "current": FileBackedCurrentStateStore(Path(root) / "current"),
@@ -234,8 +249,65 @@ def _stores(root: str):
         "mappings": MappingRepository(Path(root) / "postgres"),
         "fair_values": FairValueRepository(Path(root) / "postgres"),
         "opportunities": OpportunityRepository(Path(root) / "postgres"),
+        "health_repo": SourceHealthRepository(Path(root) / "postgres"),
         "health": SourceHealthStore(Path(root) / "current" / "source_health.json"),
     }
+    stores["current_read"] = ProjectedCurrentStateReadAdapter(
+        opportunities=stores["opportunities"],
+        mappings=stores["mappings"],
+        fair_values=stores["fair_values"],
+        bbo_rows=stores["bbo"],
+        sportsbook_events=stores["sb_events"],
+        sportsbook_odds=stores["sb_odds"],
+        source_health=stores["health_repo"],
+        polymarket_markets=stores["markets"],
+    )
+    return stores
+
+
+def _current_read_adapter(stores) -> CurrentStateReadAdapter:
+    return stores["current_read"]
+
+
+def _read_current_table(stores, table: str) -> dict[str, object]:
+    current_rows = stores["current"].read_table(table)
+    if current_rows:
+        return current_rows
+    return _current_read_adapter(stores).read_table(table)
+
+
+def _materialize_current_compatibility_table(stores, table: str) -> dict[str, object]:
+    projected_rows = _current_read_adapter(stores).read_table(table)
+    stores["current"].write_table(table, projected_rows)
+    return projected_rows
+
+
+def _update_source_health(
+    stores,
+    *,
+    source_name: str,
+    stale_after_ms: int,
+    status: str,
+    details: dict[str, object] | None = None,
+    success: bool = True,
+    observed_at: datetime | None = None,
+) -> dict[str, object]:
+    projected = materialize_source_health_state(
+        stores["health"],
+        [
+            SourceHealthUpdate(
+                source_name=source_name,
+                stale_after_ms=stale_after_ms,
+                status=status,
+                details=details or {},
+                success=success,
+                observed_at=observed_at or _utc_now(),
+            )
+        ],
+    )
+    record = projected[source_name]
+    stores["health_repo"].upsert(source_name, record)
+    return record
 
 
 def _utc_now() -> datetime:
@@ -568,6 +640,7 @@ def _run_polymarket_markets(args) -> int:
         ]
     markets = markets[: args.limit]
     rows = [normalize_market_row(item) for item in markets]
+    records: list[PolymarketMarketRecord] = []
     stores["raw"].write(
         "polymarket",
         "market_catalog",
@@ -589,11 +662,15 @@ def _run_polymarket_markets(args) -> int:
             status=row["status"],
             raw_json=row["raw_json"],
         )
+        records.append(record)
         stores["markets"].upsert(record.market_id, record)
-        stores["current"].upsert("polymarket_markets", record.market_id, row)
+    materialize_polymarket_market_state(stores["current"], records)
     stores["parquet"].append_records("polymarket_markets", _utc_now(), rows)
-    stores["health"].upsert(
-        "polymarket_market_catalog", stale_after_ms=60_000, status="ok"
+    _update_source_health(
+        stores,
+        source_name="polymarket_market_catalog",
+        stale_after_ms=60_000,
+        status="ok",
     )
     structured_log(
         logger,
@@ -625,6 +702,7 @@ def _run_polymarket_bbo(args) -> int:
     else:
         events = []
     rows = [normalize_bbo_event(event) for event in events if isinstance(event, dict)]
+    records: list[PolymarketBBORecord] = []
     for row in rows:
         record = PolymarketBBORecord(
             market_id=row["market_id"],
@@ -638,14 +716,18 @@ def _run_polymarket_bbo(args) -> int:
             source_age_ms=row["source_age_ms"],
             raw_hash=None,
         )
+        records.append(record)
         stores["bbo"].upsert(record.market_id, record)
-        stores["current"].upsert("polymarket_bbo", record.market_id, row)
+    materialize_polymarket_bbo_state(stores["current"], records)
     for event in events:
         if isinstance(event, dict):
             stores["raw"].write("polymarket", "market_channel", _utc_now(), event)
     stores["parquet"].append_records("polymarket_bbo_history", _utc_now(), rows)
-    stores["health"].upsert(
-        "polymarket_market_channel", stale_after_ms=4_000, status="ok"
+    _update_source_health(
+        stores,
+        source_name="polymarket_market_channel",
+        stale_after_ms=4_000,
+        status="ok",
     )
     structured_log(
         logger,
@@ -669,7 +751,6 @@ def _run_sportsbook_odds(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.sportsbook.odds")
     metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
     config = _load_optional_config(args.config_file)
     api_key = os.getenv(args.api_key_env)
     if not api_key:
@@ -677,67 +758,40 @@ def _run_sportsbook_odds(args) -> int:
     client = TheOddsApiClient(api_key=api_key)
     sport = _resolve_sport_key(args.sport, config)
     market = _resolve_sportsbook_market(args.market, config)
-    events = client.fetch_upcoming(sport, market)
-    event_map = load_event_map(_resolve_event_map_file(args.event_map_file, config))
-    normalized_rows: list[dict] = []
-    for event in events:
-        event["sport_key"] = sport
-        event_identity = event_map.get(str(event.get("id") or ""), {})
-        normalized_rows.extend(
-            normalize_odds_event(
-                event,
-                source="theoddsapi",
-                market_type=market,
-                captured_at=_utc_now(),
-            )
+    request = SportsbookCaptureRequest(
+        root=args.root,
+        sport=sport,
+        market=market,
+        event_map_file=_resolve_event_map_file(args.event_map_file, config),
+    )
+    stores = SportsbookCaptureStores.from_root(args.root)
+    source = TheOddsApiCaptureSource(client=client)
+    try:
+        payload = capture_sportsbook_odds_once(request, source=source, stores=stores)
+    except Exception as exc:
+        sanitized_error = sanitize_capture_error(exc)
+        failure_payload = record_sportsbook_capture_failure(
+            stores,
+            request,
+            source,
+            error=exc,
         )
-        stores["raw"].write("sportsbook", "odds", _utc_now(), event)
-        event_payload = dict(event)
-        for field in ("event_key", "game_id", "sport", "series"):
-            if event_identity.get(field) not in (None, ""):
-                event_payload[field] = event_identity[field]
-        event_record = SportsbookEventRecord(
-            sportsbook_event_id=str(event.get("id") or ""),
-            source="theoddsapi",
-            sport=sport,
-            league=event.get("sport_title"),
-            home_team=event.get("home_team"),
-            away_team=event.get("away_team"),
-            start_time=str(event.get("commence_time") or ""),
-            raw_json=event_payload,
+        structured_log(
+            logger,
+            action="sync",
+            status="error",
+            message=(f"sportsbook odds capture failed: {sanitized_error['kind']}"),
+            trace_id=trace_id,
         )
-        stores["sb_events"].upsert(event_record.sportsbook_event_id, event_record)
-        stores["current"].upsert(
-            "sportsbook_events", event_record.sportsbook_event_id, event_record.raw_json
+        metrics.record(
+            component="ingest.sportsbook.odds",
+            action="sync",
+            status="error",
+            trace_id=trace_id,
+            error_kind=sanitized_error["kind"],
         )
-    for row in normalized_rows:
-        record = SportsbookOddsRecord(
-            sportsbook_event_id=row["sportsbook_event_id"],
-            source=row["source"],
-            market_type=row["market_type"],
-            selection=row["selection"],
-            price_decimal=row["price_decimal"],
-            implied_prob=row["implied_prob"],
-            overround=row["overround"],
-            quote_ts=row["quote_ts"],
-            source_age_ms=row["source_age_ms"],
-            raw_json=row["raw_json"],
-        )
-        stores["sb_odds"].append(record)
-        stores["current"].upsert(
-            "sportsbook_odds",
-            "|".join(
-                [
-                    record.sportsbook_event_id,
-                    record.source,
-                    record.market_type,
-                    record.selection,
-                ]
-            ),
-            record.__dict__.copy(),
-        )
-    stores["parquet"].append_records("odds_snapshots", _utc_now(), normalized_rows)
-    stores["health"].upsert("sportsbook_odds", stale_after_ms=60_000, status="ok")
+        emit_json(failure_payload, quiet=args.quiet)
+        raise
     structured_log(
         logger,
         action="sync",
@@ -745,22 +799,17 @@ def _run_sportsbook_odds(args) -> int:
         message="normalized sportsbook odds",
         trace_id=trace_id,
     )
+    event_count = int(_float_or_default(payload.get("event_count"), 0.0))
+    row_count = int(_float_or_default(payload.get("row_count"), 0.0))
     metrics.record(
         component="ingest.sportsbook.odds",
         action="sync",
         status="ok",
         trace_id=trace_id,
-        event_count=len(events),
-        row_count=len(normalized_rows),
+        event_count=event_count,
+        row_count=row_count,
     )
-    emit_json(
-        {
-            "event_count": len(events),
-            "row_count": len(normalized_rows),
-            "root": args.root,
-        },
-        quiet=args.quiet,
-    )
+    emit_json(payload, quiet=args.quiet)
     return 0
 
 
@@ -774,7 +823,6 @@ def _run_build_mappings(args) -> int:
     markets = _sorted_rows(stores["markets"].read_all())
     events = stores["sb_events"].read_all()
     mappings: list[dict] = []
-    current_mappings: dict[str, dict] = {}
     mapping_manifest_values: dict[str, dict[str, object]] = {}
     for market in markets:
         best_match: MarketMappingRecord | None = None
@@ -842,9 +890,6 @@ def _run_build_mappings(args) -> int:
         stores["mappings"].append(best_match)
         best_match_payload = best_match.__dict__.copy()
         mappings.append(best_match_payload)
-        current_mappings[
-            f"{best_match.polymarket_market_id}|{best_match.sportsbook_event_id}"
-        ] = best_match_payload
         mapping_manifest_values[best_match.polymarket_market_id] = (
             best_decision.to_payload(
                 blocked_reason_override=best_blocked_reason,
@@ -853,7 +898,7 @@ def _run_build_mappings(args) -> int:
             )
         )
     stores["parquet"].append_records("market_mapping_history", _utc_now(), mappings)
-    stores["current"].write_table("market_mappings", current_mappings)
+    _materialize_current_compatibility_table(stores, "market_mappings")
     mapping_manifest_payload = MappingManifestBuild(
         generated_at=_utc_now(),
         source="live-current-state",
@@ -874,7 +919,12 @@ def _run_build_mappings(args) -> int:
         json.dumps(mapping_manifest_payload, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    stores["health"].upsert("market_mappings", stale_after_ms=60_000, status="ok")
+    _update_source_health(
+        stores,
+        source_name="market_mappings",
+        stale_after_ms=60_000,
+        status="ok",
+    )
     structured_log(
         logger,
         action="build",
@@ -902,7 +952,7 @@ def _run_build_fair_values(args) -> int:
         engine = _build_fair_value_engine(args)
         calibrator = _build_fair_value_calibrator(args)
         persisted_history = stores["fair_values"].read_all()
-        current_odds_rows = stores["current"].read_table("sportsbook_odds")
+        current_odds_rows = _read_current_table(stores, "sportsbook_odds")
         odds_rows = (
             _sorted_rows(current_odds_rows)
             if current_odds_rows
@@ -916,9 +966,9 @@ def _run_build_fair_values(args) -> int:
 
         snapshots: list[dict] = []
         pending_history_updates: dict[str, dict] = {}
-        pending_current_updates: dict[str, dict] = {}
         active_mapping_count = 0
-        for row in best_mapping_rows(stores["current"].read_table("market_mappings")):
+        current_mappings = _read_current_table(stores, "market_mappings")
+        for row in best_mapping_rows(current_mappings):
             if not bool(row.get("is_active", True)):
                 continue
             if all(row.get(field) in (None, "") for field in ("event_key", "game_id")):
@@ -980,7 +1030,6 @@ def _run_build_fair_values(args) -> int:
                 ]
             )
             pending_history_updates[history_key] = record_payload
-            pending_current_updates[record.market_id] = record_payload
             snapshots.append(record_payload)
 
         stores["parquet"].append_records("fair_values", _utc_now(), snapshots)
@@ -990,23 +1039,18 @@ def _run_build_fair_values(args) -> int:
                 **pending_history_updates,
             }
         )
-        stores["current"].write_table(
-            "fair_values",
-            pending_current_updates,
-        )
+        _materialize_current_compatibility_table(stores, "fair_values")
         runtime_manifest_payload = _build_runtime_manifest_payload(
             snapshots=snapshots,
             mappings={
                 str(row.get("polymarket_market_id") or ""): row
-                for row in best_mapping_rows(
-                    stores["current"].read_table("market_mappings")
-                )
+                for row in best_mapping_rows(current_mappings)
             },
             polymarket_markets={
                 str(market_id): row
-                for market_id, row in stores["current"]
-                .read_table("polymarket_markets")
-                .items()
+                for market_id, row in _read_current_table(
+                    stores, "polymarket_markets"
+                ).items()
                 if isinstance(row, dict)
             },
             generated_at=_utc_now(),
@@ -1017,8 +1061,9 @@ def _run_build_fair_values(args) -> int:
             encoding="utf-8",
         )
         _best_effort(
-            lambda: stores["health"].upsert(
-                "fair_values",
+            lambda: _update_source_health(
+                stores,
+                source_name="fair_values",
                 stale_after_ms=60_000,
                 status="ok",
                 details={
@@ -1064,8 +1109,9 @@ def _run_build_fair_values(args) -> int:
         return 0
     except Exception as exc:
         _best_effort(
-            lambda: stores["health"].upsert(
-                "fair_values",
+            lambda: _update_source_health(
+                stores,
+                source_name="fair_values",
                 stale_after_ms=60_000,
                 status="red",
                 details={
@@ -1103,16 +1149,16 @@ def _run_build_inference_dataset(args) -> int:
     metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
     try:
-        current_odds = stores["current"].read_table("sportsbook_odds")
+        current_odds = _read_current_table(stores, "sportsbook_odds")
         odds_table = current_odds if current_odds else stores["sb_odds"].read_all()
         rows = build_joined_inference_rows(
-            mappings=stores["current"].read_table("market_mappings"),
-            sportsbook_events=stores["current"].read_table("sportsbook_events"),
+            mappings=_read_current_table(stores, "market_mappings"),
+            sportsbook_events=_read_current_table(stores, "sportsbook_events"),
             sportsbook_odds=odds_table,
-            fair_values=stores["current"].read_table("fair_values"),
-            bbo_rows=stores["bbo"].read_all(),
-            polymarket_markets=stores["current"].read_table("polymarket_markets"),
-            source_health=stores["current"].read_table("source_health"),
+            fair_values=_read_current_table(stores, "fair_values"),
+            bbo_rows=_read_current_table(stores, "polymarket_bbo"),
+            polymarket_markets=_read_current_table(stores, "polymarket_markets"),
+            source_health=_read_current_table(stores, "source_health"),
             generated_at=_utc_now(),
             max_source_age_ms=args.max_source_age_ms,
             min_bookmaker_count=args.min_bookmaker_count,
@@ -1123,8 +1169,9 @@ def _run_build_inference_dataset(args) -> int:
             root=args.root,
             rows=rows,
         )
-        stores["health"].upsert(
-            "joined_inference_dataset",
+        _update_source_health(
+            stores,
+            source_name="joined_inference_dataset",
             stale_after_ms=60_000,
             status="ok",
             details={
@@ -1158,8 +1205,9 @@ def _run_build_inference_dataset(args) -> int:
         return 0
     except Exception as exc:
         _best_effort(
-            lambda: stores["health"].upsert(
-                "joined_inference_dataset",
+            lambda: _update_source_health(
+                stores,
+                source_name="joined_inference_dataset",
                 stale_after_ms=60_000,
                 status="red",
                 details={"error_kind": _safe_error_kind(exc)},
@@ -1183,8 +1231,9 @@ def _run_build_training_dataset(args) -> int:
             root=args.root,
             rows=rows,
         )
-        stores["health"].upsert(
-            "historical_training_dataset",
+        _update_source_health(
+            stores,
+            source_name="historical_training_dataset",
             stale_after_ms=60_000,
             status="ok",
             details={
@@ -1218,8 +1267,9 @@ def _run_build_training_dataset(args) -> int:
         return 0
     except Exception as exc:
         _best_effort(
-            lambda: stores["health"].upsert(
-                "historical_training_dataset",
+            lambda: _update_source_health(
+                stores,
+                source_name="historical_training_dataset",
                 stale_after_ms=60_000,
                 status="red",
                 details={"error_kind": _safe_error_kind(exc)},
@@ -1236,20 +1286,19 @@ def _run_build_opportunities(args) -> int:
     stores = _stores(args.root)
     fair_values = {
         str(market_id): row
-        for market_id, row in stores["current"].read_table("fair_values").items()
+        for market_id, row in _read_current_table(stores, "fair_values").items()
         if isinstance(row, dict)
     }
-    bbo_rows = stores["bbo"].read_all()
-    mapping_rows = best_mapping_rows(stores["current"].read_table("market_mappings"))
-    source_health = stores["current"].read_table("source_health")
-    sportsbook_events = stores["current"].read_table("sportsbook_events")
-    polymarket_markets = stores["current"].read_table("polymarket_markets")
+    bbo_rows = _read_current_table(stores, "polymarket_bbo")
+    mapping_rows = best_mapping_rows(_read_current_table(stores, "market_mappings"))
+    source_health = _read_current_table(stores, "source_health")
+    sportsbook_events = _read_current_table(stores, "sportsbook_events")
+    polymarket_markets = _read_current_table(stores, "polymarket_markets")
     required_sources = _required_sources(source_health)
     freeze_policy = _build_opportunity_freeze_policy(args.policy_file)
     opportunities: list[OpportunityRecord] = []
     ranked_snapshots: list[Opportunity] = []
     materialized: list[dict] = []
-    current_snapshots: dict[str, dict[str, object]] = {}
     for mapping in mapping_rows:
         market_id = str(mapping.get("polymarket_market_id") or "")
         fair_value = fair_values.get(market_id)
@@ -1361,6 +1410,8 @@ def _run_build_opportunities(args) -> int:
                 else _utc_now().isoformat(),
             )
         else:
+            assert isinstance(fair_value, dict)
+            assert isinstance(bbo, dict)
             best_bid_yes_size = max(
                 _float_or_default(bbo.get("best_bid_yes_size")),
                 0.0,
@@ -1402,19 +1453,23 @@ def _run_build_opportunities(args) -> int:
             )
         stores["opportunities"].append(opportunity)
         payload = opportunity.__dict__.copy()
-        current_snapshots[f"{opportunity.market_id}|{opportunity.side}"] = payload
         opportunities.append(opportunity)
         ranked_snapshots.append(snapshot)
         materialized.append(payload)
 
     ranked = rank_opportunities(ranked_snapshots)
-    stores["current"].write_table("opportunities", current_snapshots)
+    _materialize_current_compatibility_table(stores, "opportunities")
     stores["parquet"].append_records(
         "opportunities",
         _utc_now(),
         materialized,
     )
-    stores["health"].upsert("opportunities", stale_after_ms=60_000, status="ok")
+    _update_source_health(
+        stores,
+        source_name="opportunities",
+        stale_after_ms=60_000,
+        status="ok",
+    )
     structured_log(
         logger,
         action="build",
