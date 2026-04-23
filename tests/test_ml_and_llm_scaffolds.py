@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from contracts import parse_llm_contract_payload
 from execution.models import OrderProposal
@@ -23,6 +24,16 @@ from research.replay.exchange_sim import (
     simulate_fillable_quantity,
     snapshot_is_stale,
 )
+
+
+class _FakeTradeAttributionRepository:
+    def __init__(self, *_args, **_kwargs) -> None:
+        self.rows: dict[str, dict[str, object]] = {}
+
+    def upsert(self, key: str, row):
+        payload = row.__dict__.copy() if hasattr(row, "__dict__") else dict(row)
+        self.rows[str(key)] = payload
+        return payload
 
 
 class MlAndLlmScaffoldsTests(unittest.TestCase):
@@ -204,8 +215,12 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
             0.5,
         )
         with tempfile.TemporaryDirectory() as temp_dir:
-            record = persist_trade_attribution(
-                attribution,
-                root=Path(temp_dir),
-            )
+            with patch(
+                "research.attribution.pnl_attribution.TradeAttributionRepository",
+                _FakeTradeAttributionRepository,
+            ):
+                record = persist_trade_attribution(
+                    attribution,
+                    root=Path(temp_dir),
+                )
             self.assertEqual(record.trade_id, "t-1")

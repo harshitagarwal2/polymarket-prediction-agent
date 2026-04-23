@@ -15,9 +15,14 @@ DOCS_WITH_CANONICAL_PATH = (
 DOCS_WITH_OPERATOR_COMMANDS = (
     REPO_ROOT / "README.md",
     REPO_ROOT / "docs" / "GETTING_STARTED.md",
+    REPO_ROOT / "docs" / "ARCHITECTURE.md",
     REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
 )
-DOCS_WITH_STATUS_ADVISORY = DOCS_WITH_OPERATOR_COMMANDS
+DOCS_WITH_STATUS_ADVISORY = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "docs" / "GETTING_STARTED.md",
+    REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+)
 DOCS_WITH_POLICY_GUIDANCE = (
     REPO_ROOT / "README.md",
     REPO_ROOT / "docs" / "GETTING_STARTED.md",
@@ -28,6 +33,12 @@ DOCS_WITH_DATASET_COMMANDS = (
     REPO_ROOT / "README.md",
     REPO_ROOT / "docs" / "GETTING_STARTED.md",
     REPO_ROOT / "docs" / "VERIFICATION_SPORTS_POLYMARKET.md",
+)
+VERIFICATION_JSON_PATH = REPO_ROOT / "docs" / "verification_sports_polymarket.json"
+DOCS_WITH_CURRENT_CI_SUMMARY = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "docs" / "GETTING_STARTED.md",
+    REPO_ROOT / "docs" / "ARCHITECTURE.md",
 )
 
 
@@ -65,6 +76,13 @@ class DocsSyncTests(unittest.TestCase):
         self.assertIn("Run advisory and docs contract regressions", text)
         self.assertIn("compileall", text)
 
+    def test_ci_docs_reference_current_workflow_shape(self):
+        for path in DOCS_WITH_CURRENT_CI_SUMMARY:
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("compileall", text)
+                self.assertIn("Run advisory and docs contract regressions", text)
+
     def test_dataset_materialization_commands_are_documented(self):
         for path in DOCS_WITH_DATASET_COMMANDS:
             with self.subTest(path=path):
@@ -72,6 +90,17 @@ class DocsSyncTests(unittest.TestCase):
                 self.assertIn("build-inference-dataset", text)
                 self.assertIn("build-training-dataset", text)
                 self.assertIn("historical-training-dataset", text)
+
+    def test_verification_json_mentions_dataset_materialization(self):
+        text = VERIFICATION_JSON_PATH.read_text()
+        self.assertIn("build-inference-dataset", text)
+        self.assertIn("build-training-dataset", text)
+        self.assertIn("historical-training-dataset", text)
+
+    def test_readme_lists_all_console_entrypoints(self):
+        text = (REPO_ROOT / "README.md").read_text()
+        self.assertIn("render-model-vs-market-dashboard", text)
+        self.assertIn("scaffold-forecasting-pipeline", text)
 
 
 if __name__ == "__main__":
