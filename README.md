@@ -250,6 +250,8 @@ run-agent-loop \
 
 With the current sample config, that path supplies `configs/runtime_policy.preview.json`, keeps the loop in preview mode, points `run-agent-loop` at `runtime/data/current/fair_value_manifest.json`, and sets `opportunity_root` to `runtime/data`.
 
+It also supplies the sample safety/polling defaults, so you do not need to restate `--max-fair-value-age-seconds`, `--interval-seconds`, or `--max-cycles` for the normal preview loop.
+
 ### 5. Inspect runtime state
 
 ```bash

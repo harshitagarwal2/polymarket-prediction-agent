@@ -215,6 +215,8 @@ run-agent-loop \
 
 That path currently provides `configs/runtime_policy.preview.json`, keeps the loop in preview mode, points `run-agent-loop` at `runtime/data/current/fair_value_manifest.json`, and sets `opportunity_root` to `runtime/data`.
 
+The sample config also carries the normal preview-loop defaults for `max_fair_value_age_seconds`, `interval_seconds`, and `max_cycles`, so you only need extra CLI flags when you want to override them.
+
 For a long-running supervised preview process, add `--interval-seconds` and a larger `--max-cycles`.
 
 ### 5. Inspect state and journal output
