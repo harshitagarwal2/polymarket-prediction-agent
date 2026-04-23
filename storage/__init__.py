@@ -9,7 +9,34 @@ from storage.journal import (
     write_jsonl_records,
 )
 from storage.current_state import FileBackedCurrentStateStore
-from storage.current_selection import best_mapping_by_market, best_mapping_rows, mapping_priority
+from .current_state_materializers import (  # pyright: ignore[reportMissingImports]
+    materialize_polymarket_bbo_state,
+    materialize_polymarket_market_state,
+    materialize_source_health_state,
+    materialize_sportsbook_event_state,
+    materialize_sportsbook_quote_state,
+)
+from .current_state_projectors import (  # pyright: ignore[reportMissingImports]
+    SourceHealthUpdate,
+    project_polymarket_bbo_state,
+    project_polymarket_market_state,
+    project_source_health_state,
+    project_sportsbook_event_state,
+    project_sportsbook_quote_state,
+    sportsbook_quote_current_key,
+)
+from storage.current_read_adapter import (
+    CURRENT_STATE_TABLE_NAMES,
+    CurrentStateReadAdapter,
+    CurrentStateTableRepository,
+    FileCurrentStateReadAdapter,
+    ProjectedCurrentStateReadAdapter,
+)
+from storage.current_selection import (
+    best_mapping_by_market,
+    best_mapping_rows,
+    mapping_priority,
+)
 from storage.parquet_store import ParquetStore
 from storage.parquet import ParquetStorage, PartitionedParquetStorage
 from storage.postgres import (
@@ -37,16 +64,25 @@ from storage.postgres import (
     market_row_from_summary,
     order_book_row_from_snapshot,
 )
-from storage.raw import RawCaptureEnvelope, RawStore, build_raw_capture, write_raw_capture
+from storage.raw import (
+    RawCaptureEnvelope,
+    RawStore,
+    build_raw_capture,
+    write_raw_capture,
+)
 from storage.source_health import SourceHealthRecord, SourceHealthStore
 
 __all__ = [
     "BBORepository",
+    "CURRENT_STATE_TABLE_NAMES",
+    "CurrentStateReadAdapter",
+    "CurrentStateTableRepository",
     "best_mapping_by_market",
     "best_mapping_rows",
     "EventJournal",
     "FairValueRecord",
     "FairValueRepository",
+    "FileCurrentStateReadAdapter",
     "FileBackedCurrentStateStore",
     "MappingRepository",
     "MarketMappingRecord",
@@ -61,9 +97,11 @@ __all__ = [
     "ParquetStorage",
     "PolymarketBBORecord",
     "PolymarketMarketRecord",
+    "ProjectedCurrentStateReadAdapter",
     "PartitionedParquetStorage",
     "RawCaptureEnvelope",
     "RawStore",
+    "SourceHealthUpdate",
     "SourceHealthRecord",
     "SourceHealthRepository",
     "SourceHealthStore",
@@ -74,12 +112,23 @@ __all__ = [
     "TradeAttributionRecord",
     "TradeAttributionRepository",
     "build_raw_capture",
+    "materialize_polymarket_bbo_state",
+    "materialize_polymarket_market_state",
+    "materialize_source_health_state",
+    "materialize_sportsbook_event_state",
+    "materialize_sportsbook_quote_state",
     "market_row_from_summary",
     "mapping_priority",
     "normalize_for_json",
     "order_book_row_from_snapshot",
+    "project_polymarket_bbo_state",
+    "project_polymarket_market_state",
+    "project_source_health_state",
+    "project_sportsbook_event_state",
+    "project_sportsbook_quote_state",
     "read_jsonl_events",
     "read_jsonl_records",
+    "sportsbook_quote_current_key",
     "summarize_recent_runtime",
     "summarize_scan_cycle_events",
     "write_json",
