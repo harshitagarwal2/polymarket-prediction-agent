@@ -156,6 +156,14 @@ def _float_or_none(value: object) -> float | None:
     return float(value)
 
 
+def _coalesce_float(*values: object, default: float = 0.0) -> float:
+    for value in values:
+        parsed = _float_or_none(value)
+        if parsed is not None:
+            return parsed
+    return default
+
+
 def _metrics_collector(args) -> RuntimeMetricsCollector:
     root = (
         Path(args.opportunity_root) / "current"
@@ -274,13 +282,19 @@ def _build_preview_order_proposals(
             and bbo.get("best_bid_yes_size") not in (None, "")
             else None
         )
-        fillable_size = float(row.get("fillable_size") or 0.0)
+        stored_fillable_size = _float_or_none(row.get("fillable_size"))
+        fillable_size = (
+            stored_fillable_size if stored_fillable_size is not None else 0.0
+        )
         if current_fillable_size is not None:
             fillable_size = (
                 current_fillable_size
-                if fillable_size <= 0.0
+                if stored_fillable_size is None
                 else min(fillable_size, current_fillable_size)
+                if fillable_size > 0.0
+                else fillable_size
             )
+        fillable_size = max(fillable_size, 0.0)
         if fillable_size <= 0.0:
             blocked_reasons = list(
                 normalize_blocked_reasons(blocked_reasons, "insufficient visible depth")
@@ -290,6 +304,10 @@ def _build_preview_order_proposals(
         )
         event_start_time = (
             _parse_event_start(sportsbook_event.get("start_time"))
+            if isinstance(sportsbook_event, dict)
+            else None
+        ) or (
+            _parse_event_start(sportsbook_event.get("commence_time"))
             if isinstance(sportsbook_event, dict)
             else None
         )
@@ -306,44 +324,33 @@ def _build_preview_order_proposals(
         opportunity = Opportunity(
             market_id=market_id,
             side=side,
-            fair_yes_prob=(
-                _float_or_none(row.get("fair_yes_prob"))
-                or (
-                    _float_or_none(fair_value.get("fair_yes_prob"))
-                    if isinstance(fair_value, dict)
-                    else None
-                )
-                or 0.0
+            fair_yes_prob=_coalesce_float(
+                row.get("fair_yes_prob"),
+                fair_value.get("fair_yes_prob")
+                if isinstance(fair_value, dict)
+                else None,
             ),
-            best_bid_yes=(
-                _float_or_none(row.get("best_bid_yes"))
-                or (
-                    _float_or_none(bbo.get("best_bid_yes"))
-                    if isinstance(bbo, dict)
-                    else None
-                )
-                or 0.0
+            best_bid_yes=_coalesce_float(
+                row.get("best_bid_yes"),
+                bbo.get("best_bid_yes") if isinstance(bbo, dict) else None,
             ),
-            best_ask_yes=(
-                _float_or_none(row.get("best_ask_yes"))
-                or (
-                    _float_or_none(bbo.get("best_ask_yes"))
-                    if isinstance(bbo, dict)
-                    else None
-                )
-                or 0.0
+            best_ask_yes=_coalesce_float(
+                row.get("best_ask_yes"),
+                bbo.get("best_ask_yes") if isinstance(bbo, dict) else None,
             ),
-            edge_buy_bps=float(row.get("edge_buy_bps") or 0.0),
-            edge_sell_bps=float(row.get("edge_sell_bps") or 0.0),
-            edge_buy_after_costs_bps=float(
-                row.get("edge_buy_after_costs_bps") or row.get("edge_buy_bps") or 0.0
+            edge_buy_bps=_coalesce_float(row.get("edge_buy_bps")),
+            edge_sell_bps=_coalesce_float(row.get("edge_sell_bps")),
+            edge_buy_after_costs_bps=_coalesce_float(
+                row.get("edge_buy_after_costs_bps"),
+                row.get("edge_buy_bps"),
             ),
-            edge_sell_after_costs_bps=float(
-                row.get("edge_sell_after_costs_bps") or row.get("edge_sell_bps") or 0.0
+            edge_sell_after_costs_bps=_coalesce_float(
+                row.get("edge_sell_after_costs_bps"),
+                row.get("edge_sell_bps"),
             ),
-            edge_after_costs_bps=float(row.get("edge_after_costs_bps") or 0.0),
+            edge_after_costs_bps=_coalesce_float(row.get("edge_after_costs_bps")),
             fillable_size=fillable_size,
-            confidence=float(row.get("confidence") or 0.0),
+            confidence=_coalesce_float(row.get("confidence")),
             blocked_reasons=tuple(blocked_reasons),
             blocked_reason=blocked_reasons[0] if blocked_reasons else None,
         )
