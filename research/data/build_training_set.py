@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import timezone
+from datetime import datetime, timezone
 import json
 from pathlib import Path
+import hashlib
 
 from research.data.capture_polymarket import (
     build_polymarket_capture,
@@ -45,6 +46,7 @@ def build_training_set_rows_from_sports_inputs(
 ) -> list[TrainingSetRow]:
     market_rows = list(polymarket_markets or [])
     training_rows: list[TrainingSetRow] = []
+    seen_record_ids: dict[str, int] = {}
     for row in rows:
         if row.home_team in (None, "") or row.away_team in (None, ""):
             continue
@@ -80,12 +82,25 @@ def build_training_set_rows_from_sports_inputs(
             None,
         )
         recorded_at = _format_recorded_at(row.captured_at)
+        base_record_id = _build_training_record_id(
+            row,
+            recorded_at=recorded_at,
+            market_key=market_key,
+            condition_id=condition_id,
+        )
+        seen_count = seen_record_ids.get(base_record_id, 0) + 1
+        seen_record_ids[base_record_id] = seen_count
+        record_id = (
+            base_record_id
+            if seen_count == 1
+            else f"{base_record_id}|dup-{seen_count:02d}"
+        )
         training_rows.append(
             TrainingSetRow(
                 home_team=str(row.home_team),
                 away_team=str(row.away_team),
                 label=int(row.label),
-                record_id=_build_training_record_id(row),
+                record_id=record_id,
                 recorded_at=recorded_at,
                 event_key=row.event_key,
                 sport=row.sport,
@@ -168,22 +183,42 @@ def _build_market_feature_metadata(
     return features
 
 
-def _format_recorded_at(value) -> str:
+def _format_recorded_at(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _build_training_record_id(row: SportsInputRow) -> str:
+def _build_training_record_id(
+    row: SportsInputRow,
+    *,
+    recorded_at: str,
+    market_key: str | None,
+    condition_id: str | None,
+) -> str:
     identity = (
         row.event_key
         or row.game_id
         or row.source_event_id
         or f"{row.home_team}|{row.away_team}|{row.selection_name}"
     )
+    digest = hashlib.sha1(
+        json.dumps(
+            {
+                "bookmaker": row.bookmaker,
+                "selection_name": row.selection_name,
+                "sports_market_type": row.sports_market_type,
+                "source_event_id": row.source_event_id,
+                "market_key": market_key,
+                "condition_id": condition_id,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()[:10]
     return "|".join(
         [
             str(row.source),
             str(identity),
-            _format_recorded_at(row.captured_at),
+            str(recorded_at),
+            digest,
         ]
     )
 
