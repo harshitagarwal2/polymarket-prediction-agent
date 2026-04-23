@@ -270,9 +270,9 @@ def _current_read_adapter(stores) -> CurrentStateReadAdapter:
 
 
 def _read_current_table(stores, table: str) -> dict[str, object]:
-    current_rows = stores["current"].read_table(table)
-    if current_rows:
-        return current_rows
+    current_path = stores["current"].root / f"{table}.json"
+    if current_path.exists():
+        return stores["current"].read_table(table)
     return _current_read_adapter(stores).read_table(table)
 
 

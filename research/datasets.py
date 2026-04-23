@@ -79,6 +79,43 @@ def _validate_single_path_segment(value: object, *, field_name: str) -> str:
     return normalized
 
 
+def _resolve_snapshot_relative_path(snapshot_dir: Path, relative_path: object) -> Path:
+    normalized = _validate_relative_dataset_path(
+        relative_path,
+        field_name="dataset snapshot relative_path",
+    )
+    candidate = snapshot_dir / normalized
+    return _ensure_path_within_dir(
+        snapshot_dir,
+        candidate,
+        field_name="dataset snapshot relative_path",
+    )
+
+
+def _ensure_path_within_root(root_dir: Path, path: Path, *, field_name: str) -> Path:
+    resolved_root_dir = root_dir.resolve()
+    resolved_path = path.resolve(strict=False)
+    try:
+        resolved_path.relative_to(resolved_root_dir)
+    except ValueError as exc:
+        raise ValueError(
+            f"{field_name} must stay within the dataset registry root"
+        ) from exc
+    return path
+
+
+def _ensure_path_within_dir(directory: Path, path: Path, *, field_name: str) -> Path:
+    resolved_directory = directory.resolve()
+    resolved_path = path.resolve(strict=False)
+    try:
+        resolved_path.relative_to(resolved_directory)
+    except ValueError as exc:
+        raise ValueError(
+            f"{field_name} must stay within the snapshot directory"
+        ) from exc
+    return path
+
+
 def _require_object(name: str, value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be an object")
@@ -313,14 +350,22 @@ class DatasetRegistry:
         return _slugify(dataset_name)
 
     def _dataset_dir(self, dataset_name: str) -> Path:
-        return self.root_dir / self._dataset_dir_name(dataset_name)
+        return _ensure_path_within_root(
+            self.root_dir,
+            self.root_dir / self._dataset_dir_name(dataset_name),
+            field_name="dataset_dir",
+        )
 
     def _snapshot_dir(self, dataset_name: str, version: str) -> Path:
         resolved_version = _validate_single_path_segment(
             version,
             field_name="dataset snapshot version",
         )
-        return self._dataset_dir(dataset_name) / resolved_version
+        return _ensure_path_within_root(
+            self.root_dir,
+            self._dataset_dir(dataset_name) / resolved_version,
+            field_name="dataset snapshot version",
+        )
 
     def _update_registry(self, manifest: DatasetSnapshotManifest) -> None:
         payload = self._read_registry_payload()
@@ -499,7 +544,11 @@ class DatasetRegistry:
     ) -> DatasetSnapshotManifest:
         resolved_version = self._resolve_version(dataset_name, version)
         snapshot_dir = self._snapshot_dir(dataset_name, resolved_version)
-        manifest_path = snapshot_dir / "manifest.json"
+        manifest_path = _ensure_path_within_dir(
+            snapshot_dir,
+            snapshot_dir / "manifest.json",
+            field_name="dataset snapshot manifest",
+        )
         if not manifest_path.exists():
             raise ValueError(
                 f"dataset snapshot manifest not found: {dataset_name}@{resolved_version}"
@@ -524,7 +573,12 @@ class DatasetRegistry:
             raise ValueError(f"dataset snapshot is not a rows snapshot: {dataset_name}")
         if snapshot.snapshot_dir is None:
             raise ValueError("rows snapshot is missing snapshot_dir context")
-        return read_jsonl_records(snapshot.snapshot_dir / "rows.jsonl")
+        rows_path = _ensure_path_within_dir(
+            snapshot.snapshot_dir,
+            snapshot.snapshot_dir / "rows.jsonl",
+            field_name="dataset snapshot rows file",
+        )
+        return read_jsonl_records(rows_path)
 
     def read_rows_by_record_ids(
         self,
@@ -563,7 +617,12 @@ class DatasetRegistry:
                 raise ValueError(
                     f"benchmark case snapshot record is missing relative_path: {record.record_id}"
                 )
-            paths.append(snapshot.snapshot_dir / record.relative_path)
+            paths.append(
+                _resolve_snapshot_relative_path(
+                    snapshot.snapshot_dir,
+                    record.relative_path,
+                )
+            )
         return tuple(paths)
 
     def benchmark_case_paths_by_record_ids(
@@ -587,7 +646,12 @@ class DatasetRegistry:
                 raise ValueError(
                     f"unknown benchmark case snapshot record id: {record_id}"
                 )
-            paths.append(snapshot.snapshot_dir / record.relative_path)
+            paths.append(
+                _resolve_snapshot_relative_path(
+                    snapshot.snapshot_dir,
+                    record.relative_path,
+                )
+            )
         return tuple(paths)
 
 

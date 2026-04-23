@@ -64,20 +64,24 @@ def build_training_set_rows_from_sports_inputs(
         matched_markets = [
             market for market in market_rows if _matches_market_record(row, market)
         ]
-        market_features = _build_market_feature_metadata(row, matched_markets)
+        selected_market = _select_training_market_match(matched_markets)
+        market_features = _build_market_feature_metadata(
+            row,
+            [selected_market] if selected_market is not None else [],
+        )
         market_key = next(
             (
                 market.market_key
-                for market in matched_markets
-                if market.market_key not in (None, "")
+                for market in [selected_market]
+                if market is not None and market.market_key not in (None, "")
             ),
             None,
         )
         condition_id = next(
             (
                 market.condition_id
-                for market in matched_markets
-                if market.condition_id not in (None, "")
+                for market in [selected_market]
+                if market is not None and market.condition_id not in (None, "")
             ),
             None,
         )
@@ -181,6 +185,14 @@ def _build_market_feature_metadata(
     )
     features["market_count"] = float(len(market_rows))
     return features
+
+
+def _select_training_market_match(
+    matched_markets: list[PolymarketMarketRecord],
+) -> PolymarketMarketRecord | None:
+    if len(matched_markets) != 1:
+        return None
+    return matched_markets[0]
 
 
 def _format_recorded_at(value: datetime) -> str:

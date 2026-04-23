@@ -212,6 +212,53 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
         self.assertEqual(metadata["market_market_count"], 1.0)
         self.assertEqual(metadata["market_time_to_start_minutes"], 180.0)
 
+    def test_training_rows_skip_ambiguous_polymarket_market_links(self):
+        captured_at = datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc)
+        start_time = datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc)
+        sports_capture = build_sports_input_capture(
+            [
+                {
+                    "event_key": "event-1",
+                    "sport": "nba",
+                    "sports_market_type": "moneyline",
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "selection_name": "Home Team",
+                    "decimal_odds": 1.80,
+                    "start_time": start_time.isoformat(),
+                    "label": 1,
+                }
+            ],
+            source="sports-inputs",
+            captured_at=captured_at,
+        )
+        market_capture = build_polymarket_capture(
+            [
+                {
+                    "conditionId": "condition-1",
+                    "eventKey": "event-1",
+                    "sportsMarketType": "moneyline",
+                    "question": "Will Home Team beat Away Team?",
+                    "tokens": [
+                        {"token_id": "token-home", "outcome": "Yes", "midpoint": 0.6},
+                        {"token_id": "token-away", "outcome": "No", "midpoint": 0.4},
+                    ],
+                }
+            ],
+            layer="gamma",
+            captured_at=captured_at,
+        )
+
+        rows = build_training_set_rows_from_sports_inputs(
+            sports_capture.rows,
+            polymarket_markets=market_capture.markets,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0].market_key)
+        self.assertIsNone(rows[0].condition_id)
+        self.assertNotIn("market_market_count", rows[0].metadata)
+
     def test_training_and_eval_scaffolding_works(self):
         case = SportsBenchmarkCase.from_payload(
             json.loads((FIXTURES_DIR / "sports_benchmark_tiny.json").read_text())
