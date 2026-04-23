@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import count
+from typing import Any
 
 from adapters.types import (
     Contract,
@@ -14,6 +15,9 @@ from adapters.types import (
 )
 
 
+_PUBLIC_TRADE_METADATA_KEYS = frozenset({"mapping_risk", "replay_step_index"})
+
+
 @dataclass
 class PaperTrade:
     order_id: str
@@ -23,6 +27,88 @@ class PaperTrade:
     quantity: float
     filled: bool
     reason: str
+    requested_quantity: float | None = None
+    remaining_quantity: float | None = None
+    submitted_step: int | None = None
+    fill_step: int | None = None
+    wait_steps: int = 0
+    resting: bool = False
+    limit_price: float | None = None
+    decision_best_bid: float | None = None
+    decision_best_ask: float | None = None
+    decision_midpoint: float | None = None
+    decision_reference_price: float | None = None
+    decision_fair_value: float | None = None
+    visible_quantity: float | None = None
+    levels_consumed: int = 0
+    stale_data_flag: bool = False
+    price_move_bps: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def fill_ratio(self) -> float:
+        requested = self.requested_quantity or 0.0
+        if requested <= 0:
+            return 0.0
+        return self.quantity / requested
+
+    @property
+    def partial_fill(self) -> bool:
+        return self.filled and (self.remaining_quantity or 0.0) > 0.0
+
+    def _edge_bps(self, *, price: float | None) -> float | None:
+        if price is None or price <= 0.0 or self.decision_fair_value is None:
+            return None
+        direction = 1.0 if self.action is OrderAction.BUY else -1.0
+        return round(direction * (self.decision_fair_value - price) * 10_000.0, 4)
+
+    def to_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "order_id": self.order_id,
+            "market_id": self.contract.market_key,
+            "action": self.action.value,
+            "price": self.price,
+            "filled_quantity": self.quantity,
+            "filled": self.filled,
+            "reason": self.reason,
+            "fill_ratio": round(self.fill_ratio, 6),
+            "partial_fill": self.partial_fill,
+            "wait_steps": self.wait_steps,
+            "resting": self.resting,
+            "levels_consumed": self.levels_consumed,
+            "stale_data_flag": self.stale_data_flag,
+            "price_move_bps": self.price_move_bps,
+        }
+        optional_fields = {
+            "requested_quantity": self.requested_quantity,
+            "remaining_quantity": self.remaining_quantity,
+            "submitted_step": self.submitted_step,
+            "fill_step": self.fill_step,
+            "limit_price": self.limit_price,
+            "decision_best_bid": self.decision_best_bid,
+            "decision_best_ask": self.decision_best_ask,
+            "decision_midpoint": self.decision_midpoint,
+            "decision_reference_price": self.decision_reference_price,
+            "decision_fair_value": self.decision_fair_value,
+            "visible_quantity": self.visible_quantity,
+        }
+        for key, value in optional_fields.items():
+            if value is not None:
+                payload[key] = value
+        expected_edge_bps = self._edge_bps(price=self.decision_reference_price)
+        realized_edge_bps = self._edge_bps(price=self.price) if self.filled else None
+        if expected_edge_bps is not None:
+            payload["expected_edge_bps"] = expected_edge_bps
+        if realized_edge_bps is not None:
+            payload["realized_edge_bps"] = realized_edge_bps
+            if expected_edge_bps is not None:
+                payload["slippage_bps"] = round(
+                    realized_edge_bps - expected_edge_bps,
+                    4,
+                )
+        if self.metadata:
+            payload["metadata"] = dict(self.metadata)
+        return payload
 
 
 @dataclass
@@ -31,6 +117,8 @@ class PaperExecutionConfig:
     slippage_bps: float = 0.0
     resting_max_fill_ratio_per_step: float | None = None
     resting_fill_delay_steps: int = 0
+    stale_after_steps: int = 0
+    price_move_bps_per_step: float = 0.0
 
 
 @dataclass
@@ -117,22 +205,62 @@ class PaperBroker:
     def _record_fill(
         self,
         *,
-        order_id: str,
-        contract: Contract,
-        action: OrderAction,
+        order: NormalizedOrder,
+        book: OrderBookSnapshot,
         price: float,
         quantity: float,
         reason: str,
+        requested_quantity: float,
+        remaining_quantity: float,
+        resting: bool,
+        visible_quantity: float,
+        levels_consumed: int,
+        price_move_bps: float = 0.0,
     ) -> PaperTrade:
+        contract = order.contract
         self._remember_contract(contract)
+        raw = order.raw if isinstance(order.raw, dict) else {}
+        submitted_step = raw.get("_submitted_step")
+        wait_steps = 0
+        if isinstance(submitted_step, int):
+            wait_steps = max(0, self.current_step - submitted_step)
         trade = PaperTrade(
-            order_id=order_id,
+            order_id=order.order_id,
             contract=contract,
-            action=action,
+            action=order.action,
             price=price,
             quantity=quantity,
             filled=quantity > 0,
             reason=reason,
+            requested_quantity=requested_quantity,
+            remaining_quantity=remaining_quantity,
+            submitted_step=submitted_step if isinstance(submitted_step, int) else None,
+            fill_step=self.current_step,
+            wait_steps=wait_steps,
+            resting=resting,
+            limit_price=order.price,
+            decision_best_bid=_coerce_optional_float(raw.get("_decision_best_bid")),
+            decision_best_ask=_coerce_optional_float(raw.get("_decision_best_ask")),
+            decision_midpoint=_coerce_optional_float(raw.get("_decision_midpoint")),
+            decision_reference_price=_coerce_optional_float(
+                raw.get("_decision_reference_price")
+            ),
+            decision_fair_value=_coerce_optional_float(raw.get("_decision_fair_value")),
+            visible_quantity=visible_quantity,
+            levels_consumed=levels_consumed,
+            stale_data_flag=_snapshot_is_stale(
+                current_step=self.current_step,
+                snapshot_step=submitted_step,
+                stale_after_steps=self.config.stale_after_steps,
+            )
+            if isinstance(submitted_step, int)
+            else False,
+            price_move_bps=price_move_bps,
+            metadata={
+                key: value
+                for key, value in raw.items()
+                if isinstance(key, str) and key in _PUBLIC_TRADE_METADATA_KEYS
+            },
         )
         self.trades.append(trade)
         return trade
@@ -174,7 +302,11 @@ class PaperBroker:
             )
             if not crosses or remaining <= 0:
                 break
-            effective_level_qty = level.quantity * fill_ratio
+            effective_level_qty = _simulate_fillable_quantity(
+                requested_quantity=remaining,
+                visible_quantity=level.quantity,
+                max_fill_ratio_per_step=fill_ratio,
+            )
             fill_qty = min(remaining, effective_level_qty)
             fills.append((level.price, fill_qty))
             remaining -= fill_qty
@@ -200,16 +332,39 @@ class PaperBroker:
             return price * (1 + multiplier)
         return price * (1 - multiplier)
 
+    def _apply_wait_time_slippage(
+        self, *, order: NormalizedOrder, price: float, resting: bool
+    ) -> tuple[float, float]:
+        if not resting or self.config.price_move_bps_per_step <= 0.0:
+            return price, 0.0
+        raw = order.raw if isinstance(order.raw, dict) else {}
+        submitted_step = raw.get("_submitted_step")
+        if not isinstance(submitted_step, int):
+            return price, 0.0
+        wait_steps = max(0, self.current_step - submitted_step)
+        if wait_steps <= 0:
+            return price, 0.0
+        price_move_bps = wait_steps * self.config.price_move_bps_per_step
+        multiplier = price_move_bps / 10_000.0
+        if order.action is OrderAction.BUY:
+            return price * (1.0 + multiplier), price_move_bps
+        return price * (1.0 - multiplier), price_move_bps
+
     def _execute_order(
         self, book: OrderBookSnapshot, order: NormalizedOrder, *, resting: bool
     ) -> list[PaperTrade]:
         if resting and not self._resting_order_ready(order):
             return []
+        requested_quantity = order.remaining_quantity
+        visible_quantity = book.cumulative_quantity(
+            order.action,
+            limit_price=order.price,
+        )
         fills, remaining = self._walk_levels(
             order.action,
             book,
             order.price,
-            order.remaining_quantity,
+            requested_quantity,
             fill_ratio=(
                 self._resting_fill_ratio()
                 if resting
@@ -225,19 +380,28 @@ class PaperBroker:
         ):
             return [
                 self._record_fill(
-                    order_id=order.order_id,
-                    contract=order.contract,
-                    action=order.action,
+                    order=order,
+                    book=book,
                     price=order.price,
                     quantity=0.0,
                     reason="insufficient paper inventory",
+                    requested_quantity=requested_quantity,
+                    remaining_quantity=requested_quantity,
+                    resting=resting,
+                    visible_quantity=visible_quantity,
+                    levels_consumed=0,
                 )
             ]
 
         results: list[PaperTrade] = []
         spent = 0.0
-        for fill_price, fill_qty in fills:
+        for level_index, (fill_price, fill_qty) in enumerate(fills, start=1):
             effective_price = self._apply_slippage(order.action, fill_price)
+            effective_price, price_move_bps = self._apply_wait_time_slippage(
+                order=order,
+                price=effective_price,
+                resting=resting,
+            )
             if order.action is OrderAction.BUY:
                 affordable_qty = fill_qty
                 if effective_price > 0:
@@ -256,14 +420,20 @@ class PaperBroker:
                 continue
             self._apply_fill(order.action, order.contract, effective_price, fill_qty)
             spent += fill_qty
+            remaining_quantity = max(0.0, requested_quantity - spent)
             results.append(
                 self._record_fill(
-                    order_id=order.order_id,
-                    contract=order.contract,
-                    action=order.action,
+                    order=order,
+                    book=book,
                     price=effective_price,
                     quantity=fill_qty,
                     reason="book crossed",
+                    requested_quantity=requested_quantity,
+                    remaining_quantity=remaining_quantity,
+                    resting=resting,
+                    visible_quantity=visible_quantity,
+                    levels_consumed=level_index,
+                    price_move_bps=price_move_bps,
                 )
             )
 
@@ -279,12 +449,16 @@ class PaperBroker:
             self.open_orders[order.order_id] = order
             results.append(
                 self._record_fill(
-                    order_id=order.order_id,
-                    contract=order.contract,
-                    action=order.action,
+                    order=order,
+                    book=book,
                     price=order.price,
                     quantity=0.0,
                     reason="resting on book",
+                    requested_quantity=requested_quantity,
+                    remaining_quantity=order.remaining_quantity,
+                    resting=resting,
+                    visible_quantity=visible_quantity,
+                    levels_consumed=0,
                 )
             )
         return results
@@ -296,6 +470,17 @@ class PaperBroker:
         for intent in intents:
             raw = dict(intent.metadata)
             raw["_submitted_step"] = self.current_step
+            raw["_decision_fair_value"] = raw.get("fair_value")
+            raw["_decision_best_bid"] = book.best_bid
+            raw["_decision_best_ask"] = book.best_ask
+            raw["_decision_midpoint"] = book.midpoint
+            raw["_decision_reference_price"] = (
+                book.best_ask if intent.action is OrderAction.BUY else book.best_bid
+            )
+            raw["_decision_visible_quantity"] = book.cumulative_quantity(
+                intent.action,
+                limit_price=intent.price,
+            )
             order = NormalizedOrder(
                 order_id=self._next_order_id(),
                 contract=intent.contract,
@@ -329,3 +514,29 @@ class PaperBroker:
         for market_key, quantity in self.positions.items():
             value += quantity * mark_prices.get(market_key, 0.0)
         return value
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _snapshot_is_stale(
+    *, current_step: int, snapshot_step: int | None, stale_after_steps: int
+) -> bool:
+    if snapshot_step is None or stale_after_steps <= 0:
+        return False
+    return (current_step - snapshot_step) > max(0, stale_after_steps)
+
+
+def _simulate_fillable_quantity(
+    *,
+    requested_quantity: float,
+    visible_quantity: float,
+    max_fill_ratio_per_step: float,
+) -> float:
+    capped_visible = max(0.0, visible_quantity) * max(0.0, max_fill_ratio_per_step)
+    return min(max(0.0, requested_quantity), capped_visible)

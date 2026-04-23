@@ -120,7 +120,8 @@ def _build_bookmaker_baseline_predictions(
     except ValueError as exc:
         return None, str(exc)
     predictions: dict[str, float] = {}
-    for market_key, record in manifest.values.items():
+    manifest_values = manifest.values or {}
+    for market_key, record in manifest_values.items():
         if market_key not in labels:
             continue
         value = record.get("fair_value")

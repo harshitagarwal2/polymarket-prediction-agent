@@ -138,6 +138,55 @@ class PaperBrokerTests(unittest.TestCase):
         self.assertEqual(sum(trade.quantity for trade in trades if trade.filled), 5)
         self.assertEqual(broker.open_orders_for(contract)[0].remaining_quantity, 5)
 
+    def test_resting_fill_telemetry_tracks_wait_time_staleness_and_price_drift(self):
+        contract = make_contract()
+        resting_book = OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.44, quantity=10)],
+            asks=[PriceLevel(price=0.60, quantity=10)],
+        )
+        crossing_book = OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.44, quantity=10)],
+            asks=[PriceLevel(price=0.49, quantity=10)],
+        )
+        broker = PaperBroker(
+            cash=100,
+            config=PaperExecutionConfig(
+                resting_fill_delay_steps=1,
+                stale_after_steps=1,
+                price_move_bps_per_step=25.0,
+            ),
+        )
+
+        broker.submit_intents(
+            resting_book,
+            [
+                OrderIntent(
+                    contract=contract,
+                    action=OrderAction.BUY,
+                    price=0.50,
+                    quantity=5.0,
+                    metadata={
+                        "mapping_risk": 0.2,
+                        "secret_token": "should-not-persist",
+                    },
+                )
+            ],
+        )
+        self.assertEqual(broker.advance(crossing_book), [])
+
+        filled_trades = broker.advance(crossing_book)
+
+        self.assertEqual(len(filled_trades), 1)
+        self.assertEqual(filled_trades[0].wait_steps, 2)
+        self.assertTrue(filled_trades[0].stale_data_flag)
+        self.assertAlmostEqual(filled_trades[0].price, 0.49245)
+        self.assertEqual(filled_trades[0].decision_best_ask, 0.60)
+        self.assertEqual(filled_trades[0].decision_reference_price, 0.60)
+        self.assertEqual(filled_trades[0].requested_quantity, 5.0)
+        self.assertEqual(filled_trades[0].metadata, {"mapping_risk": 0.2})
+
 
 if __name__ == "__main__":
     unittest.main()

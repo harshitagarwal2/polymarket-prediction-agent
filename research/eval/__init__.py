@@ -3,8 +3,6 @@ from research.eval.closing_value import evaluate_closing_value
 from research.eval.dm_test import compare_loss_differentials
 from research.eval.execution_metrics import summarize_execution_metrics
 from research.eval.metrics import score_forecasts
-from research.eval.reports import write_walk_forward_report_artifacts
-from research.eval.walk_forward import run_dataset_walk_forward
 
 __all__ = [
     "compare_loss_differentials",
@@ -15,3 +13,15 @@ __all__ = [
     "summarize_execution_metrics",
     "write_walk_forward_report_artifacts",
 ]
+
+
+def write_walk_forward_report_artifacts(*args, **kwargs):
+    from research.eval.reports import write_walk_forward_report_artifacts as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def run_dataset_walk_forward(*args, **kwargs):
+    from research.eval.walk_forward import run_dataset_walk_forward as _impl
+
+    return _impl(*args, **kwargs)

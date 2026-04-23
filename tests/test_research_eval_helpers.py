@@ -38,16 +38,24 @@ class ResearchEvalHelperTests(unittest.TestCase):
         metrics = summarize_execution_metrics(
             [
                 {
+                    "requested_quantity": 4.0,
+                    "filled_quantity": 2.0,
                     "expected_edge_bps": 120.0,
                     "realized_edge_bps": 80.0,
                     "slippage_bps": 15.0,
+                    "fill_ratio": 0.5,
+                    "partial_fill": True,
                     "filled": True,
                     "stale_data_flag": False,
                 },
                 {
+                    "requested_quantity": 4.0,
+                    "filled_quantity": 0.0,
                     "expected_edge_bps": 90.0,
                     "realized_edge_bps": 0.0,
                     "slippage_bps": 0.0,
+                    "fill_ratio": 0.0,
+                    "partial_fill": False,
                     "filled": False,
                     "stale_data_flag": True,
                 },
@@ -56,7 +64,11 @@ class ResearchEvalHelperTests(unittest.TestCase):
 
         self.assertEqual(metrics.trade_count, 2)
         self.assertEqual(metrics.filled_trade_count, 1)
+        self.assertEqual(metrics.complete_fill_count, 0)
+        self.assertEqual(metrics.partial_fill_count, 1)
         self.assertAlmostEqual(metrics.fill_rate, 0.5)
+        self.assertAlmostEqual(metrics.partial_fill_rate, 0.5)
+        self.assertAlmostEqual(metrics.average_fill_ratio, 0.25)
         self.assertAlmostEqual(metrics.average_realized_slippage_bps, 15.0)
         self.assertEqual(metrics.stale_data_count, 1)
 
