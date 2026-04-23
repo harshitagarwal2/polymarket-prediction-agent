@@ -21,3 +21,4 @@ runtime:
   sportsbook_market: h2h
   event_map_file: runtime/odds_event_map.json
   consensus_artifact: runtime/consensus_artifact.json
+  calibration_artifact:
