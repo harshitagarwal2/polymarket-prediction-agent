@@ -94,6 +94,60 @@ class MlAndLlmScaffoldsTests(unittest.TestCase):
                 }
             )
 
+        with self.assertRaisesRegex(
+            ValueError,
+            "includes_overtime must be true or false",
+        ):
+            parse_llm_contract_payload(
+                {
+                    "includes_overtime": 1,
+                    "void_on_postponement": True,
+                    "requires_player_to_start": False,
+                    "ambiguity_score": 0.12,
+                }
+            )
+
+    def test_llm_contract_parser_requires_boolean_flags_and_finite_ambiguity_score(
+        self,
+    ):
+        with self.assertRaisesRegex(
+            ValueError,
+            "void_on_postponement is required",
+        ):
+            parse_llm_contract_payload(
+                {
+                    "includes_overtime": True,
+                    "requires_player_to_start": False,
+                    "ambiguity_score": 0.12,
+                }
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ambiguity_score must be between 0 and 1",
+        ):
+            parse_llm_contract_payload(
+                {
+                    "includes_overtime": True,
+                    "void_on_postponement": True,
+                    "requires_player_to_start": False,
+                    "ambiguity_score": "nan",
+                }
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ambiguity_score must be a finite number between 0 and 1",
+        ):
+            parse_llm_contract_payload(
+                {
+                    "includes_overtime": True,
+                    "void_on_postponement": True,
+                    "requires_player_to_start": False,
+                    "ambiguity_score": True,
+                }
+            )
+
     def test_operator_memo_and_evidence_summary_are_deterministic(self):
         memo = summarize_evidence(
             ["Line moved after injury report", "Depth still thin"],

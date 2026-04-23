@@ -409,16 +409,50 @@ class LLMAdvisoryTests(unittest.TestCase):
             ):
                 load_llm_advisory_contract_rows(handle.name)
 
+    def test_load_llm_advisory_contract_rows_rejects_missing_nested_boolean_flags(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(
+                {
+                    "contracts": [
+                        {
+                            "contract_id": "bad-contract",
+                            "llm_contract": {
+                                "includes_overtime": True,
+                                "requires_player_to_start": None,
+                                "resolution_source": "league",
+                                "ambiguity_score": 0.2,
+                            },
+                        }
+                    ]
+                },
+                handle,
+            )
+            handle.flush()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "void_on_postponement is required",
+            ):
+                load_llm_advisory_contract_rows(handle.name)
+
     def test_render_llm_advisory_markdown_sanitizes_untrusted_text(self):
         artifact = build_llm_advisory_artifact(
             [
                 {
-                    "contract_id": "contract-danger",
-                    "question": "Question\u001b[31m <b>red</b>",
-                    "summary": "Summary <script>alert(1)</script>",
-                    "citations": ["cite\u001b[0m", "<unsafe>"],
+                    "contract_id": "contract-[danger](javascript:alert(1))",
+                    "question": "Question\u001b[31m <b>red</b> [link](javascript:alert(1))",
+                    "summary": "Summary <script>alert(1)</script> **bold**",
+                    "citations": [
+                        "cite\u001b[0m",
+                        "<unsafe>",
+                        "[link](javascript:alert(1))",
+                    ],
                 }
             ],
+            source="source-[danger](javascript:alert(1))",
+            provider_name="provider**danger**",
+            provider_model="model`danger`",
+            prompt_version="#danger",
             runtime_health={"state": "healthy\u001b[31m", "tag": "<unsafe>"},
         )
 
@@ -428,6 +462,48 @@ class LLMAdvisoryTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", rendered)
         self.assertIn("&lt;b&gt;red&lt;/b&gt;", rendered)
         self.assertIn("&lt;unsafe&gt;", rendered)
+        self.assertIn("source\\-\\[danger\\]\\(javascript:alert\\(1\\)\\)", rendered)
+        self.assertIn("provider\\*\\*danger\\*\\*", rendered)
+        self.assertIn("model\\`danger\\`", rendered)
+        self.assertIn("\\#danger", rendered)
+        self.assertIn("contract\\-\\[danger\\]\\(javascript:alert\\(1\\)\\)", rendered)
+        self.assertNotIn("[link](javascript:alert(1))", rendered)
+
+    def test_write_llm_advisory_artifacts_rejects_non_finite_values(self):
+        artifact = build_llm_advisory_artifact(
+            [
+                {
+                    "contract_id": "contract-pm-1",
+                    "llm_probability": 0.5,
+                }
+            ]
+        )
+        invalid_artifact = artifact.__class__(
+            generated_at=artifact.generated_at,
+            evidence_summary=artifact.evidence_summary,
+            operator_memo=artifact.operator_memo,
+            contracts=(
+                artifact.contracts[0].__class__(
+                    contract_id=artifact.contracts[0].contract_id,
+                    llm_probability=float("nan"),
+                ),
+            ),
+            preview_order_proposals=artifact.preview_order_proposals,
+            blocked_preview_orders=artifact.blocked_preview_orders,
+            schema_version=artifact.schema_version,
+            source=artifact.source,
+            provider_name=artifact.provider_name,
+            provider_model=artifact.provider_model,
+            prompt_version=artifact.prompt_version,
+            runtime_health=artifact.runtime_health,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "llm_advisory.json"
+            with self.assertRaisesRegex(
+                ValueError, "Out of range float values are not JSON compliant"
+            ):
+                write_llm_advisory_artifacts(invalid_artifact, output_path)
 
     def test_preview_runtime_context_matches_missing_bbo_blocked_behavior(self):
         with tempfile.TemporaryDirectory() as temp_dir:
