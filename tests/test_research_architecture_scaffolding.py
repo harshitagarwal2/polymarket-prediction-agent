@@ -29,6 +29,7 @@ from research.features.joiners import merge_feature_sets
 from research.features.market_features import build_market_microstructure_features
 from research.features.sports_features import build_team_strength_features
 from research.fair_values import load_market_snapshot
+from research.datasets import DatasetRegistry
 from research.models.bradley_terry import fit_bradley_terry_from_rows
 from research.models.blend import blend_probability
 from research.schemas import SportsBenchmarkCase
@@ -291,6 +292,68 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
         self.assertEqual(artifact_payload["model_generator"], "elo")
         self.assertEqual(artifact_payload["training_match_count"], 1)
         self.assertIn("elo|v1", registry_payload)
+
+    def test_train_models_can_use_training_dataset_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset_root = Path(temp_dir) / "runtime-data" / "datasets"
+            output_path = Path(temp_dir) / "elo.json"
+            registry_root = Path(temp_dir) / "registry"
+            dataset_registry = DatasetRegistry(dataset_root)
+            dataset_registry.write_rows_snapshot(
+                "historical-training-dataset",
+                [
+                    {
+                        "record_id": "sports-inputs|event-1|2026-04-21T18:00:00Z|abc123",
+                        "recorded_at": "2026-04-21T18:00:00Z",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "label": 1,
+                        "event_key": "event-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                        "game_id": "game-1",
+                        "sports_market_type": "moneyline",
+                        "source": "sports-inputs",
+                        "market_key": "token-home:yes",
+                        "condition_id": "condition-1",
+                        "metadata": {},
+                    }
+                ],
+                version="v1",
+                record_id_field="record_id",
+                timestamp_field="recorded_at",
+            )
+
+            with patch(
+                "sys.argv",
+                [
+                    "train_models.py",
+                    "--model",
+                    "elo",
+                    "--training-dataset",
+                    "historical-training-dataset",
+                    "--training-dataset-version",
+                    "v1",
+                    "--dataset-root",
+                    str(dataset_root),
+                    "--output",
+                    str(output_path),
+                    "--registry-root",
+                    str(registry_root),
+                ],
+            ):
+                train_models.main()
+
+            artifact_payload = json.loads(output_path.read_text())
+            registry_payload = json.loads(
+                (registry_root / "model_registry.json").read_text()
+            )
+
+        self.assertEqual(artifact_payload["model_generator"], "elo")
+        self.assertEqual(artifact_payload["training_match_count"], 1)
+        self.assertEqual(
+            registry_payload["elo|v1"]["feature_spec"]["input"], "training-dataset"
+        )
 
     def test_train_models_can_read_model_from_config_file(self):
         training_payload = {
