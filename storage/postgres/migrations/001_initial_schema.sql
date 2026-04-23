@@ -86,6 +86,7 @@ CREATE TABLE fair_values (
   market_id TEXT NOT NULL,
   as_of TIMESTAMPTZ NOT NULL,
   fair_yes_prob NUMERIC(10,6) NOT NULL,
+  calibrated_fair_yes_prob NUMERIC(10,6),
   lower_prob NUMERIC(10,6) NOT NULL,
   upper_prob NUMERIC(10,6) NOT NULL,
   book_dispersion NUMERIC(10,6) NOT NULL,

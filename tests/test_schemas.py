@@ -121,6 +121,30 @@ class BenchmarkSchemaTests(unittest.TestCase):
         self.assertEqual(len(case.fair_value_case.calibration_samples), 2)
         self.assertEqual(case.fair_value_case.calibration_bin_count, 2)
 
+    def test_replay_broker_realism_knobs_are_loaded_when_present(self):
+        payload = {
+            "name": "replay-realism-case",
+            "replay_case": {
+                "broker": {
+                    "cash": 1000.0,
+                    "stale_after_steps": 2,
+                    "price_move_bps_per_step": 12.5,
+                },
+                "steps": [],
+            },
+        }
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as handle:
+            json.dump(payload, handle)
+            handle.flush()
+
+            case = load_benchmark_case(handle.name)
+
+        if case.replay_case is None:
+            self.fail("expected replay case")
+        self.assertEqual(case.replay_case.broker.stale_after_steps, 2)
+        self.assertEqual(case.replay_case.broker.price_move_bps_per_step, 12.5)
+
     def test_model_fair_values_and_blend_weight_are_loaded_when_present(self):
         payload = {
             "name": "modeled-case",
