@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Literal, Sequence
+from typing import Any, Iterable, Iterator, Literal, Sequence
 
 from research.fair_values import parse_timestamp
 from research.schemas import SportsBenchmarkCase, serialize_benchmark_case
 from research.storage import (
     normalize_for_json,
-    read_jsonl_records,
     write_json,
     write_jsonl_records,
 )
@@ -101,7 +102,7 @@ def _ensure_path_within_root(root_dir: Path, path: Path, *, field_name: str) -> 
         raise ValueError(
             f"{field_name} must stay within the dataset registry root"
         ) from exc
-    return path
+    return resolved_path
 
 
 def _ensure_path_within_dir(directory: Path, path: Path, *, field_name: str) -> Path:
@@ -113,7 +114,87 @@ def _ensure_path_within_dir(directory: Path, path: Path, *, field_name: str) -> 
         raise ValueError(
             f"{field_name} must stay within the snapshot directory"
         ) from exc
-    return path
+    return resolved_path
+
+
+@contextmanager
+def _open_directory_beneath_root(
+    root_dir: Path,
+    directory: Path,
+    *,
+    field_name: str,
+) -> Iterator[int]:
+    resolved_root_dir = root_dir.resolve()
+    resolved_directory = _ensure_path_within_root(
+        root_dir,
+        directory,
+        field_name=field_name,
+    )
+    relative_directory = resolved_directory.relative_to(resolved_root_dir)
+    base_flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        base_flags |= os.O_DIRECTORY
+    current_fd = os.open(resolved_root_dir, base_flags)
+    opened_fds = [current_fd]
+    try:
+        for part in relative_directory.parts:
+            next_flags = base_flags
+            if hasattr(os, "O_NOFOLLOW"):
+                next_flags |= os.O_NOFOLLOW
+            try:
+                next_fd = os.open(part, next_flags, dir_fd=current_fd)
+            except OSError as exc:
+                raise ValueError(
+                    f"{field_name} must stay within the dataset registry root"
+                ) from exc
+            opened_fds.append(next_fd)
+            current_fd = next_fd
+        yield current_fd
+    finally:
+        for fd in reversed(opened_fds):
+            os.close(fd)
+
+
+def _read_text_file_from_directory_fd(
+    directory_fd: int,
+    filename: str,
+    *,
+    field_name: str,
+) -> str:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        file_fd = os.open(filename, flags, dir_fd=directory_fd)
+    except OSError as exc:
+        raise ValueError(
+            f"{field_name} must stay within the snapshot directory"
+        ) from exc
+    with os.fdopen(file_fd, "r", encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _read_jsonl_records_from_directory_fd(
+    directory_fd: int,
+    filename: str,
+    *,
+    field_name: str,
+) -> list[dict[str, Any]]:
+    text = _read_text_file_from_directory_fd(
+        directory_fd,
+        filename,
+        field_name=field_name,
+    )
+    records: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError("jsonl record must deserialize to an object")
+        records.append(payload)
+    return records
 
 
 def _require_object(name: str, value: object) -> dict[str, Any]:
@@ -553,10 +634,20 @@ class DatasetRegistry:
             raise ValueError(
                 f"dataset snapshot manifest not found: {dataset_name}@{resolved_version}"
             )
+        with _open_directory_beneath_root(
+            self.root_dir,
+            snapshot_dir,
+            field_name="dataset snapshot version",
+        ) as snapshot_dir_fd:
+            manifest_text = _read_text_file_from_directory_fd(
+                snapshot_dir_fd,
+                "manifest.json",
+                field_name="dataset snapshot manifest",
+            )
         manifest = DatasetSnapshotManifest.from_payload(
             _require_object(
                 "dataset snapshot manifest",
-                json.loads(manifest_path.read_text(encoding="utf-8")),
+                json.loads(manifest_text),
             ),
             snapshot_dir=snapshot_dir,
         )
@@ -578,7 +669,16 @@ class DatasetRegistry:
             snapshot.snapshot_dir / "rows.jsonl",
             field_name="dataset snapshot rows file",
         )
-        return read_jsonl_records(rows_path)
+        with _open_directory_beneath_root(
+            self.root_dir,
+            snapshot.snapshot_dir,
+            field_name="dataset snapshot version",
+        ) as snapshot_dir_fd:
+            return _read_jsonl_records_from_directory_fd(
+                snapshot_dir_fd,
+                rows_path.name,
+                field_name="dataset snapshot rows file",
+            )
 
     def read_rows_by_record_ids(
         self,

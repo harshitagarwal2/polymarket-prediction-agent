@@ -19,6 +19,7 @@ from storage.postgres.models import (
 from storage.postgres.repositories import (
     BBORepository,
     FairValueRepository,
+    list_raw_capture_events,
     MappingRepository,
     MarketRepository,
     ModelRegistryRepository,
@@ -27,6 +28,8 @@ from storage.postgres.repositories import (
     SportsbookEventRepository,
     SportsbookOddsRepository,
     TradeAttributionRepository,
+    append_raw_capture_event,
+    read_capture_checkpoint,
     upsert_capture_checkpoint,
 )
 
@@ -127,8 +130,11 @@ __all__ = [
     "SportsbookOddsRepository",
     "TradeAttributionRecord",
     "TradeAttributionRepository",
+    "append_raw_capture_event",
+    "list_raw_capture_events",
     "market_row_from_summary",
     "order_book_row_from_snapshot",
+    "read_capture_checkpoint",
     "resolve_postgres_dsn",
     "upsert_capture_checkpoint",
 ]

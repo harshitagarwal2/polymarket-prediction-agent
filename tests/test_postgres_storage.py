@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import stat
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
+from services.capture import (
+    PolymarketMarketSnapshotRequest,
+    SportsbookCaptureRequest,
+    SportsbookCaptureStores,
+    capture_sportsbook_odds_once,
+    hydrate_polymarket_market_snapshot,
+    persist_polymarket_bbo_input_events,
+)
+from services.projection import project_current_state_once
+from storage.current_projection import build_preview_runtime_context
 from storage.postgres import (
     BBORepository,
     FairValueRepository,
@@ -25,6 +37,7 @@ from storage.postgres.bootstrap import (
     write_dsn_marker,
 )
 from storage.postgres.repositories import upsert_capture_checkpoint
+from storage.current_read_adapter import ProjectedCurrentStateReadAdapter
 
 
 TEST_DSN_ENV = "PREDICTION_MARKET_POSTGRES_TEST_DSN"
@@ -45,6 +58,7 @@ class PostgresBootstrapTests(unittest.TestCase):
                 resolve_postgres_dsn(root / "postgres"),
                 "postgresql://example/test",
             )
+            self.assertEqual(stat.S_IMODE(marker_path.stat().st_mode), 0o600)
 
     def test_resolve_postgres_dsn_supports_direct_marker_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -102,6 +116,30 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                     """
                 )
             connection.commit()
+
+    def _sample_event(self, *, last_update: str) -> dict[str, object]:
+        return {
+            "id": "sb-1",
+            "sport_title": "NBA",
+            "home_team": "Home Team",
+            "away_team": "Away Team",
+            "commence_time": "2026-04-21T20:00:00+00:00",
+            "bookmakers": [
+                {
+                    "key": "book-a",
+                    "last_update": last_update,
+                    "markets": [
+                        {
+                            "key": "h2h",
+                            "outcomes": [
+                                {"name": "Home Team", "price": 1.8},
+                                {"name": "Away Team", "price": 2.0},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
 
     def test_bootstrap_records_all_migrations(self):
         with connect_postgres(self.dsn) as connection:
@@ -359,3 +397,165 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
         self.assertEqual(checkpoint_value, "cursor-1")
         self.assertEqual(source_health_events, 1)
         self.assertEqual(book_snapshot_count, 1)
+
+    def test_capture_projection_runtime_read_chain_works_with_postgres(self):
+        class _StaticSource:
+            def __init__(self, event_payload):
+                self.event_payload = event_payload
+
+            provider_name = "theoddsapi"
+
+            def fetch_upcoming(self, sport: str, market_type: str):
+                return [self.event_payload]
+
+        class _StaticCatalogClient:
+            def fetch_open_markets(self):
+                return [
+                    {
+                        "id": "pm-1",
+                        "conditionId": "pm-1",
+                        "question": "Will Home Team beat Away Team?",
+                        "active": True,
+                        "tokenIds": ["yes-token", "no-token"],
+                    }
+                ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            write_dsn_marker(root, self.dsn)
+            event_map = Path(temp_dir) / "event_map.json"
+            event_map.write_text(
+                '{"sb-1": {"event_key": "event-1", "game_id": "game-1", "sport": "nba", "series": "playoffs"}}',
+                encoding="utf-8",
+            )
+
+            capture_sportsbook_odds_once(
+                SportsbookCaptureRequest(
+                    root=str(root),
+                    sport="basketball_nba",
+                    market="h2h",
+                    event_map_file=str(event_map),
+                ),
+                source=_StaticSource(
+                    {
+                        "id": "sb-1",
+                        "sport_title": "NBA",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "commence_time": "2026-05-21T20:00:00+00:00",
+                        "bookmakers": [
+                            {
+                                "key": "book-a",
+                                "last_update": "2026-05-21T17:59:30+00:00",
+                                "markets": [
+                                    {
+                                        "key": "h2h",
+                                        "outcomes": [
+                                            {"name": "Home Team", "price": 1.8},
+                                            {"name": "Away Team", "price": 2.0},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                stores=SportsbookCaptureStores.from_root(root, require_postgres=True),
+                observed_at=datetime(2026, 5, 21, 18, 0, tzinfo=timezone.utc),
+            )
+            hydrate_polymarket_market_snapshot(
+                request=PolymarketMarketSnapshotRequest(
+                    root=str(root),
+                    sport=None,
+                    market_type=None,
+                    limit=500,
+                    stale_after_ms=60_000,
+                ),
+                client=_StaticCatalogClient(),
+                observed_at=datetime(2026, 5, 21, 18, 1, tzinfo=timezone.utc),
+            )
+            persist_polymarket_bbo_input_events(
+                [
+                    {
+                        "asset_id": "pm-1",
+                        "best_bid": 0.45,
+                        "best_bid_size": 10,
+                        "best_ask": 0.47,
+                        "best_ask_size": 8,
+                        "timestamp": "2026-05-21T18:02:00Z",
+                    }
+                ],
+                root=str(root),
+                observed_at=datetime(2026, 5, 21, 18, 2, tzinfo=timezone.utc),
+            )
+
+            projection_result = project_current_state_once(root)
+
+            mapping_repo = MappingRepository(root / "postgres")
+            fair_value_repo = FairValueRepository(root / "postgres")
+            opportunity_repo = OpportunityRepository(root / "postgres")
+            mapping_repo.append(
+                {
+                    "polymarket_market_id": "pm-1",
+                    "sportsbook_event_id": "sb-1",
+                    "sportsbook_market_type": "h2h",
+                    "normalized_market_type": "moneyline_full_game",
+                    "match_confidence": 0.98,
+                    "resolution_risk": 0.02,
+                    "mismatch_reason": None,
+                    "event_key": "event-1",
+                    "sport": "nba",
+                    "series": "playoffs",
+                    "game_id": "game-1",
+                    "blocked_reason": None,
+                    "is_active": True,
+                }
+            )
+            fair_value_repo.append(
+                {
+                    "market_id": "pm-1",
+                    "as_of": "2026-05-21T18:03:00+00:00",
+                    "fair_yes_prob": 0.61,
+                    "calibrated_fair_yes_prob": 0.60,
+                    "lower_prob": 0.58,
+                    "upper_prob": 0.64,
+                    "book_dispersion": 0.01,
+                    "data_age_ms": 100,
+                    "source_count": 2,
+                    "model_name": "consensus",
+                    "model_version": "v1",
+                }
+            )
+            opportunity_repo.append(
+                {
+                    "market_id": "pm-1",
+                    "as_of": "2026-05-21T18:04:00+00:00",
+                    "side": "buy_yes",
+                    "fair_yes_prob": 0.61,
+                    "best_bid_yes": 0.45,
+                    "best_ask_yes": 0.47,
+                    "edge_buy_bps": 190.0,
+                    "edge_sell_bps": -160.0,
+                    "edge_buy_after_costs_bps": 170.0,
+                    "edge_sell_after_costs_bps": -180.0,
+                    "edge_after_costs_bps": 170.0,
+                    "fillable_size": 8.0,
+                    "confidence": 0.98,
+                    "blocked_reason": None,
+                    "blocked_reasons": [],
+                    "fair_value_ref": "2026-05-21T18:03:00+00:00",
+                }
+            )
+            adapter = ProjectedCurrentStateReadAdapter.from_root(root)
+            sportsbook_events = adapter.read_table("sportsbook_events")
+            sportsbook_odds = adapter.read_table("sportsbook_odds")
+            polymarket_markets = adapter.read_table("polymarket_markets")
+            polymarket_bbo = adapter.read_table("polymarket_bbo")
+            preview_context = build_preview_runtime_context(None, read_adapter=adapter)
+
+        self.assertTrue(projection_result["ok"])
+        self.assertIn("sb-1", sportsbook_events)
+        self.assertIn("sb-1|book-a|h2h|Home Team", sportsbook_odds)
+        self.assertIn("pm-1", polymarket_markets)
+        self.assertIn("pm-1", polymarket_bbo)
+        self.assertGreaterEqual(len(preview_context.preview_order_proposals), 1)

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +17,7 @@ from services.capture import (
     SportsbookCaptureWorkerConfig,
     capture_sportsbook_odds_once,
 )
+from services.capture import sportsbook as sportsbook_capture
 
 
 class _StaticSource:
@@ -124,6 +127,74 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
         self.assertEqual(current_health["sportsbook_odds"]["status"], "ok")
         self.assertEqual(postgres_health["sportsbook_odds"]["status"], "ok")
 
+    def test_capture_once_appends_raw_capture_event_and_checkpoint(self):
+        capture_time = datetime(2026, 4, 21, 18, 5, tzinfo=timezone.utc)
+        source_time = (capture_time - timedelta(seconds=30)).isoformat()
+        raw_events: list[dict[str, object]] = []
+        checkpoints: list[dict[str, object]] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            event_map = Path(temp_dir) / "event_map.json"
+            self._write_json(
+                event_map,
+                {
+                    "sb-1": {
+                        "event_key": "event-1",
+                        "game_id": "game-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                    }
+                },
+            )
+
+            with (
+                patch.object(
+                    sportsbook_capture,
+                    "append_raw_capture_event",
+                    side_effect=lambda **kwargs: raw_events.append(kwargs) or kwargs,
+                ),
+                patch.object(
+                    sportsbook_capture,
+                    "upsert_capture_checkpoint",
+                    side_effect=lambda *args, **kwargs: checkpoints.append(
+                        {
+                            "checkpoint_name": args[0],
+                            "source_name": args[1],
+                            "checkpoint_value": args[2],
+                            "checkpoint_ts": kwargs.get("checkpoint_ts"),
+                        }
+                    )
+                    or checkpoints[-1],
+                ),
+            ):
+                payload = capture_sportsbook_odds_once(
+                    SportsbookCaptureRequest(
+                        root=str(root),
+                        sport="basketball_nba",
+                        market="h2h",
+                        event_map_file=str(event_map),
+                    ),
+                    source=_StaticSource(
+                        [[self._sample_event(last_update=source_time)]]
+                    ),
+                    stores=SportsbookCaptureStores.from_root(root),
+                    observed_at=capture_time,
+                )
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(len(raw_events), 1)
+        self.assertEqual(raw_events[0]["source"], "sportsbook")
+        self.assertEqual(raw_events[0]["layer"], "odds_api")
+        self.assertEqual(raw_events[0]["entity_type"], "sportsbook_odds_envelope")
+        raw_payload = raw_events[0]["payload"]
+        if not isinstance(raw_payload, dict):
+            self.fail("expected raw sportsbook payload dict")
+        self.assertEqual(raw_payload["event_key"], "event-1")
+        self.assertEqual(checkpoints[0]["checkpoint_name"], "sportsbook_odds")
+        self.assertEqual(checkpoints[0]["source_name"], "theoddsapi")
+        self.assertEqual(checkpoints[0]["checkpoint_value"], source_time)
+
     def test_capture_once_replaces_current_snapshot(self):
         capture_time = datetime(2026, 4, 21, 18, 5, tzinfo=timezone.utc)
 
@@ -193,7 +264,7 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
 
             results = worker.run()
             health = json.loads(
-                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+                (root / "postgres" / "source_health.json").read_text(encoding="utf-8")
             )
 
         self.assertEqual(len(results), 2)
@@ -221,7 +292,7 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
 
             results = worker.run()
             health = json.loads(
-                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+                (root / "postgres" / "source_health.json").read_text(encoding="utf-8")
             )
 
         self.assertEqual(results[0]["error_kind"], "RuntimeError")
@@ -295,6 +366,7 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
     def test_run_sportsbook_capture_main_executes_worker_cycle(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
+            stores = SportsbookCaptureStores.from_root(root)
             with (
                 patch.object(
                     run_sportsbook_capture.TheOddsApiCaptureSource,
@@ -302,6 +374,10 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
                     return_value=[
                         self._sample_event(last_update="2026-04-21T18:04:30+00:00")
                     ],
+                ),
+                patch(
+                    "scripts.run_sportsbook_capture.SportsbookCaptureStores.from_root",
+                    return_value=stores,
                 ),
                 patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
             ):
@@ -327,6 +403,118 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         self.assertIn("sb-1", postgres_events)
+        self.assertFalse((root / "current" / "sportsbook_events.json").exists())
+        self.assertFalse((root / "current" / "sportsbook_odds.json").exists())
+        self.assertFalse((root / "current" / "source_health.json").exists())
+
+    def test_worker_does_not_materialize_selector_facing_current_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            worker = SportsbookCaptureWorker(
+                source=_StaticSource(
+                    [[self._sample_event(last_update="2026-04-21T18:04:30+00:00")]]
+                ),
+                config=SportsbookCaptureWorkerConfig(
+                    root=str(root),
+                    sport="basketball_nba",
+                    market="h2h",
+                    max_cycles=1,
+                ),
+                sleep_fn=lambda _: None,
+            )
+
+            results = worker.run()
+
+        self.assertTrue(results[-1]["ok"])
+        self.assertFalse((root / "current" / "sportsbook_events.json").exists())
+        self.assertFalse((root / "current" / "sportsbook_odds.json").exists())
+
+    def test_run_sportsbook_capture_main_requires_postgres_setup(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            with patch.dict(
+                "os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False
+            ):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    result = run_sportsbook_capture.main(
+                        [
+                            "--sport",
+                            "basketball_nba",
+                            "--market",
+                            "h2h",
+                            "--root",
+                            str(root),
+                            "--max-cycles",
+                            "1",
+                        ]
+                    )
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "Postgres worker storage is not configured",
+        )
+
+    def test_run_sportsbook_capture_main_handles_runtime_storage_failures_cleanly(self):
+        class _BrokenHealthRepo:
+            def read_all(self):
+                return {}
+
+            def upsert(self, key, row):
+                raise RuntimeError("psycopg is required for Postgres storage")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stores = SportsbookCaptureStores.from_root(root)
+            broken_stores = SportsbookCaptureStores(
+                raw=stores.raw,
+                parquet=stores.parquet,
+                current=stores.current,
+                sportsbook_events=stores.sportsbook_events,
+                sportsbook_odds=stores.sportsbook_odds,
+                current_health=stores.current_health,
+                postgres_health=_BrokenHealthRepo(),
+            )
+            with (
+                patch.object(
+                    run_sportsbook_capture.TheOddsApiCaptureSource,
+                    "fetch_upcoming",
+                    return_value=[
+                        self._sample_event(last_update="2026-04-21T18:04:30+00:00")
+                    ],
+                ),
+                patch(
+                    "scripts.run_sportsbook_capture.SportsbookCaptureStores.from_root",
+                    return_value=broken_stores,
+                ),
+                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
+            ):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    result = run_sportsbook_capture.main(
+                        [
+                            "--sport",
+                            "basketball_nba",
+                            "--market",
+                            "h2h",
+                            "--root",
+                            str(root),
+                            "--max-cycles",
+                            "1",
+                        ]
+                    )
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "RuntimeError during sportsbook capture",
+        )
+        self.assertEqual(payload["health_error_kind"], "RuntimeError")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 {
   "focused_tests": {
-    "command": "uv run --locked python -m unittest tests.test_build_sports_fair_values tests.test_run_agent_loop tests.test_research_architecture_scaffolding tests.test_ingest_live_data tests.test_polymarket_ws_sports",
-    "result": "Ran 82 tests in 1.107s\n\nOK"
+    "command": "uv run --locked python -m unittest tests.test_sportsbook_capture_worker tests.test_build_sports_fair_values tests.test_run_agent_loop tests.test_research_architecture_scaffolding tests.test_ingest_live_data tests.test_polymarket_ws_sports",
+    "result": "Ran 97 tests in 0.970s\n\nOK"
   },
   "full_suite": {
     "command": "uv run --locked python -m unittest discover -s tests -p \"test_*.py\"",
-    "result": "Ran 511 tests in 3.181s\n\nOK"
+    "result": "Ran 568 tests in 4.600s\n\nOK (skipped=3)"
   },
   "manual_qa": {
     "config_driven_build_fair_values": {
@@ -24,6 +24,33 @@
         "missing_identity_blocked": true,
         "joined_inference_dataset_written": true,
         "joined_inference_dataset_registered": true
+      }
+    },
+    "dedicated_sportsbook_capture_worker": {
+      "command": "uv sync --extra postgres && export PREDICTION_MARKET_POSTGRES_DSN=postgresql://... && python -m scripts.run_sportsbook_capture --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> --max-cycles 1",
+      "observed": {
+        "requires_postgres_setup": true,
+        "current_snapshot_replaced": true,
+        "append_only_quote_events_written": true,
+        "provider_and_quote_timestamps_persisted": true,
+        "source_health_written_to_current_and_postgres_tables": true
+      }
+    },
+    "dedicated_polymarket_capture_worker": {
+      "command": "uv sync --extra postgres --extra polymarket && export PREDICTION_MARKET_POSTGRES_DSN=postgresql://... && python -m scripts.run_polymarket_capture market --asset-id <asset-id> --root <runtime_root> --max-sessions 1",
+      "observed": {
+        "requires_postgres_setup": true,
+        "sanitized_failure_payload_supported": true,
+        "raw_and_normalized_capture_supported": true,
+        "source_health_written": true
+      }
+    },
+    "current_projection_worker": {
+      "command": "python -m scripts.run_current_projection --root <runtime_root> --max-cycles 1",
+      "observed": {
+        "nonzero_exit_on_failed_cycle": true,
+        "latest_worker_payload_emitted": true,
+        "compatibility_snapshots_materialized": true
       }
     },
     "live_current_state_build_fair_values_with_calibration": {
@@ -57,6 +84,14 @@
         "historical_training_dataset_registered": true,
         "dataset_backed_training_supported": true
       }
+    },
+    "replay_attribution_cli": {
+      "command": "python -m scripts.run_replay_attribution --fixture sports_benchmark_tiny.json --output <attribution.json>",
+      "observed": {
+        "trade_attributions_emitted": true,
+        "attribution_summary_emitted": true,
+        "quiet_mode_supported": true
+      }
     }
   },
   "automated_verification": {
@@ -75,6 +110,13 @@
           "Away Team": -0.6931471805599453,
           "Home Team": 0.6931471805599453
         }
+      }
+    },
+    "walk_forward_attribution_artifacts": {
+      "automated_test": "tests.test_benchmark_suite.BenchmarkSuiteTests.test_write_walk_forward_suite_report_includes_split_summaries_and_root_aggregate",
+      "observed": {
+        "root_attribution_ledger_artifact": "walk_forward_benchmark_attribution_ledger.json",
+        "split_attribution_ledger_artifact": "benchmark_suite_attribution_ledger.json"
       }
     }
   },

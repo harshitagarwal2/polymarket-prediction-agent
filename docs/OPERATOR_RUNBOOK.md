@@ -172,6 +172,7 @@ Before any continuous run:
 - `uv sync --locked`
 - `uv sync --locked --extra polymarket` for Polymarket operation
 - `uv sync --locked --extra kalshi` for Kalshi operation
+- `uv sync --locked --extra postgres` for the dedicated sportsbook capture worker or any other Postgres-backed storage flow
 - `runtime/data/current/fair_value_manifest.json` exists
 - if you just ran `build-mappings`, `runtime/data/current/market_mappings.json` should exist for runtime selection and `runtime/data/current/market_mapping_manifest.json` should exist for structured mapping review/debugging
 - if you are using the research dataset builders, `runtime/data/processed/inference/joined_inference_dataset.jsonl` and/or `runtime/data/processed/training/historical_training_dataset.jsonl` should exist, with matching versioned snapshots under `runtime/data/datasets`
@@ -179,6 +180,11 @@ Before any continuous run:
 - chosen journal path exists or can be created
 - required venue credentials are present
 - if using `--policy-file`, the file exists and matches schema version 1
+
+If you are using `run-sportsbook-capture`, make sure Postgres is bootstrapped first:
+
+- export `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL`, or write a `postgres.dsn` marker under `runtime/data/postgres`
+- if needed, run `bootstrap-postgres --root runtime/data` once to apply the shipped storage migrations before the continuous worker starts
 
 For Polymarket run mode:
 

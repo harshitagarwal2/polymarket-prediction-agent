@@ -985,6 +985,12 @@ class RunAgentLoopTests(unittest.TestCase):
                 ):
                     run_agent_loop.main()
 
+            preview_snapshot = json.loads(
+                (
+                    Path(temp_dir) / "data" / "current" / "preview_order_context.json"
+                ).read_text(encoding="utf-8")
+            )
+
         payload = json.loads(
             "".join(call.args[0] for call in stdout.write.call_args_list)
         )
@@ -994,6 +1000,12 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertEqual(proposal["edge_buy_after_costs_bps"], 1285.0)
         self.assertEqual(proposal["edge_sell_after_costs_bps"], -1515.0)
         self.assertEqual(proposal["blocked_reasons"], [])
+        self.assertEqual(preview_snapshot["preview_order_proposal_count"], 1)
+        self.assertEqual(preview_snapshot["preview_order_blocked_count"], 0)
+        self.assertEqual(
+            preview_snapshot["preview_order_proposals"][0]["market_id"],
+            "pm-1",
+        )
 
     def test_main_preview_prefers_best_mapping_per_market(self):
         adapter = FakeAdapter()
@@ -1753,6 +1765,9 @@ class RunAgentLoopTests(unittest.TestCase):
                 ):
                     run_agent_loop.main()
 
+            preview_snapshot = json.loads(
+                (runtime_root / "preview_order_context.json").read_text()
+            )
             metrics_payload = json.loads(
                 (runtime_root / "runtime_metrics.json").read_text()
             )
@@ -1771,6 +1786,12 @@ class RunAgentLoopTests(unittest.TestCase):
             ["source polymarket_market_channel unhealthy"],
         )
         self.assertEqual(blocked["edge_buy_after_costs_bps"], 1285.0)
+        self.assertEqual(preview_snapshot["preview_order_proposal_count"], 0)
+        self.assertEqual(preview_snapshot["preview_order_blocked_count"], 1)
+        self.assertEqual(
+            preview_snapshot["preview_order_blocked"][0]["blocked_reason"],
+            "source polymarket_market_channel unhealthy",
+        )
         self.assertIn("run_agent_loop:preview_proposals", metrics_payload["metrics"])
 
     def test_main_uses_policy_file_for_thresholds_and_manifest_event_registry(self):

@@ -54,6 +54,9 @@ render-model-vs-market-dashboard = "scripts.render_model_vs_market_dashboard:mai
 scaffold-forecasting-pipeline = "scripts.scaffold_forecasting_pipeline:main"
 bootstrap-postgres = "storage.postgres.bootstrap:main"
 run-sportsbook-capture = "scripts.run_sportsbook_capture:main"
+run-polymarket-capture = "scripts.run_polymarket_capture:main"
+run-current-projection = "scripts.run_current_projection:main"
+run-replay-attribution = "scripts.run_replay_attribution:main"
 
 [tool.setuptools]
 include-package-data = true

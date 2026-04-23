@@ -58,6 +58,9 @@ class BenchmarkSuiteCliTests(unittest.TestCase):
                 (Path(output_dir) / "benchmark_suite_summary.json").exists()
             )
             self.assertTrue((Path(output_dir) / "benchmark_suite_summary.md").exists())
+            self.assertTrue(
+                (Path(output_dir) / "benchmark_suite_attribution_ledger.json").exists()
+            )
 
     def test_suite_cli_runs_benchmark_case_dataset_snapshot(self):
         case_payload = json.loads(
@@ -152,10 +155,19 @@ class BenchmarkSuiteCliTests(unittest.TestCase):
             payload = json.loads(summary_path.read_text())
             self.assertIn("aggregate", payload)
             self.assertEqual(payload["aggregate"]["successful_cases"], 1)
+            root_attribution_ledger = (
+                output_dir / payload["report_artifacts"]["attribution_ledger_json"]
+            )
             split_summary = (
                 output_dir / payload["splits"][0]["report_artifacts"]["summary_json"]
             )
+            split_attribution_ledger = (
+                output_dir
+                / payload["splits"][0]["report_artifacts"]["attribution_ledger_json"]
+            )
+            self.assertTrue(root_attribution_ledger.exists())
             self.assertTrue(split_summary.exists())
+            self.assertTrue(split_attribution_ledger.exists())
             split_payload = json.loads(split_summary.read_text())
             fair_value_payload = split_payload["case_results"][0]["report"][
                 "fair_value"

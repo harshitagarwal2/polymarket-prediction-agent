@@ -90,6 +90,11 @@ The package installs these console entrypoints from `pyproject.toml`:
 - `prediction-market-sports-benchmark-suite`
 - `render-model-vs-market-dashboard`
 - `scaffold-forecasting-pipeline`
+- `bootstrap-postgres`
+- `run-sportsbook-capture`
+- `run-polymarket-capture`
+- `run-current-projection`
+- `run-replay-attribution`
 
 ## Fast start paths
 
@@ -205,9 +210,19 @@ python -m scripts.run_sportsbook_capture \
   --event-map-file runtime/odds_event_map.json \
   --root runtime/data \
   --refresh-interval-seconds 60
+
+python -m scripts.run_polymarket_capture market \
+  --asset-id pm-1 \
+  --root runtime/data \
+  --max-sessions 1 \
+  --max-messages-per-session 1
+
+python -m scripts.run_current_projection \
+  --root runtime/data \
+  --max-cycles 1
 ```
 
-That worker keeps publishing the same downstream-compatible current-state artifacts under `runtime/data/current/`, while also appending sportsbook quote events and mirrored source-health rows through the postgres-layer storage contract. The dedicated worker uses the Postgres repository layer directly, so it requires the optional `postgres` extra and either `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under the configured `runtime/data/postgres` root.
+The dedicated capture workers now treat Postgres as the authoritative backend: sportsbook capture appends raw capture events plus checkpoints/source-health rows, Polymarket workers append raw market/BBO/user events plus checkpoints/source-health rows, and `run_current_projection` replays raw Postgres capture events into current-state tables and compatibility snapshots under `runtime/data/current/`. Runtime and ingest readers prefer the projected Postgres-backed view whenever a Postgres DSN marker is present, and the dedicated sportsbook worker no longer mutates selector-facing `runtime/data/current/*.json` directly. The dedicated workers use the Postgres repository layer directly, so they require the optional `postgres` extra and either `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under the configured `runtime/data/postgres` root.
 
 That live path keeps sportsbook event identity (`event_key` / `game_id`) in the current-state mapping flow and lets the consensus artifact configure the deterministic fair-value snapshot builder. `build-mappings` still writes the flat selector-facing snapshot to `runtime/data/current/market_mappings.json`, and now also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, identity metadata, and rule semantics for each mapped Polymarket market. If you also pass a calibration artifact, the live snapshot keeps raw `fair_yes_prob` in `runtime/data/current/fair_values.json`, adds sibling `calibrated_fair_yes_prob`, and projects `calibrated_fair_value` plus calibration metadata into `runtime/data/current/fair_value_manifest.json`. `build-inference-dataset` materializes the latest joined inference rows at `runtime/data/processed/inference/joined_inference_dataset.jsonl` and also registers a versioned `joined-inference-dataset` snapshot under `runtime/data/datasets`. `build-training-dataset` does the same for labeled training rows at `runtime/data/processed/training/historical_training_dataset.jsonl` and the `historical-training-dataset` snapshot that `train-models --training-dataset ...` can now consume directly.
 

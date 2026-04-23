@@ -47,6 +47,18 @@ class ConsoleScriptEntryPointsTests(unittest.TestCase):
             targets["prediction-market-sports-benchmark-suite"],
             "scripts.run_sports_benchmark_suite:main",
         )
+        self.assertEqual(
+            targets["run-polymarket-capture"],
+            "scripts.run_polymarket_capture:main",
+        )
+        self.assertEqual(
+            targets["run-current-projection"],
+            "scripts.run_current_projection:main",
+        )
+        self.assertEqual(
+            targets["run-replay-attribution"],
+            "scripts.run_replay_attribution:main",
+        )
 
     def test_console_script_modules_import_without_sys_path_mutation(self):
         targets = _project_script_targets()

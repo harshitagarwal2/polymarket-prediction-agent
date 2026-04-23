@@ -97,6 +97,7 @@ def write_dsn_marker(root: str | Path, dsn: str) -> Path:
     marker_dir.mkdir(parents=True, exist_ok=True)
     marker_path = marker_dir / "postgres.dsn"
     marker_path.write_text(dsn.strip(), encoding="utf-8")
+    marker_path.chmod(0o600)
     return marker_path
 
 

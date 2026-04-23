@@ -28,6 +28,12 @@ from engine.runtime_metrics import RuntimeMetricsCollector
 from engine.runtime_policy import load_runtime_policy
 from engine.structured_logging import build_structured_logger, structured_log
 from engine.runtime_bootstrap import build_adapter
+from services.capture.polymarket import (
+    PolymarketCaptureStores,
+    PolymarketMarketSnapshotRequest,
+    hydrate_polymarket_market_snapshot,
+    persist_polymarket_bbo_input_events,
+)
 from storage import (
     BBORepository,
     CurrentStateReadAdapter,
@@ -57,6 +63,7 @@ from storage import (
     materialize_source_health_state,
     mapping_priority,
 )
+from storage.postgres.bootstrap import resolve_postgres_dsn
 from forecasting import FairValueEngine, ForecastCalibrator
 from opportunity import opportunity_from_prices, rank_opportunities
 from opportunity.models import Opportunity, normalize_blocked_reasons
@@ -238,19 +245,101 @@ def _load_live_payload(args) -> object:
 
 
 def _stores(root: str):
+    root_path = Path(root)
+    postgres_root = root_path / "postgres"
+
+    class _JsonKeyedRepository:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def read_all(self) -> dict[str, object]:
+            if not self.path.exists():
+                return {}
+            return json.loads(self.path.read_text(encoding="utf-8"))
+
+        def write_all(self, rows: dict[str, object]) -> dict[str, object]:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(
+                json.dumps(rows, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            return rows
+
+        def upsert(self, key: str, row) -> dict[str, object]:
+            payload = row.__dict__.copy() if hasattr(row, "__dict__") else dict(row)
+            existing = self.read_all()
+            existing[str(key)] = payload
+            self.write_all(existing)
+            return payload
+
+    class _JsonAppendRepository(_JsonKeyedRepository):
+        def append(self, row) -> dict[str, object]:
+            payload = row.__dict__.copy() if hasattr(row, "__dict__") else dict(row)
+            existing = self.read_all()
+            existing[str(len(existing))] = payload
+            self.write_all(existing)
+            return payload
+
+    use_postgres = True
+    try:
+        resolve_postgres_dsn(postgres_root)
+    except RuntimeError as exc:
+        if not any(
+            marker in str(exc)
+            for marker in (
+                "Postgres DSN not configured",
+                "Could not resolve a Postgres DSN",
+            )
+        ):
+            raise
+        use_postgres = False
+
     stores = {
-        "raw": RawStore(Path(root) / "raw"),
-        "parquet": ParquetStore(Path(root) / "parquet"),
-        "current": FileBackedCurrentStateStore(Path(root) / "current"),
-        "markets": MarketRepository(Path(root) / "postgres"),
-        "bbo": BBORepository(Path(root) / "postgres"),
-        "sb_events": SportsbookEventRepository(Path(root) / "postgres"),
-        "sb_odds": SportsbookOddsRepository(Path(root) / "postgres"),
-        "mappings": MappingRepository(Path(root) / "postgres"),
-        "fair_values": FairValueRepository(Path(root) / "postgres"),
-        "opportunities": OpportunityRepository(Path(root) / "postgres"),
-        "health_repo": SourceHealthRepository(Path(root) / "postgres"),
-        "health": SourceHealthStore(Path(root) / "current" / "source_health.json"),
+        "raw": RawStore(root_path / "raw"),
+        "parquet": ParquetStore(root_path / "parquet"),
+        "current": FileBackedCurrentStateStore(root_path / "current"),
+        "projected_authoritative": use_postgres,
+        "markets": (
+            MarketRepository(postgres_root)
+            if use_postgres
+            else _JsonKeyedRepository(postgres_root / "polymarket_markets.json")
+        ),
+        "bbo": (
+            BBORepository(postgres_root)
+            if use_postgres
+            else _JsonKeyedRepository(postgres_root / "polymarket_bbo.json")
+        ),
+        "sb_events": (
+            SportsbookEventRepository(postgres_root)
+            if use_postgres
+            else _JsonKeyedRepository(postgres_root / "sportsbook_events.json")
+        ),
+        "sb_odds": (
+            SportsbookOddsRepository(postgres_root)
+            if use_postgres
+            else _JsonAppendRepository(postgres_root / "sportsbook_odds.json")
+        ),
+        "mappings": (
+            MappingRepository(postgres_root)
+            if use_postgres
+            else _JsonAppendRepository(postgres_root / "market_mappings.json")
+        ),
+        "fair_values": (
+            FairValueRepository(postgres_root)
+            if use_postgres
+            else _JsonAppendRepository(postgres_root / "fair_values.json")
+        ),
+        "opportunities": (
+            OpportunityRepository(postgres_root)
+            if use_postgres
+            else _JsonAppendRepository(postgres_root / "opportunities.json")
+        ),
+        "health_repo": (
+            SourceHealthRepository(postgres_root)
+            if use_postgres
+            else _JsonKeyedRepository(postgres_root / "source_health.json")
+        ),
+        "health": SourceHealthStore(root_path / "current" / "source_health.json"),
     }
     stores["current_read"] = ProjectedCurrentStateReadAdapter(
         opportunities=stores["opportunities"],
@@ -270,6 +359,8 @@ def _current_read_adapter(stores) -> CurrentStateReadAdapter:
 
 
 def _read_current_table(stores, table: str) -> dict[str, object]:
+    if bool(stores.get("projected_authoritative")):
+        return _current_read_adapter(stores).read_table(table)
     current_path = stores["current"].root / f"{table}.json"
     if current_path.exists():
         return stores["current"].read_table(table)
@@ -621,51 +712,73 @@ def _run_polymarket_markets(args) -> int:
     logger = build_structured_logger("ingest.polymarket.markets")
     metrics = _metrics_collector(args.root)
     stores = _stores(args.root)
-    client = PolymarketMarketCatalogClient()
-    markets = client.fetch_open_markets()
-    if args.sport:
-        markets = [
-            item
-            for item in markets
-            if str(item.get("sport") or "").lower() == args.sport.lower()
-        ]
-    if args.market_type:
-        markets = [
-            item
-            for item in markets
-            if args.market_type.lower()
-            in str(
-                item.get("sports_market_type") or item.get("market_type") or ""
-            ).lower()
-        ]
-    markets = markets[: args.limit]
-    rows = [normalize_market_row(item) for item in markets]
-    records: list[PolymarketMarketRecord] = []
-    stores["raw"].write(
-        "polymarket",
-        "market_catalog",
-        _utc_now(),
-        {"markets": markets},
+    observed_at = _utc_now()
+    result = hydrate_polymarket_market_snapshot(
+        PolymarketMarketSnapshotRequest(
+            root=args.root,
+            sport=args.sport,
+            market_type=args.market_type,
+            limit=args.limit,
+            stale_after_ms=60_000,
+        ),
+        client=PolymarketMarketCatalogClient(),
+        stores=PolymarketCaptureStores(
+            source_health=stores["health_repo"],
+            postgres_root=Path(args.root) / "postgres",
+            raw=stores["raw"],
+        ),
+        observed_at=observed_at,
     )
-    for row in rows:
-        record = PolymarketMarketRecord(
-            market_id=row["market_id"],
-            condition_id=row["condition_id"],
-            token_id_yes=None,
-            token_id_no=None,
-            title=row["title"],
-            description=row["description"],
-            event_slug=row["event_slug"],
-            market_slug=row["market_slug"],
-            category=row["category"],
-            end_time=row["end_time"],
-            status=row["status"],
-            raw_json=row["raw_json"],
+    rows = [dict(row) for row in result["rows"]]
+    records = [
+        PolymarketMarketRecord(
+            market_id=str(row["market_id"]),
+            condition_id=(
+                str(row["condition_id"])
+                if row.get("condition_id") not in (None, "")
+                else None
+            ),
+            token_id_yes=(
+                str(row["token_id_yes"])
+                if row.get("token_id_yes") not in (None, "")
+                else None
+            ),
+            token_id_no=(
+                str(row["token_id_no"])
+                if row.get("token_id_no") not in (None, "")
+                else None
+            ),
+            title=str(row["title"]),
+            description=(
+                str(row["description"])
+                if row.get("description") not in (None, "")
+                else None
+            ),
+            event_slug=(
+                str(row["event_slug"])
+                if row.get("event_slug") not in (None, "")
+                else None
+            ),
+            market_slug=(
+                str(row["market_slug"])
+                if row.get("market_slug") not in (None, "")
+                else None
+            ),
+            category=(
+                str(row["category"]) if row.get("category") not in (None, "") else None
+            ),
+            end_time=(
+                str(row["end_time"]) if row.get("end_time") not in (None, "") else None
+            ),
+            status=str(row["status"]),
+            raw_json=dict(row["raw_json"]),
         )
-        records.append(record)
+        for row in rows
+    ]
+    for record in records:
         stores["markets"].upsert(record.market_id, record)
     materialize_polymarket_market_state(stores["current"], records)
-    stores["parquet"].append_records("polymarket_markets", _utc_now(), rows)
+    stores["parquet"].append_records("polymarket_markets", observed_at, rows)
     _update_source_health(
         stores,
         source_name="polymarket_market_catalog",
@@ -701,28 +814,40 @@ def _run_polymarket_bbo(args) -> int:
         events = payload if isinstance(payload, list) else [payload]
     else:
         events = []
-    rows = [normalize_bbo_event(event) for event in events if isinstance(event, dict)]
-    records: list[PolymarketBBORecord] = []
-    for row in rows:
-        record = PolymarketBBORecord(
-            market_id=row["market_id"],
-            best_bid_yes=row["best_bid_yes"],
-            best_bid_yes_size=row["best_bid_yes_size"],
-            best_ask_yes=row["best_ask_yes"],
-            best_ask_yes_size=row["best_ask_yes_size"],
-            midpoint_yes=row["midpoint_yes"],
-            spread_yes=row["spread_yes"],
-            book_ts=row["book_ts"],
-            source_age_ms=row["source_age_ms"],
-            raw_hash=None,
+    observed_at = _utc_now()
+    result = persist_polymarket_bbo_input_events(
+        [event for event in events if isinstance(event, dict)],
+        root=args.root,
+        stores=PolymarketCaptureStores(
+            source_health=stores["health_repo"],
+            postgres_root=Path(args.root) / "postgres",
+            raw=stores["raw"],
+        ),
+        observed_at=observed_at,
+        stale_after_ms=4_000,
+    )
+    rows = [dict(row) for row in result["normalized_rows"]]
+    records = [
+        PolymarketBBORecord(
+            market_id=str(row["market_id"]),
+            best_bid_yes=row.get("best_bid_yes"),
+            best_bid_yes_size=row.get("best_bid_yes_size"),
+            best_ask_yes=row.get("best_ask_yes"),
+            best_ask_yes_size=row.get("best_ask_yes_size"),
+            midpoint_yes=row.get("midpoint_yes"),
+            spread_yes=row.get("spread_yes"),
+            book_ts=str(row["book_ts"]),
+            source_age_ms=int(row.get("source_age_ms") or 0),
+            raw_hash=(
+                str(row["raw_hash"]) if row.get("raw_hash") not in (None, "") else None
+            ),
         )
-        records.append(record)
+        for row in rows
+    ]
+    for record in records:
         stores["bbo"].upsert(record.market_id, record)
     materialize_polymarket_bbo_state(stores["current"], records)
-    for event in events:
-        if isinstance(event, dict):
-            stores["raw"].write("polymarket", "market_channel", _utc_now(), event)
-    stores["parquet"].append_records("polymarket_bbo_history", _utc_now(), rows)
+    stores["parquet"].append_records("polymarket_bbo_history", observed_at, rows)
     _update_source_health(
         stores,
         source_name="polymarket_market_channel",
@@ -770,12 +895,26 @@ def _run_sportsbook_odds(args) -> int:
         payload = capture_sportsbook_odds_once(request, source=source, stores=stores)
     except Exception as exc:
         sanitized_error = sanitize_capture_error(exc)
-        failure_payload = record_sportsbook_capture_failure(
-            stores,
-            request,
-            source,
-            error=exc,
-        )
+        try:
+            failure_payload = record_sportsbook_capture_failure(
+                stores,
+                request,
+                source,
+                error=exc,
+            )
+        except Exception as failure_exc:
+            secondary_error = sanitize_capture_error(failure_exc)
+            failure_payload = {
+                "ok": False,
+                "error_kind": sanitized_error["kind"],
+                "error_message": sanitized_error["message"],
+                "health_error_kind": secondary_error["kind"],
+                "health_error_message": secondary_error["message"],
+                "provider": source.provider_name,
+                "sport": request.sport,
+                "market": request.market,
+                "root": request.root,
+            }
         structured_log(
             logger,
             action="sync",
@@ -791,7 +930,7 @@ def _run_sportsbook_odds(args) -> int:
             error_kind=sanitized_error["kind"],
         )
         emit_json(failure_payload, quiet=args.quiet)
-        raise
+        return 1
     structured_log(
         logger,
         action="sync",

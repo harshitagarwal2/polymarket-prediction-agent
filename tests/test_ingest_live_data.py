@@ -483,6 +483,78 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(payload["markets"][0]["sports_market_type"], "moneyline")
         self.assertIsNotNone(payload["markets"][0]["contract"])
 
+    def test_polymarket_ingest_preserves_raw_fallback_without_postgres_dsn(self):
+        event_start = datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc)
+        market_payload = [
+            {
+                "id": "pm-1",
+                "conditionId": "condition-1",
+                "question": "Will Home Team beat Away Team?",
+                "sport": "nba",
+                "eventKey": "event-1",
+                "gameId": "game-1",
+                "sports_market_type": "moneyline",
+                "active": True,
+                "gameStartTime": event_start.isoformat(),
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            bbo_path = Path(temp_dir) / "bbo.json"
+            bbo_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "market_id": "pm-1",
+                            "best_bid": 0.5,
+                            "best_bid_size": 10,
+                            "best_ask": 0.52,
+                            "best_ask_size": 8,
+                            "timestamp": int(event_start.timestamp() * 1000),
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                ingest_live_data.PolymarketMarketCatalogClient,
+                "fetch_open_markets",
+                return_value=market_payload,
+            ):
+                ingest_live_data.main(
+                    [
+                        "polymarket-markets",
+                        "--sport",
+                        "nba",
+                        "--root",
+                        str(root),
+                        "--quiet",
+                    ]
+                )
+
+            ingest_live_data.main(
+                [
+                    "polymarket-bbo",
+                    "--input",
+                    str(bbo_path),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+            raw_market_files = list(
+                (root / "raw" / "polymarket" / "market_catalog").rglob("*.jsonl.gz")
+            )
+            raw_bbo_files = list(
+                (root / "raw" / "polymarket" / "market_channel").rglob("*.jsonl.gz")
+            )
+
+        self.assertEqual(len(raw_market_files), 1)
+        self.assertEqual(len(raw_bbo_files), 1)
+
     def test_live_pipeline_subcommands_build_fair_values_and_opportunities(self):
         event_start = datetime.now(timezone.utc) + timedelta(hours=2)
         market_payload = [
@@ -842,6 +914,88 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertTrue(
             source_health["fair_values"]["details"]["calibration_artifact_configured"]
         )
+
+    def test_sportsbook_odds_failure_returns_sanitized_json_without_traceback(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stdout = io.StringIO()
+            with (
+                patch.object(
+                    ingest_live_data.TheOddsApiClient,
+                    "fetch_upcoming",
+                    side_effect=RuntimeError("https://example.com/?apiKey=secret"),
+                ),
+                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
+                patch("sys.stdout", stdout),
+            ):
+                result = ingest_live_data.main(
+                    [
+                        "sportsbook-odds",
+                        "--sport",
+                        "basketball_nba",
+                        "--market",
+                        "h2h",
+                        "--root",
+                        str(root),
+                    ]
+                )
+
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "RuntimeError during sportsbook capture",
+        )
+        self.assertNotIn("apiKey=secret", json.dumps(payload, sort_keys=True))
+
+    def test_sportsbook_odds_failure_survives_failure_recording_errors(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stdout = io.StringIO()
+            with (
+                patch.object(
+                    ingest_live_data.TheOddsApiClient,
+                    "fetch_upcoming",
+                    side_effect=RuntimeError("https://example.com/?apiKey=secret"),
+                ),
+                patch.object(
+                    ingest_live_data,
+                    "record_sportsbook_capture_failure",
+                    side_effect=RuntimeError(
+                        "psycopg is required for Postgres storage"
+                    ),
+                ),
+                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
+                patch("sys.stdout", stdout),
+            ):
+                result = ingest_live_data.main(
+                    [
+                        "sportsbook-odds",
+                        "--sport",
+                        "basketball_nba",
+                        "--market",
+                        "h2h",
+                        "--root",
+                        str(root),
+                    ]
+                )
+
+            payload = json.loads(stdout.getvalue())
+
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "RuntimeError during sportsbook capture",
+        )
+        self.assertEqual(payload["health_error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["health_error_message"],
+            "RuntimeError during sportsbook capture",
+        )
+        self.assertNotIn("apiKey=secret", json.dumps(payload, sort_keys=True))
 
     def test_build_mappings_persists_research_identity_metadata(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2528,6 +2682,37 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertIsNone(latest_rows[0]["market_key"])
         self.assertIsNone(latest_rows[0]["condition_id"])
         self.assertNotIn("market_market_count", latest_rows[0]["metadata"])
+
+    def test_read_current_table_prefers_projected_state_when_postgres_authoritative(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            current_store = ingest_live_data.FileBackedCurrentStateStore(
+                root / "current"
+            )
+            current_store.write_table(
+                "fair_values",
+                {"stale-market": {"market_id": "stale-market", "fair_yes_prob": 0.12}},
+            )
+
+            class _Projected:
+                def read_table(self, table: str):
+                    self.table = table
+                    return {"pm-1": {"market_id": "pm-1", "fair_yes_prob": 0.61}}
+
+            projected = _Projected()
+            rows = ingest_live_data._read_current_table(
+                {
+                    "projected_authoritative": True,
+                    "current": current_store,
+                    "current_read": projected,
+                },
+                "fair_values",
+            )
+
+        self.assertEqual(projected.table, "fair_values")
+        self.assertEqual(list(rows.keys()), ["pm-1"])
 
     def test_build_opportunities_uses_current_fair_values_over_history_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:

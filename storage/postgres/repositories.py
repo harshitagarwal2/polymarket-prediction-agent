@@ -1198,3 +1198,165 @@ def upsert_capture_checkpoint(
             )
         connection.commit()
     return payload
+
+
+def read_capture_checkpoint(
+    checkpoint_name: str,
+    source_name: str,
+    *,
+    root: str | Path = "runtime/data/postgres",
+    dsn: str | None = None,
+) -> dict[str, Any] | None:
+    resolved_dsn = resolve_postgres_dsn(dsn or root)
+    if resolved_dsn not in _MIGRATED_DSNS:
+        apply_migrations(resolved_dsn)
+        _MIGRATED_DSNS.add(resolved_dsn)
+    with connect_postgres(resolved_dsn) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT checkpoint_value, checkpoint_ts, metadata
+                FROM capture_checkpoints
+                WHERE checkpoint_name = %s AND source_name = %s
+                """,
+                (checkpoint_name, source_name),
+            )
+            row = cursor.fetchone()
+    if row is None:
+        return None
+    checkpoint_value, checkpoint_ts, metadata = row
+    return {
+        "checkpoint_name": checkpoint_name,
+        "source_name": source_name,
+        "checkpoint_value": checkpoint_value,
+        "checkpoint_ts": (
+            checkpoint_ts.astimezone(timezone.utc).isoformat()
+            if isinstance(checkpoint_ts, datetime)
+            else None
+        ),
+        "metadata": _decode_payload(metadata) if metadata is not None else {},
+    }
+
+
+def append_raw_capture_event(
+    *,
+    source: str,
+    layer: str,
+    entity_type: str,
+    operation: str,
+    payload: dict[str, Any],
+    entity_key: str | None = None,
+    captured_at: datetime | None = None,
+    metadata: dict[str, Any] | None = None,
+    root: str | Path = "runtime/data/postgres",
+    dsn: str | None = None,
+) -> dict[str, Any]:
+    resolved_dsn = resolve_postgres_dsn(dsn or root)
+    if resolved_dsn not in _MIGRATED_DSNS:
+        apply_migrations(resolved_dsn)
+        _MIGRATED_DSNS.add(resolved_dsn)
+    event_payload = {
+        "source": source,
+        "layer": layer,
+        "entity_type": entity_type,
+        "entity_key": entity_key,
+        "operation": operation,
+        "payload": dict(payload),
+        "metadata": dict(metadata or {}),
+        "captured_at": (captured_at or datetime.now(timezone.utc)).isoformat(),
+    }
+    with connect_postgres(resolved_dsn) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO raw_capture_events (
+                  source,
+                  layer,
+                  entity_type,
+                  entity_key,
+                  operation,
+                  captured_at,
+                  payload,
+                  metadata
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                """,
+                (
+                    source,
+                    layer,
+                    entity_type,
+                    entity_key,
+                    operation,
+                    captured_at or datetime.now(timezone.utc),
+                    _payload_json(payload),
+                    _payload_json(metadata or {}),
+                ),
+            )
+        connection.commit()
+    return event_payload
+
+
+def list_raw_capture_events(
+    *,
+    source: str | None = None,
+    layer: str | None = None,
+    after_capture_id: int | None = None,
+    limit: int = 1000,
+    root: str | Path = "runtime/data/postgres",
+    dsn: str | None = None,
+) -> list[dict[str, Any]]:
+    resolved_dsn = resolve_postgres_dsn(dsn or root)
+    if resolved_dsn not in _MIGRATED_DSNS:
+        apply_migrations(resolved_dsn)
+        _MIGRATED_DSNS.add(resolved_dsn)
+    filters: list[str] = []
+    params: list[Any] = []
+    if source not in (None, ""):
+        filters.append("source = %s")
+        params.append(source)
+    if layer not in (None, ""):
+        filters.append("layer = %s")
+        params.append(layer)
+    if after_capture_id is not None:
+        filters.append("capture_id > %s")
+        params.append(int(after_capture_id))
+    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    params.append(max(1, int(limit)))
+    with connect_postgres(resolved_dsn) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT capture_id, source, layer, entity_type, entity_key, operation,
+                       captured_at, payload, metadata
+                FROM raw_capture_events
+                {where_clause}
+                ORDER BY capture_id ASC
+                LIMIT %s
+                """,
+                tuple(params),
+            )
+            rows = cursor.fetchall()
+    return [
+        {
+            "capture_id": int(capture_id),
+            "source": str(row_source),
+            "layer": str(row_layer),
+            "entity_type": str(entity_type),
+            "entity_key": str(entity_key) if entity_key not in (None, "") else None,
+            "operation": str(operation),
+            "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
+            "payload": _decode_payload(payload),
+            "metadata": _decode_payload(metadata) if metadata is not None else {},
+        }
+        for (
+            capture_id,
+            row_source,
+            row_layer,
+            entity_type,
+            entity_key,
+            operation,
+            captured_at,
+            payload,
+            metadata,
+        ) in rows
+    ]

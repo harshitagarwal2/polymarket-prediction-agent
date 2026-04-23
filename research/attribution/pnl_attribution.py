@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Mapping
 
 from adapters.types import OrderAction
+from research.eval.closing_value import (
+    evaluate_closing_value as _evaluate_closing_value,
+)
 from storage.postgres import TradeAttributionRecord, TradeAttributionRepository
 
 
@@ -314,19 +317,15 @@ def evaluate_closing_value(
     side: str,
     fair_value: float | None = None,
 ) -> ClosingValueBreakdown:
-    if side == "sell_yes":
-        closing_edge_bps = (signal_price - closing_price) * 10_000.0
-        value_capture_bps = (
-            (signal_price - fair_value) * 10_000.0 if fair_value is not None else 0.0
-        )
-    else:
-        closing_edge_bps = (closing_price - signal_price) * 10_000.0
-        value_capture_bps = (
-            (fair_value - signal_price) * 10_000.0 if fair_value is not None else 0.0
-        )
+    report = _evaluate_closing_value(
+        signal_price=signal_price,
+        closing_price=closing_price,
+        side=side,
+        fair_value=fair_value,
+    )
     return ClosingValueBreakdown(
-        closing_edge_bps=round(closing_edge_bps, 4),
-        value_capture_bps=round(value_capture_bps, 4),
+        closing_edge_bps=report.closing_edge_bps,
+        value_capture_bps=report.value_capture_bps,
     )
 
 

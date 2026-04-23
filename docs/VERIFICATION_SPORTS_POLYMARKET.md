@@ -10,6 +10,7 @@ Command:
 
 ```bash
 uv run --locked python -m unittest \
+  tests.test_sportsbook_capture_worker \
   tests.test_build_sports_fair_values \
   tests.test_run_agent_loop \
   tests.test_research_architecture_scaffolding \
@@ -20,7 +21,7 @@ uv run --locked python -m unittest \
 Observed result:
 
 ```text
-Ran 82 tests in 1.107s
+Ran 97 tests in 0.970s
 
 OK
 ```
@@ -36,9 +37,9 @@ uv run --locked python -m unittest discover -s tests -p "test_*.py"
 Observed result:
 
 ```text
-Ran 511 tests in 3.181s
+Ran 568 tests in 4.600s
 
-OK
+OK (skipped=3)
 ```
 
 ## Manual QA — config-driven fair-value build
@@ -65,6 +66,8 @@ Observed output excerpt:
 
 ## Manual QA — dedicated sportsbook capture worker
 
+Equivalent console entrypoint: `run-sportsbook-capture`
+
 Command shape:
 
 ```bash
@@ -82,10 +85,31 @@ python -m scripts.run_sportsbook_capture \
 Observed behavior:
 
 - continuous sportsbook capture no longer has to run through the monolithic `ingest_live_data` orchestration path
-- each cycle replaces `current/sportsbook_events.json` and `current/sportsbook_odds.json` with the latest snapshot rather than accumulating stale rows forever
+- each cycle appends authoritative sportsbook raw envelopes and capture checkpoints into Postgres-backed storage
 - append-only sportsbook quote rows are still written to the postgres-layer `sportsbook_odds` store
 - each normalized quote row preserves bookmaker-facing `source`, upstream `provider`, `source_ts`, `capture_ts`, and `source_age_ms`
-- `source_health` is mirrored into both `current/source_health.json` and `postgres/source_health.json`
+- `source_health` is written through the relational `source_health` / `source_health_events` tables reached through the configured Postgres DSN
+- selector-facing `runtime/data/current/*.json` is left to the dedicated projector worker rather than the capture worker
+
+## Manual QA — dedicated Postgres projector worker
+
+Equivalent console entrypoint: `run-current-projection`
+
+Command shape:
+
+```bash
+python -m scripts.run_current_projection \
+  --root <runtime_root> \
+  --max-cycles 1
+```
+
+Observed behavior:
+
+- the projector reads raw rows from `raw_capture_events` using projection checkpoints stored in `capture_checkpoints`
+- sportsbook capture rows are replayed into authoritative Postgres history/current tables before compatibility JSON is refreshed
+- Polymarket market-catalog and market-channel rows are replayed into authoritative Postgres history/current tables before compatibility JSON is refreshed
+- `current/source_health.json` now includes projector lane health such as `projection_sportsbook_odds` and `projection_polymarket_market_catalog`
+- when a Postgres DSN marker exists, runtime/ingest readers consume the projected adapter first and no longer treat stale `current/*.json` files as authoritative
 
 ## Manual QA — live current-state fair-value build with consensus artifact
 
@@ -166,6 +190,46 @@ What it verifies:
 - the configured path still completes successfully in the test harness
 
 ## Manual QA — live Gamma capture
+
+## Manual QA — dedicated Polymarket capture worker
+
+Equivalent console entrypoint: `run-polymarket-capture`
+
+Command shape:
+
+```bash
+uv sync --extra postgres --extra polymarket
+export PREDICTION_MARKET_POSTGRES_DSN=postgresql://...
+
+python -m scripts.run_polymarket_capture market \
+  --asset-id <asset-id> \
+  --root <runtime_root> \
+  --max-sessions 1
+```
+
+Observed behavior:
+
+- the dedicated Polymarket capture worker no longer needs to run through the end-to-end ingest CLI
+- capture failures return a non-zero exit code plus a sanitized JSON payload instead of leaking DSN details
+- successful market sessions append raw market envelopes and normalized BBO/catalog rows through the Postgres-backed capture stores
+
+## Manual QA — current-state projection worker
+
+Equivalent console entrypoint: `run-current-projection`
+
+Command shape:
+
+```bash
+python -m scripts.run_current_projection \
+  --root <runtime_root> \
+  --max-cycles 1
+```
+
+Observed behavior:
+
+- a failed worker cycle returns a non-zero exit code plus the latest worker payload
+- a successful worker cycle projects the raw sportsbook/Polymarket capture lanes back into `runtime/data/current/*.json` compatibility snapshots
+- runtime readers can then prefer the projected Postgres-backed view while keeping the legacy current-state files in sync
 
 Command shape:
 

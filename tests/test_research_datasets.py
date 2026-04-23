@@ -203,6 +203,43 @@ class ResearchDatasetTests(unittest.TestCase):
                     record_id_field="record_id",
                 )
 
+    def test_rows_snapshot_uses_resolved_safe_symlinked_dataset_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "datasets"
+            actual_root = root / "actual-dataset"
+            actual_root.mkdir(parents=True, exist_ok=True)
+            registry = _datasets_module().DatasetRegistry(root)
+            (root / "linked-dataset").symlink_to(actual_root, target_is_directory=True)
+            registry.registry_path.write_text(
+                json.dumps(
+                    {
+                        "datasets": {
+                            "sports-rows": {
+                                "dataset_name": "sports-rows",
+                                "dataset_dir": "linked-dataset",
+                                "latest_version": "v1",
+                                "versions": {},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = registry.write_rows_snapshot(
+                "sports-rows",
+                [{"record_id": "row-1", "recorded_at": "2026-04-01T12:00:00Z"}],
+                version="v1",
+                record_id_field="record_id",
+            )
+            loaded = registry.load_snapshot("sports-rows", version="v1")
+
+        self.assertEqual(
+            manifest.snapshot_dir,
+            (actual_root / "v1").resolve(),
+        )
+        self.assertEqual(loaded.snapshot_dir, (actual_root / "v1").resolve())
+
     def test_generate_walk_forward_splits_over_dated_row_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             registry = _datasets_module().DatasetRegistry(Path(temp_dir) / "datasets")

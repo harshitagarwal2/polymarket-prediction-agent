@@ -121,15 +121,19 @@ class ProjectedCurrentStateReadAdapter:
     def from_root(
         cls, root: str | Path = "runtime/data/postgres"
     ) -> "ProjectedCurrentStateReadAdapter":
+        root_path = Path(root)
+        postgres_root = (
+            root_path if root_path.name == "postgres" else root_path / "postgres"
+        )
         return cls(
-            opportunities=OpportunityRepository(root),
-            mappings=MappingRepository(root),
-            fair_values=FairValueRepository(root),
-            bbo_rows=BBORepository(root),
-            sportsbook_events=SportsbookEventRepository(root),
-            sportsbook_odds=SportsbookOddsRepository(root),
-            source_health=SourceHealthRepository(root),
-            polymarket_markets=MarketRepository(root),
+            opportunities=OpportunityRepository(postgres_root),
+            mappings=MappingRepository(postgres_root),
+            fair_values=FairValueRepository(postgres_root),
+            bbo_rows=BBORepository(postgres_root),
+            sportsbook_events=SportsbookEventRepository(postgres_root),
+            sportsbook_odds=SportsbookOddsRepository(postgres_root),
+            source_health=SourceHealthRepository(postgres_root),
+            polymarket_markets=MarketRepository(postgres_root),
         )
 
     def read_table(self, table: str) -> dict[str, object]:

@@ -24,7 +24,7 @@ from engine.fair_value_loader import (
 )
 from engine.runtime_bootstrap import build_adapter, build_current_state_read_adapter
 from engine.runtime_bootstrap import parse_comma_separated as _parse_comma_separated
-from engine.runtime_metrics import RuntimeMetricsCollector
+from engine.runtime_metrics import RuntimeMetricsCollector, RuntimeProposalJournal
 from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
@@ -133,6 +133,13 @@ def _metrics_collector(args) -> RuntimeMetricsCollector:
         else Path("runtime/data/current")
     )
     return RuntimeMetricsCollector(root / "runtime_metrics.json")
+
+
+def _proposal_journal(args) -> RuntimeProposalJournal | None:
+    if not args.opportunity_root:
+        return None
+    root = Path(args.opportunity_root) / "current"
+    return RuntimeProposalJournal(root / "preview_order_context.json")
 
 
 def _build_preview_order_proposals(
@@ -325,6 +332,12 @@ def main() -> int:
                 policy,
             )
         )
+        proposal_journal = _proposal_journal(args)
+        if proposal_journal is not None:
+            proposal_journal.write_preview_snapshot(
+                proposals=preview_order_proposals,
+                blocked=blocked_preview_orders,
+            )
         status_snapshot = getattr(engine, "status_snapshot", None)
         status = status_snapshot() if callable(status_snapshot) else None
         live_state_status_getter = getattr(adapter, "live_state_status", None)

@@ -7,9 +7,11 @@ from pathlib import Path
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
 from services.capture import (
+    SportsbookCaptureStores,
     SportsbookCaptureWorker,
     SportsbookCaptureWorkerConfig,
     TheOddsApiCaptureSource,
+    sanitize_capture_error,
 )
 
 
@@ -84,8 +86,26 @@ def main(argv: list[str] | None = None) -> int:
     if not api_key:
         raise RuntimeError(f"missing required environment variable: {args.api_key_env}")
 
+    try:
+        stores = SportsbookCaptureStores.from_root(args.root, require_postgres=True)
+    except RuntimeError as exc:
+        if "Could not resolve a Postgres DSN" not in str(exc):
+            raise
+        sanitized_error = sanitize_capture_error(exc)
+        emit_json(
+            {
+                "ok": False,
+                "error_kind": sanitized_error["kind"],
+                "error_message": "Postgres worker storage is not configured",
+                "root": args.root,
+            },
+            quiet=args.quiet,
+        )
+        return 1
+
     worker = SportsbookCaptureWorker(
         source=TheOddsApiCaptureSource(api_key=api_key),
+        stores=stores,
         config=SportsbookCaptureWorkerConfig(
             root=args.root,
             sport=_resolve_sport_key(args.sport, config),
