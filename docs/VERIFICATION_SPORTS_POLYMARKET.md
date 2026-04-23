@@ -70,6 +70,7 @@ python -m scripts.train_models --model consensus --output <consensus_artifact.js
 python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root>
 python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root>
 python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json>
+python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>
 ```
 
 Observed behavior:
@@ -79,6 +80,7 @@ Observed behavior:
 - `build-mappings` keeps the flat current-state selector rows in `runtime/data/current/market_mappings.json` and also writes `runtime/data/current/market_mapping_manifest.json` with structured `mapping_status`, `mapping_confidence`, `blocked_reason`, identity, and rule-semantics payloads
 - `build-fair-values --consensus-artifact ...` changes live fair-value output based on artifact half-life and writes current-state fair values plus `source_health`
 - a failing fair-value build marks `source_health["fair_values"]` red without partially overwriting the prior fair-values tables
+- `build-inference-dataset` writes `processed/inference/joined_inference_dataset.jsonl`, registers `joined-inference-dataset`, and keeps `source_health["joined_inference_dataset"]` in sync with the latest row count
 
 ## Manual QA — live current-state fair-value build with optional calibration artifact
 
@@ -98,6 +100,30 @@ Observed behavior:
 - `runtime/data/current/fair_value_manifest.json` keeps raw `fair_value` and adds sibling `calibrated_fair_value`
 - the runtime manifest includes `metadata.calibration` with histogram bin and sample counts
 - `source_health["fair_values"]["details"]` records whether a calibration artifact was configured
+
+## Manual QA — materialized historical training dataset and dataset-backed model training
+
+Command shape:
+
+```bash
+python -m scripts.ingest_live_data build-training-dataset \
+  --input <sports_inputs_labeled.json> \
+  --polymarket-input <polymarket_markets.json> \
+  --root <runtime_root>
+
+python -m scripts.train_models \
+  --model elo \
+  --training-dataset historical-training-dataset \
+  --dataset-root <runtime_root>/datasets \
+  --output <elo_artifact.json>
+```
+
+Observed behavior:
+
+- `build-training-dataset` writes `processed/training/historical_training_dataset.jsonl`
+- the same command registers a versioned `historical-training-dataset` snapshot under `<runtime_root>/datasets`
+- the materialized training rows keep a fixed schema even when optional market linkage fields are null
+- `train-models --training-dataset ...` consumes that snapshot without requiring the original capture-envelope JSON
 
 ## Automated verification — config-driven runtime defaults
 
