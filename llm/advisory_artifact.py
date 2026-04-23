@@ -126,7 +126,30 @@ def _sanitize_rendered_text(value: object) -> str:
         for character in text
         if character in ("\n", "\t") or ord(character) >= 32
     )
-    return sanitized.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    sanitized = (
+        sanitized.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\\", "\\\\")
+    )
+    for character in (
+        "`",
+        "*",
+        "_",
+        "{",
+        "}",
+        "[",
+        "]",
+        "(",
+        ")",
+        "#",
+        "+",
+        "-",
+        "!",
+        "|",
+    ):
+        sanitized = sanitized.replace(character, f"\\{character}")
+    return sanitized
 
 
 def _serialize_evidence_summary(summary: EvidenceMemo) -> dict[str, object]:
@@ -599,10 +622,10 @@ def render_llm_advisory_markdown(artifact: LLMAdvisoryArtifact) -> str:
             "## Summary",
             "",
             f"- Generated at: {artifact.generated_at.isoformat().replace('+00:00', 'Z')}",
-            f"- Source: {artifact.source}",
-            f"- Provider: {artifact.provider_name}",
-            f"- Provider model: {artifact.provider_model or 'n/a'}",
-            f"- Prompt version: {artifact.prompt_version or 'n/a'}",
+            f"- Source: {_sanitize_rendered_text(artifact.source)}",
+            f"- Provider: {_sanitize_rendered_text(artifact.provider_name)}",
+            f"- Provider model: {_sanitize_rendered_text(artifact.provider_model or 'n/a')}",
+            f"- Prompt version: {_sanitize_rendered_text(artifact.prompt_version or 'n/a')}",
             f"- Contracts: {len(artifact.contracts)}",
             f"- Preview proposals: {len(artifact.preview_order_proposals)}",
             f"- Blocked preview orders: {len(artifact.blocked_preview_orders)}",
@@ -635,7 +658,7 @@ def render_llm_advisory_markdown(artifact: LLMAdvisoryArtifact) -> str:
         lines.append("")
     lines.extend(["## Contract summaries", ""])
     for row in artifact.contracts:
-        lines.append(f"### {row.contract_id}")
+        lines.append(f"### {_sanitize_rendered_text(row.contract_id)}")
         lines.append("")
         if row.question is not None:
             lines.append(f"- Question: {_sanitize_rendered_text(row.question)}")
@@ -685,7 +708,9 @@ def write_llm_advisory_artifacts(
     json_path = Path(output_path)
     json_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path = json_path.with_suffix(".md")
-    json_path.write_text(json.dumps(artifact.to_payload(), indent=2, sort_keys=True))
+    json_path.write_text(
+        json.dumps(artifact.to_payload(), indent=2, sort_keys=True, allow_nan=False)
+    )
     markdown_path.write_text(render_llm_advisory_markdown(artifact))
     return json_path, markdown_path
 

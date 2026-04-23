@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,17 +25,29 @@ class ParsedLLMContract:
 
 def _parse_bool_flag(payload: dict[str, Any], field_name: str) -> bool:
     if field_name not in payload:
-        return False
+        raise ValueError(f"{field_name} is required")
     value = payload[field_name]
-    if value not in (True, False):
+    if not isinstance(value, bool):
         raise ValueError(f"{field_name} must be true or false")
     return value
 
 
-def parse_llm_contract_payload(payload: dict[str, Any]) -> ParsedLLMContract:
-    ambiguity_score = float(payload.get("ambiguity_score", 0.0))
-    if ambiguity_score < 0.0 or ambiguity_score > 1.0:
+def _parse_ambiguity_score(payload: dict[str, Any]) -> float:
+    raw_value = payload.get("ambiguity_score", 0.0)
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float, str)):
+        raise ValueError("ambiguity_score must be a finite number between 0 and 1")
+    ambiguity_score = float(raw_value)
+    if (
+        not math.isfinite(ambiguity_score)
+        or ambiguity_score < 0.0
+        or ambiguity_score > 1.0
+    ):
         raise ValueError("ambiguity_score must be between 0 and 1")
+    return ambiguity_score
+
+
+def parse_llm_contract_payload(payload: dict[str, Any]) -> ParsedLLMContract:
+    ambiguity_score = _parse_ambiguity_score(payload)
     player_rule = payload.get("requires_player_to_start")
     if player_rule not in (None, True, False):
         raise ValueError("requires_player_to_start must be true, false, or null")
