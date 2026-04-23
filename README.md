@@ -309,11 +309,12 @@ The benchmark stack is useful when you want a reproducible offline slice of the 
 
 ## CI
 
-`.github/workflows/python-ci.yml` currently does four things on pushes and pull requests:
+`.github/workflows/python-ci.yml` currently does five things on pushes and pull requests:
 
 - checks that `uv.lock` matches the dependency declarations
 - installs the package from the committed lockfile
-- compiles the key runtime and research modules with `py_compile`
+- compiles the key runtime and research modules with `python -m compileall -q`
+- runs the focused **Run advisory and docs contract regressions** unittest step
 - runs `python -m unittest discover -s tests -p "test_*.py"`
 
 ## Citation and release metadata

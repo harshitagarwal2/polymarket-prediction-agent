@@ -47,11 +47,14 @@ The operator CLI can also build the same style of sidecar at `runtime/data/curre
 ```bash
 operator-cli build-llm-advisory \
   --llm-input runtime/llm_contract_rows.json \
+  --policy-file runtime/policy.json \
   --opportunity-root runtime/data \
   --output runtime/data/current/llm_advisory.json
 ```
 
 Because that file reuses the `ContractEvidence` row keys, you can pass `runtime/data/current/llm_advisory.json` directly to `render-model-vs-market-dashboard --llm-contract-evidence ...`.
+
+If you want the advisory preview proposals and blocked reasons to reflect the same thresholds and freeze windows as the live runtime, pass the same `--policy-file` that `run-agent-loop` uses.
 
 Evidence is optional. When the file is omitted or a contract has no LLM probability, the dashboard records a deterministic fallback consistency surface instead of failing closed. That keeps market-vs-model review available even when LLM support is absent or incomplete.
 
