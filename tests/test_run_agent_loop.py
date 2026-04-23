@@ -4,6 +4,7 @@ import io
 import json
 import tempfile
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import cast
 import unittest
@@ -493,6 +494,43 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertEqual(config.depth_admission_levels, 4)
         self.assertEqual(config.depth_admission_liquidity_fraction, 0.65)
         self.assertEqual(config.depth_admission_max_expected_slippage_bps, 20.0)
+
+    def test_build_adapter_derives_polymarket_live_user_markets_from_manifest(self):
+        with tempfile.NamedTemporaryFile("w+", suffix=".json") as fair_values:
+            json.dump(
+                {
+                    "schema_version": 1,
+                    "generated_at": "2026-04-07T12:00:00Z",
+                    "values": {
+                        "token-1:yes": {
+                            "fair_value": 0.6,
+                            "condition_id": "cond-1",
+                        },
+                        "token-2:yes": {
+                            "fair_value": 0.55,
+                            "condition_id": "cond-2",
+                        },
+                    },
+                },
+                fair_values,
+            )
+            fair_values.flush()
+
+            args = SimpleNamespace(
+                fair_values_file=fair_values.name,
+                polymarket_live_user_markets=None,
+                polymarket_user_ws_host=None,
+            )
+
+            with patch.dict(
+                "os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=False
+            ):
+                adapter = run_agent_loop.build_adapter("polymarket", args)
+
+        self.assertIsInstance(adapter, PolymarketAdapter)
+        polymarket_adapter = cast(PolymarketAdapter, adapter)
+        config = cast(PolymarketConfig, polymarket_adapter.config)
+        self.assertEqual(config.live_user_markets, ["cond-1", "cond-2"])
 
     def test_main_stops_heartbeat_in_finally(self):
         adapter = FakeAdapter()
@@ -1205,6 +1243,230 @@ class RunAgentLoopTests(unittest.TestCase):
         rendered = "".join(call.args[0] for call in stdout.write.call_args_list)
         self.assertIn('"preview_order_proposal_count": 1', rendered)
         self.assertIn('"size": 2.0', rendered)
+
+    def test_build_preview_order_proposals_preserves_zero_snapshot_values(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = Path(temp_dir) / "data" / "current"
+            runtime_root.mkdir(parents=True)
+            (runtime_root / "opportunities.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1|buy_yes": {
+                            "market_id": "pm-1",
+                            "side": "buy_yes",
+                            "fair_yes_prob": 0.0,
+                            "best_bid_yes": 0.0,
+                            "best_ask_yes": 0.0,
+                            "edge_buy_bps": 125.0,
+                            "edge_sell_bps": -125.0,
+                            "edge_buy_after_costs_bps": 0.0,
+                            "edge_sell_after_costs_bps": 0.0,
+                            "edge_after_costs_bps": 0.0,
+                            "fillable_size": 0.0,
+                            "confidence": 0.99,
+                            "blocked_reasons": [],
+                            "blocked_reason": None,
+                        }
+                    }
+                )
+            )
+            (runtime_root / "fair_values.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1": {
+                            "market_id": "pm-1",
+                            "fair_yes_prob": 0.6,
+                            "book_dispersion": 0.01,
+                            "data_age_ms": 1000,
+                        }
+                    }
+                )
+            )
+            (runtime_root / "polymarket_bbo.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1": {
+                            "market_id": "pm-1",
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "best_bid_yes_size": 9.0,
+                            "best_ask_yes_size": 6.0,
+                            "source_age_ms": 500,
+                        }
+                    }
+                )
+            )
+            (runtime_root / "market_mappings.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1|sb-1": {
+                            "polymarket_market_id": "pm-1",
+                            "sportsbook_event_id": "sb-1",
+                        }
+                    }
+                )
+            )
+            (runtime_root / "sportsbook_events.json").write_text(
+                json.dumps(
+                    {
+                        "sb-1": {
+                            "sportsbook_event_id": "sb-1",
+                            "start_time": "2026-04-30T19:00:00Z",
+                        }
+                    }
+                )
+            )
+            (runtime_root / "polymarket_markets.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1": {
+                            "market_id": "pm-1",
+                            "status": "open",
+                            "end_time": "2026-04-30T22:00:00Z",
+                        }
+                    }
+                )
+            )
+
+            proposals, blocked = run_agent_loop._build_preview_order_proposals(
+                SimpleNamespace(opportunity_root=str(Path(temp_dir) / "data")),
+                None,
+            )
+
+        self.assertEqual(proposals, [])
+        self.assertEqual(len(blocked), 1)
+        blocked_payload = blocked[0]
+        self.assertEqual(blocked_payload["fair_yes_prob"], 0.0)
+        self.assertEqual(blocked_payload["best_bid_yes"], 0.0)
+        self.assertEqual(blocked_payload["best_ask_yes"], 0.0)
+        self.assertEqual(blocked_payload["edge_buy_after_costs_bps"], 0.0)
+        self.assertEqual(blocked_payload["edge_sell_after_costs_bps"], 0.0)
+        self.assertEqual(blocked_payload["fillable_size"], 0.0)
+        blocked_reasons = blocked_payload["blocked_reasons"]
+        self.assertIsInstance(blocked_reasons, list)
+        if not isinstance(blocked_reasons, list):
+            self.fail("expected blocked_reasons list")
+        self.assertIn("insufficient visible depth", blocked_reasons)
+
+    def test_build_preview_order_proposals_uses_commence_time_for_freeze_window(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = Path(temp_dir) / "data" / "current"
+            runtime_root.mkdir(parents=True)
+            (runtime_root / "opportunities.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1|buy_yes": {
+                            "market_id": "pm-1",
+                            "side": "buy_yes",
+                            "fair_yes_prob": 0.6,
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "edge_buy_bps": 1300.0,
+                            "edge_sell_bps": -1500.0,
+                            "edge_buy_after_costs_bps": 1285.0,
+                            "edge_sell_after_costs_bps": -1515.0,
+                            "edge_after_costs_bps": 220.0,
+                            "fillable_size": 5.0,
+                            "confidence": 0.99,
+                            "blocked_reasons": [],
+                            "blocked_reason": None,
+                        }
+                    }
+                )
+            )
+            (runtime_root / "fair_values.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1": {
+                            "market_id": "pm-1",
+                            "fair_yes_prob": 0.6,
+                            "book_dispersion": 0.01,
+                            "data_age_ms": 1000,
+                        }
+                    }
+                )
+            )
+            (runtime_root / "polymarket_bbo.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1": {
+                            "market_id": "pm-1",
+                            "best_bid_yes": 0.45,
+                            "best_ask_yes": 0.47,
+                            "best_bid_yes_size": 9.0,
+                            "best_ask_yes_size": 5.0,
+                            "source_age_ms": 500,
+                        }
+                    }
+                )
+            )
+            (runtime_root / "market_mappings.json").write_text(
+                json.dumps(
+                    {
+                        "pm-1|sb-1": {
+                            "polymarket_market_id": "pm-1",
+                            "sportsbook_event_id": "sb-1",
+                        }
+                    }
+                )
+            )
+            (runtime_root / "sportsbook_events.json").write_text(
+                json.dumps(
+                    {
+                        "sb-1": {
+                            "sportsbook_event_id": "sb-1",
+                            "commence_time": (
+                                datetime.now(timezone.utc) + timedelta(minutes=5)
+                            ).isoformat(),
+                        }
+                    }
+                )
+            )
+
+            with (
+                patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+                patch.object(run_agent_loop, "validate_runtime"),
+                patch.object(
+                    run_agent_loop,
+                    "build_fair_value_provider",
+                    return_value=SimpleNamespace(),
+                ),
+                patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+                patch.object(run_agent_loop, "AgentOrchestrator"),
+                patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+                patch("sys.stdout") as stdout,
+            ):
+                polling_loop.return_value.run.return_value = [fake_cycle]
+
+                with patch(
+                    "sys.argv",
+                    [
+                        "run_agent_loop.py",
+                        "--venue",
+                        "polymarket",
+                        "--fair-values-file",
+                        "runtime/fair-values.json",
+                        "--opportunity-root",
+                        str(Path(temp_dir) / "data"),
+                    ],
+                ):
+                    run_agent_loop.main()
+
+        rendered = "".join(call.args[0] for call in stdout.write.call_args_list)
+        self.assertIn('"preview_order_proposal_count": 0', rendered)
+        self.assertIn("market within pre-start freeze window", rendered)
 
     def test_main_preview_blocks_when_current_bbo_is_stale(self):
         adapter = FakeAdapter()

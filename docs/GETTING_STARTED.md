@@ -224,6 +224,8 @@ That path currently provides `configs/runtime_policy.preview.json`, keeps the lo
 
 The sample config also carries the normal preview-loop defaults for `max_fair_value_age_seconds`, `interval_seconds`, and `max_cycles`, so you only need extra CLI flags when you want to override them.
 
+For Polymarket, the runtime now also derives live user-stream condition IDs from that configured fair-value manifest by default. You only need `POLYMARKET_LIVE_USER_MARKETS` when you want to override the derived subscription set manually.
+
 For a long-running supervised preview process, add `--interval-seconds` and a larger `--max-cycles`.
 
 ### 5. Inspect state and journal output
@@ -329,6 +331,8 @@ Current knobs are:
 - `slippage_bps`
 - `resting_max_fill_ratio_per_step`
 - `resting_fill_delay_steps`
+- `stale_after_steps`
+- `price_move_bps_per_step`
 
 These help make offline replay less naive, but they still do not make replay venue-true.
 
