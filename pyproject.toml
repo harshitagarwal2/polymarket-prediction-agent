@@ -25,7 +25,7 @@ dev = [
   "mypy>=1.11",
   "pip-audit>=2.7",
   "pre-commit>=3.8",
-  "ruff>=0.6.9",
+  "ruff>=0.15.12",
   "setuptools>=68",
   "wheel>=0.43",
 ]
