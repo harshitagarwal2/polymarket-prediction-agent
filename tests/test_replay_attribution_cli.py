@@ -135,6 +135,12 @@ class ReplayAttributionCliTests(unittest.TestCase):
             self.assertTrue(label_output.exists())
             self.assertEqual(rows[0]["market_id"], "token-home:yes")
             self.assertIn("slippage_bps", rows[0])
+            self.assertIn("decision_fair_value", rows[0])
+            self.assertIn("decision_reference_price", rows[0])
+            self.assertIn("decision_best_bid", rows[0])
+            self.assertIn("decision_best_ask", rows[0])
+            self.assertIn("decision_midpoint", rows[0])
+            self.assertEqual(rows[0]["replay_step_index"], 0)
 
 
 if __name__ == "__main__":

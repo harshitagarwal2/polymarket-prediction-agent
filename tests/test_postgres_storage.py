@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import ingest_live_data
 from services.capture import (
@@ -17,6 +18,7 @@ from services.capture import (
     hydrate_polymarket_market_snapshot,
     persist_polymarket_bbo_input_events,
 )
+from services.capture import sportsbook as sportsbook_capture
 from services.projection import project_current_state_once
 from storage.current_projection import build_preview_runtime_context
 from storage.postgres import (
@@ -73,19 +75,35 @@ class PostgresBootstrapTests(unittest.TestCase):
 
     def test_live_ingest_stores_fail_closed_when_postgres_is_required(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "ingest-live-data sportsbook-odds requires Postgres authority",
+            with patch.dict(
+                os.environ,
+                {
+                    "PREDICTION_MARKET_POSTGRES_DSN": "",
+                    "POSTGRES_DSN": "",
+                    "DATABASE_URL": "",
+                },
             ):
-                ingest_live_data._stores(
-                    temp_dir,
-                    require_postgres=True,
-                    authority_context="ingest-live-data sportsbook-odds",
-                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data sportsbook-odds requires Postgres authority",
+                ):
+                    ingest_live_data._stores(
+                        temp_dir,
+                        require_postgres=True,
+                        authority_context="ingest-live-data sportsbook-odds",
+                    )
 
     def test_non_live_ingest_stores_can_still_use_json_backed_fallback(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            stores = ingest_live_data._stores(temp_dir)
+            with patch.dict(
+                os.environ,
+                {
+                    "PREDICTION_MARKET_POSTGRES_DSN": "",
+                    "POSTGRES_DSN": "",
+                    "DATABASE_URL": "",
+                },
+            ):
+                stores = ingest_live_data._stores(temp_dir)
             payload = {
                 "market_id": "pm-1",
                 "as_of": "2026-04-22T18:03:00+00:00",
@@ -441,6 +459,68 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
 
             def fetch_upcoming(self, sport: str, market_type: str):
                 return [self.event_payload]
+
+            def event_id(self, event: dict[str, object]) -> str:
+                return sportsbook_capture._default_event_id(event)
+
+            def normalize_event(
+                self,
+                event: dict[str, object],
+                *,
+                market_type: str,
+                captured_at: datetime,
+            ):
+                return sportsbook_capture._default_normalize_event(
+                    event,
+                    provider_name=self.provider_name,
+                    market_type=market_type,
+                    captured_at=captured_at,
+                )
+
+            def build_raw_capture_payload(
+                self,
+                event: dict[str, object],
+                *,
+                sport: str,
+                market_type: str,
+                event_identity: dict[str, object],
+            ):
+                return sportsbook_capture._default_build_raw_capture_payload(
+                    event,
+                    sport=sport,
+                    event_identity=event_identity,
+                )
+
+            def build_event_record(
+                self,
+                event: dict[str, object],
+                *,
+                sport: str,
+                market_type: str,
+                event_identity: dict[str, object],
+            ):
+                return sportsbook_capture._default_build_event_record(
+                    event,
+                    provider_name=self.provider_name,
+                    sport=sport,
+                    event_identity=event_identity,
+                )
+
+            def build_capture_metadata(
+                self,
+                event: dict[str, object],
+                *,
+                sport: str,
+                market: str,
+                captured_at: datetime,
+            ):
+                return sportsbook_capture._default_build_capture_metadata(
+                    event,
+                    provider_name=self.provider_name,
+                    sport=sport,
+                    market=market,
+                    captured_at=captured_at,
+                )
 
         class _StaticCatalogClient:
             def fetch_open_markets(self):

@@ -46,7 +46,7 @@ uv run --locked --extra research --extra postgres --extra polymarket python -m u
 Observed result:
 
 ```text
-Ran 633 tests in 4.751s
+Ran 650 tests in 7.671s
 
 OK (skipped=1)
 ```
@@ -174,13 +174,15 @@ Observed behavior:
 - `current/source_health.json` now includes projector lane health such as `projection_sportsbook_odds` and `projection_polymarket_market_catalog`
 - when a Postgres DSN marker exists, runtime/ingest readers consume the projected adapter first and no longer treat stale `current/*.json` files as authoritative
 
-## Manual QA — live current-state fair-value build with consensus artifact
+## Manual QA — sanctioned current-state fair-value build with consensus artifact
 
 Command shape:
 
 ```bash
 python -m scripts.train_models --model consensus --output <consensus_artifact.json>
-python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root>
+python -m scripts.run_sportsbook_capture --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> --max-cycles 1
+python -m scripts.run_polymarket_capture market --asset-id <asset-id> --root <runtime_root> --max-sessions 1
+python -m scripts.run_current_projection --root <runtime_root> --max-cycles 1
 python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root>
 python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json>
 python -m scripts.ingest_live_data build-opportunities --root <runtime_root>
@@ -189,13 +191,15 @@ python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>
 
 Observed behavior:
 
-- the live sportsbook ingest path accepts `--event-map-file` and persists enriched sportsbook event identity for mapping
+- the sanctioned path starts with the dedicated sportsbook and Polymarket capture workers plus `run-current-projection`
+- `run-sportsbook-capture` remains raw-ingress-only and leaves selector-facing `runtime/data/current/*.json` ownership to the projector
 - `build-mappings` blocks rows missing upstream `event_key` / `game_id`
 - `build-mappings` keeps the flat current-state selector rows in `runtime/data/current/market_mappings.json` and also writes `runtime/data/current/market_mapping_manifest.json` with structured `mapping_status`, `mapping_confidence`, `blocked_reason`, identity, and rule-semantics payloads
 - `build-fair-values --consensus-artifact ...` changes live fair-value output based on artifact half-life and writes current-state fair values plus `source_health`
 - `build-opportunities` materializes ranked executable opportunity rows from the same projected mapping, fair-value, and BBO boundary
 - a failing fair-value build marks `source_health["fair_values"]` red without partially overwriting the prior fair-values tables
 - `build-inference-dataset` writes `processed/inference/joined_inference_dataset.jsonl`, registers `joined-inference-dataset`, and keeps `source_health["joined_inference_dataset"]` in sync with the latest row count
+- the legacy `ingest-live-data polymarket-markets`, `sportsbook-odds`, and `polymarket-bbo` live ingress paths stay retired in favor of the dedicated workers plus projector chain
 
 ## Manual QA — live current-state fair-value build with optional calibration artifact
 
@@ -215,6 +219,8 @@ Observed behavior:
 - `runtime/data/current/fair_value_manifest.json` keeps raw `fair_value` and adds sibling `calibrated_fair_value`
 - the runtime manifest includes `metadata.calibration` with histogram bin and sample counts
 - `source_health["fair_values"]["details"]` records whether a calibration artifact was configured
+
+This remains a deterministic builder step on top of the sanctioned capture -> projector -> builder chain above. It is not the standalone live ingress boundary.
 
 ## Manual QA — materialized historical training dataset and dataset-backed model training
 

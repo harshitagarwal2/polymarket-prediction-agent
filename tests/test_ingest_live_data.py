@@ -177,10 +177,13 @@ class IngestLiveDataTests(unittest.TestCase):
         path.write_text(json.dumps(payload), encoding="utf-8")
 
     def test_live_parser_no_longer_registers_legacy_polymarket_bbo_command(self):
-        self.assertNotIn(
-            "polymarket-bbo",
-            ingest_live_data.build_new_parser().format_help(),
-        )
+        new_help_text = ingest_live_data.build_new_parser().format_help()
+        legacy_help_text = ingest_live_data.build_parser().format_help()
+        self.assertNotIn("polymarket-bbo", new_help_text)
+        self.assertNotIn("polymarket-markets", new_help_text)
+        self.assertNotIn("sportsbook-odds", new_help_text)
+        self.assertIn("build-fair-values", legacy_help_text)
+        self.assertIn("Legacy live capture subcommands", legacy_help_text)
 
     def _seed_mapping_build_inputs(
         self,
@@ -189,59 +192,57 @@ class IngestLiveDataTests(unittest.TestCase):
         sportsbook_event_key: str = "event-1",
     ) -> None:
         start_time = "2026-04-21T19:00:00Z"
-        self._write_json(
-            root / "postgres" / "polymarket_markets.json",
-            {
-                "pm-1": {
-                    "market_id": "pm-1",
-                    "condition_id": "condition-1",
-                    "token_id_yes": None,
-                    "token_id_no": None,
-                    "title": "Will Home Team beat Away Team?",
-                    "description": None,
-                    "event_slug": None,
-                    "market_slug": None,
-                    "category": "sports",
-                    "end_time": "2026-04-21T22:00:00Z",
-                    "status": "open",
-                    "raw_json": {
-                        "id": "pm-1",
-                        "conditionId": "condition-1",
-                        "eventKey": "event-1",
-                        "gameId": "game-1",
-                        "sport": "nba",
-                        "series": "playoffs",
-                        "sportsMarketType": "moneyline",
-                        "question": "Will Home Team beat Away Team?",
-                        "gameStartTime": start_time,
-                    },
-                }
-            },
-        )
-        self._write_json(
-            root / "postgres" / "sportsbook_events.json",
-            {
-                "sb-1": {
-                    "sportsbook_event_id": "sb-1",
-                    "source": "theoddsapi",
-                    "sport": "basketball_nba",
-                    "league": "playoffs",
+        market_rows = {
+            "pm-1": {
+                "market_id": "pm-1",
+                "condition_id": "condition-1",
+                "token_id_yes": None,
+                "token_id_no": None,
+                "title": "Will Home Team beat Away Team?",
+                "description": None,
+                "event_slug": None,
+                "market_slug": None,
+                "category": "sports",
+                "end_time": "2026-04-21T22:00:00Z",
+                "status": "open",
+                "raw_json": {
+                    "id": "pm-1",
+                    "conditionId": "condition-1",
+                    "eventKey": "event-1",
+                    "gameId": "game-1",
+                    "sport": "nba",
+                    "series": "playoffs",
+                    "sportsMarketType": "moneyline",
+                    "question": "Will Home Team beat Away Team?",
+                    "gameStartTime": start_time,
+                },
+            }
+        }
+        event_rows = {
+            "sb-1": {
+                "sportsbook_event_id": "sb-1",
+                "source": "theoddsapi",
+                "sport": "basketball_nba",
+                "league": "playoffs",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "start_time": start_time,
+                "raw_json": {
+                    "id": "sb-1",
+                    "event_key": sportsbook_event_key,
+                    "game_id": "game-1",
+                    "sport": "nba",
+                    "series": "playoffs",
                     "home_team": "Home Team",
                     "away_team": "Away Team",
                     "start_time": start_time,
-                    "raw_json": {
-                        "id": "sb-1",
-                        "event_key": sportsbook_event_key,
-                        "game_id": "game-1",
-                        "sport": "nba",
-                        "series": "playoffs",
-                        "home_team": "Home Team",
-                        "away_team": "Away Team",
-                        "start_time": start_time,
-                    },
-                }
-            },
-        )
+                },
+            }
+        }
+        self._write_json(root / "postgres" / "polymarket_markets.json", market_rows)
+        self._write_json(root / "current" / "polymarket_markets.json", market_rows)
+        self._write_json(root / "postgres" / "sportsbook_events.json", event_rows)
+        self._write_json(root / "current" / "sportsbook_events.json", event_rows)
 
     def _seed_opportunity_build_inputs(
         self,
@@ -377,6 +378,23 @@ class IngestLiveDataTests(unittest.TestCase):
             },
         )
         self._write_json(
+            root / "current" / "polymarket_bbo.json",
+            {
+                "pm-1": {
+                    "market_id": "pm-1",
+                    "best_bid_yes": 0.50,
+                    "best_bid_yes_size": 10.0,
+                    "best_ask_yes": 0.52,
+                    "best_ask_yes_size": 8.0,
+                    "midpoint_yes": 0.51,
+                    "spread_yes": 0.02,
+                    "book_ts": now_iso,
+                    "source_age_ms": 100,
+                    "raw_hash": None,
+                }
+            },
+        )
+        self._write_json(
             root / "current" / "source_health.json",
             source_health,
         )
@@ -489,7 +507,7 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(payload["markets"][0]["sports_market_type"], "moneyline")
         self.assertIsNotNone(payload["markets"][0]["contract"])
 
-    def test_polymarket_live_market_subcommand_requires_postgres_and_bbo_is_retired(
+    def test_polymarket_live_market_subcommand_and_bbo_are_retired(
         self,
     ):
         event_start = datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc)
@@ -526,40 +544,44 @@ class IngestLiveDataTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch.object(
-                ingest_live_data.PolymarketMarketCatalogClient,
-                "fetch_open_markets",
-                return_value=market_payload,
-            ):
-                with self.assertRaisesRegex(
-                    RuntimeError,
-                    "ingest-live-data polymarket-markets requires Postgres authority",
-                ):
-                    ingest_live_data.main(
-                        [
-                            "polymarket-markets",
-                            "--sport",
-                            "nba",
-                            "--root",
-                            str(root),
-                            "--quiet",
-                        ]
-                    )
+            stdout = io.StringIO()
+            with patch("sys.stdout", stdout):
+                result_markets = ingest_live_data.main(
+                    [
+                        "polymarket-markets",
+                        "--sport",
+                        "nba",
+                        "--root",
+                        str(root),
+                    ]
+                )
+                markets_payload = json.loads(stdout.getvalue())
 
-            result = ingest_live_data.main(
-                [
-                    "polymarket-bbo",
-                    "--input",
-                    str(bbo_path),
-                    "--root",
-                    str(root),
-                    "--quiet",
-                ]
-            )
+            stdout = io.StringIO()
+            with patch("sys.stdout", stdout):
+                result = ingest_live_data.main(
+                    [
+                        "polymarket-bbo",
+                        "--input",
+                        str(bbo_path),
+                        "--root",
+                        str(root),
+                    ]
+                )
+                bbo_payload = json.loads(stdout.getvalue())
 
+        self.assertEqual(result_markets, 1)
         self.assertEqual(result, 1)
+        self.assertEqual(
+            markets_payload["error_message"],
+            "ingest-live-data polymarket-markets is retired; use run-polymarket-capture market and run-current-projection for the capture-owned market catalog path",
+        )
+        self.assertEqual(
+            bbo_payload["error_message"],
+            "ingest-live-data polymarket-bbo is retired; use run-polymarket-capture market for live Polymarket capture",
+        )
 
-    def test_live_pipeline_subcommands_require_postgres_authority(self):
+    def test_live_capture_subcommands_are_retired(self):
         event_start = datetime.now(timezone.utc) + timedelta(hours=2)
         market_payload = [
             {
@@ -631,25 +653,18 @@ class IngestLiveDataTests(unittest.TestCase):
                 )
             )
 
-            with patch.object(
-                ingest_live_data.PolymarketMarketCatalogClient,
-                "fetch_open_markets",
-                return_value=market_payload,
-            ):
-                with self.assertRaisesRegex(
-                    RuntimeError,
-                    "ingest-live-data polymarket-markets requires Postgres authority",
-                ):
-                    ingest_live_data.main(
-                        [
-                            "polymarket-markets",
-                            "--sport",
-                            "nba",
-                            "--root",
-                            str(root),
-                            "--quiet",
-                        ]
-                    )
+            stdout = io.StringIO()
+            with patch("sys.stdout", stdout):
+                result_markets = ingest_live_data.main(
+                    [
+                        "polymarket-markets",
+                        "--sport",
+                        "nba",
+                        "--root",
+                        str(root),
+                    ]
+                )
+                markets_payload = json.loads(stdout.getvalue())
 
             with (
                 patch.object(
@@ -659,11 +674,9 @@ class IngestLiveDataTests(unittest.TestCase):
                 ),
                 patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
             ):
-                with self.assertRaisesRegex(
-                    RuntimeError,
-                    "ingest-live-data sportsbook-odds requires Postgres authority",
-                ):
-                    ingest_live_data.main(
+                stdout = io.StringIO()
+                with patch("sys.stdout", stdout):
+                    result_sportsbook = ingest_live_data.main(
                         [
                             "sportsbook-odds",
                             "--sport",
@@ -674,24 +687,40 @@ class IngestLiveDataTests(unittest.TestCase):
                             str(root),
                             "--event-map-file",
                             str(event_map_path),
-                            "--quiet",
                         ]
                     )
+                    sportsbook_payload = json.loads(stdout.getvalue())
 
-            result = ingest_live_data.main(
-                [
-                    "polymarket-bbo",
-                    "--input",
-                    str(bbo_path),
-                    "--root",
-                    str(root),
-                    "--quiet",
-                ]
-            )
+            stdout = io.StringIO()
+            with patch("sys.stdout", stdout):
+                result = ingest_live_data.main(
+                    [
+                        "polymarket-bbo",
+                        "--input",
+                        str(bbo_path),
+                        "--root",
+                        str(root),
+                    ]
+                )
+                bbo_payload = json.loads(stdout.getvalue())
 
+        self.assertEqual(result_markets, 1)
+        self.assertEqual(result_sportsbook, 1)
         self.assertEqual(result, 1)
+        self.assertEqual(
+            markets_payload["error_message"],
+            "ingest-live-data polymarket-markets is retired; use run-polymarket-capture market and run-current-projection for the capture-owned market catalog path",
+        )
+        self.assertEqual(
+            sportsbook_payload["error_message"],
+            "ingest-live-data sportsbook-odds is retired; use run-sportsbook-capture and run-current-projection for the sanctioned sportsbook capture path",
+        )
+        self.assertEqual(
+            bbo_payload["error_message"],
+            "ingest-live-data polymarket-bbo is retired; use run-polymarket-capture market for live Polymarket capture",
+        )
 
-    def test_polymarket_markets_authoritative_path_skips_current_compatibility_exports(
+    def test_polymarket_markets_command_returns_sanitized_json(
         self,
     ):
         event_start = datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc)
@@ -712,22 +741,8 @@ class IngestLiveDataTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
 
-            with (
-                patch.object(
-                    ingest_live_data.PolymarketMarketCatalogClient,
-                    "fetch_open_markets",
-                    return_value=market_payload,
-                ),
-                patch.object(
-                    ingest_live_data,
-                    "require_postgres_dsn",
-                    return_value="postgresql://user:pass@localhost:5432/db",
-                ),
-                patch(
-                    "storage.current_state_materializers.resolve_postgres_dsn",
-                    return_value="postgresql://user:pass@localhost:5432/db",
-                ),
-            ):
+            stdout = io.StringIO()
+            with patch("sys.stdout", stdout):
                 result = ingest_live_data.main(
                     [
                         "polymarket-markets",
@@ -735,26 +750,17 @@ class IngestLiveDataTests(unittest.TestCase):
                         "nba",
                         "--root",
                         str(root),
-                        "--quiet",
                     ]
                 )
+                payload = json.loads(stdout.getvalue())
 
-            postgres_markets = json.loads(
-                (root / "postgres" / "polymarket_markets.json").read_text(
-                    encoding="utf-8"
-                )
-            )
-            postgres_health = json.loads(
-                (root / "postgres" / "source_health.json").read_text(encoding="utf-8")
-            )
-
-        self.assertEqual(result, 0)
-        self.assertEqual(len(postgres_markets), 1)
-        stored_market = next(iter(postgres_markets.values()))
-        self.assertEqual(stored_market["raw_json"]["id"], "pm-1")
-        self.assertEqual(postgres_health["polymarket_market_catalog"]["status"], "ok")
-        self.assertFalse((root / "current" / "polymarket_markets.json").exists())
-        self.assertFalse((root / "current" / "source_health.json").exists())
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "ingest-live-data polymarket-markets is retired; use run-polymarket-capture market and run-current-projection for the capture-owned market catalog path",
+        )
+        self.assertEqual(payload["root"], str(root))
 
     def test_retired_polymarket_bbo_command_returns_sanitized_json(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -785,7 +791,7 @@ class IngestLiveDataTests(unittest.TestCase):
         )
         self.assertEqual(payload["root"], str(root))
 
-    def test_live_pipeline_subcommands_with_config_defaults_still_require_postgres(
+    def test_live_capture_subcommands_with_config_defaults_still_return_retirement_payload(
         self,
     ):
         event_start = datetime.now(timezone.utc) + timedelta(hours=2)
@@ -927,44 +933,31 @@ class IngestLiveDataTests(unittest.TestCase):
                 ),
                 patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
             ):
-                with self.assertRaisesRegex(
-                    RuntimeError,
-                    "ingest-live-data sportsbook-odds requires Postgres authority",
-                ):
-                    ingest_live_data.main(
+                stdout = io.StringIO()
+                with patch("sys.stdout", stdout):
+                    result = ingest_live_data.main(
                         [
                             "sportsbook-odds",
                             "--config-file",
                             str(config_path),
                             "--root",
                             str(root),
-                            "--quiet",
                         ]
                     )
+                    payload = json.loads(stdout.getvalue())
 
-    def test_sportsbook_odds_failure_returns_sanitized_json_without_traceback(self):
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "ingest-live-data sportsbook-odds is retired; use run-sportsbook-capture and run-current-projection for the sanctioned sportsbook capture path",
+        )
+
+    def test_sportsbook_odds_command_returns_retired_payload(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
             stdout = io.StringIO()
-            with (
-                patch.object(
-                    ingest_live_data,
-                    "require_postgres_dsn",
-                    return_value="postgresql://example/test",
-                ),
-                patch.object(
-                    ingest_live_data.SportsbookCaptureStores,
-                    "from_root",
-                    return_value=object(),
-                ),
-                patch.object(
-                    ingest_live_data,
-                    "capture_sportsbook_odds_once",
-                    side_effect=RuntimeError("https://example.com/?apiKey=secret"),
-                ),
-                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
-                patch("sys.stdout", stdout),
-            ):
+            with patch("sys.stdout", stdout):
                 result = ingest_live_data.main(
                     [
                         "sportsbook-odds",
@@ -983,47 +976,34 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(payload["error_kind"], "RuntimeError")
         self.assertEqual(
             payload["error_message"],
-            "RuntimeError during sportsbook capture",
+            "ingest-live-data sportsbook-odds is retired; use run-sportsbook-capture and run-current-projection for the sanctioned sportsbook capture path",
         )
-        self.assertNotIn("apiKey=secret", json.dumps(payload, sort_keys=True))
+        self.assertEqual(payload["root"], str(root))
 
-    def test_sportsbook_odds_failure_survives_failure_recording_errors(self):
+    def test_sportsbook_odds_command_with_config_defaults_returns_retired_payload(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
+            config_path = Path(temp_dir) / "sports.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "league": "nba",
+                        "capture": {"sport_key": "basketball_nba"},
+                        "runtime": {
+                            "sportsbook_market": "h2h",
+                            "event_map_file": "runtime/odds_event_map.json",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
             stdout = io.StringIO()
-            with (
-                patch.object(
-                    ingest_live_data,
-                    "require_postgres_dsn",
-                    return_value="postgresql://example/test",
-                ),
-                patch.object(
-                    ingest_live_data.SportsbookCaptureStores,
-                    "from_root",
-                    return_value=object(),
-                ),
-                patch.object(
-                    ingest_live_data,
-                    "capture_sportsbook_odds_once",
-                    side_effect=RuntimeError("https://example.com/?apiKey=secret"),
-                ),
-                patch.object(
-                    ingest_live_data,
-                    "record_sportsbook_capture_failure",
-                    side_effect=RuntimeError(
-                        "psycopg is required for Postgres storage"
-                    ),
-                ),
-                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
-                patch("sys.stdout", stdout),
-            ):
+            with patch("sys.stdout", stdout):
                 result = ingest_live_data.main(
                     [
                         "sportsbook-odds",
-                        "--sport",
-                        "basketball_nba",
-                        "--market",
-                        "h2h",
+                        "--config-file",
+                        str(config_path),
                         "--root",
                         str(root),
                     ]
@@ -1035,14 +1015,9 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(payload["error_kind"], "RuntimeError")
         self.assertEqual(
             payload["error_message"],
-            "RuntimeError during sportsbook capture",
+            "ingest-live-data sportsbook-odds is retired; use run-sportsbook-capture and run-current-projection for the sanctioned sportsbook capture path",
         )
-        self.assertEqual(payload["health_error_kind"], "RuntimeError")
-        self.assertEqual(
-            payload["health_error_message"],
-            "RuntimeError during sportsbook capture",
-        )
-        self.assertNotIn("apiKey=secret", json.dumps(payload, sort_keys=True))
+        self.assertEqual(payload["root"], str(root))
 
     def test_build_mappings_persists_research_identity_metadata(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1142,6 +1117,7 @@ class IngestLiveDataTests(unittest.TestCase):
             )
             self._write_json(root / "current" / "fair_values.json", {})
             self._write_json(root / "postgres" / "polymarket_bbo.json", {})
+            self._write_json(root / "current" / "polymarket_bbo.json", {})
 
             ingest_live_data.main(
                 ["build-opportunities", "--root", str(root), "--quiet"]
@@ -1314,6 +1290,108 @@ class IngestLiveDataTests(unittest.TestCase):
                 },
             )
             self._write_json(
+                root / "current" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
                 root / "current" / "opportunities.json",
                 {
                     "pm-1|buy_yes": {
@@ -1363,6 +1441,23 @@ class IngestLiveDataTests(unittest.TestCase):
             )
             self._write_json(
                 root / "postgres" / "polymarket_bbo.json",
+                {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "best_bid_yes": 0.54,
+                        "best_bid_yes_size": 9.0,
+                        "best_ask_yes": 0.60,
+                        "best_ask_yes_size": 2.0,
+                        "midpoint_yes": 0.57,
+                        "spread_yes": 0.06,
+                        "book_ts": datetime.now(timezone.utc).isoformat(),
+                        "source_age_ms": 100,
+                        "raw_hash": None,
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "polymarket_bbo.json",
                 {
                     "pm-1": {
                         "market_id": "pm-1",
@@ -1437,6 +1532,35 @@ class IngestLiveDataTests(unittest.TestCase):
                         "raw_json": {},
                     },
                     "1": {
+                        "sportsbook_event_id": "sb-high",
+                        "source": "theoddsapi",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 1.5,
+                        "implied_prob": 0.6666666667,
+                        "overround": 0.6666666667,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    },
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_odds.json",
+                {
+                    "sb-low|theoddsapi|h2h|Home Team": {
+                        "sportsbook_event_id": "sb-low",
+                        "source": "theoddsapi",
+                        "market_type": "h2h",
+                        "selection": "Home Team",
+                        "price_decimal": 4.0,
+                        "implied_prob": 0.25,
+                        "overround": 0.25,
+                        "quote_ts": "2026-04-21T18:00:00+00:00",
+                        "source_age_ms": 0,
+                        "raw_json": {},
+                    },
+                    "sb-high|theoddsapi|h2h|Home Team": {
                         "sportsbook_event_id": "sb-high",
                         "source": "theoddsapi",
                         "market_type": "h2h",
@@ -1881,6 +2005,292 @@ class IngestLiveDataTests(unittest.TestCase):
                     }
                 },
             )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
 
             ingest_live_data.main(
                 ["build-mappings", "--market", "h2h", "--root", str(root), "--quiet"]
@@ -1939,6 +2349,28 @@ class IngestLiveDataTests(unittest.TestCase):
             self._seed_mapping_build_inputs(root)
             self._write_json(
                 root / "postgres" / "sportsbook_events.json",
+                {
+                    "sb-1": {
+                        "sportsbook_event_id": "sb-1",
+                        "source": "theoddsapi",
+                        "sport": "basketball_nba",
+                        "league": "playoffs",
+                        "home_team": "Home Team",
+                        "away_team": "Away Team",
+                        "start_time": "2026-04-21T19:00:00Z",
+                        "raw_json": {
+                            "id": "sb-1",
+                            "sport": "nba",
+                            "series": "playoffs",
+                            "home_team": "Home Team",
+                            "away_team": "Away Team",
+                            "start_time": "2026-04-21T19:00:00Z",
+                        },
+                    }
+                },
+            )
+            self._write_json(
+                root / "current" / "sportsbook_events.json",
                 {
                     "sb-1": {
                         "sportsbook_event_id": "sb-1",

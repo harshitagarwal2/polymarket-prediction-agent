@@ -114,6 +114,7 @@ class RunAgentLoopTests(unittest.TestCase):
         args = SimpleNamespace(
             venue="polymarket",
             fair_values_file="runtime/missing.json",
+            mode="preview",
             journal="runtime/events.jsonl",
             state_file="runtime/safety-state.json",
         )
@@ -176,6 +177,7 @@ class RunAgentLoopTests(unittest.TestCase):
         with (
             tempfile.NamedTemporaryFile("w+", suffix=".json") as fair_values,
             tempfile.NamedTemporaryFile("w+", suffix=".yaml") as config_file,
+            tempfile.TemporaryDirectory() as temp_dir,
         ):
             json.dump({"token-1:yes": 0.6}, fair_values)
             fair_values.flush()
@@ -183,6 +185,7 @@ class RunAgentLoopTests(unittest.TestCase):
                 "runtime:\n"
                 "  policy_file: configs/runtime_policy.preview.json\n"
                 "  preview_only: false\n"
+                f"  opportunity_root: {Path(temp_dir) / 'data'}\n"
             )
             config_file.flush()
 
@@ -196,8 +199,13 @@ class RunAgentLoopTests(unittest.TestCase):
                     ) as validate_runtime,
                     patch.object(
                         run_agent_loop,
-                        "build_fair_value_provider",
-                        return_value=SimpleNamespace(),
+                        "_build_projected_fair_value_provider",
+                        return_value=ManifestFairValueProvider(records={}),
+                    ),
+                    patch.object(
+                        run_agent_loop,
+                        "build_current_state_read_adapter",
+                        return_value=SimpleNamespace(read_table=lambda table: {}),
                     ),
                     patch.object(
                         run_agent_loop,
@@ -208,15 +216,12 @@ class RunAgentLoopTests(unittest.TestCase):
                     patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
                 ):
                     polling_loop.return_value.run.return_value = [fake_cycle]
-
                     with patch(
                         "sys.argv",
                         [
                             "run_agent_loop.py",
                             "--venue",
                             "polymarket",
-                            "--fair-values-file",
-                            fair_values.name,
                             "--config-file",
                             config_file.name,
                             "--quiet",
@@ -231,6 +236,10 @@ class RunAgentLoopTests(unittest.TestCase):
             "configs/runtime_policy.preview.json",
         )
         self.assertEqual(polling_loop.call_args.kwargs["config"].mode, "run")
+        self.assertEqual(
+            validated_args.opportunity_root,
+            str(Path(temp_dir) / "data"),
+        )
 
     def test_main_can_apply_fair_values_and_opportunity_root_from_config_file(self):
         adapter = FakeAdapter()
@@ -314,6 +323,165 @@ class RunAgentLoopTests(unittest.TestCase):
             str(Path(temp_dir) / "data"),
         )
         self.assertEqual(build_provider.call_args.args[0], fair_values.name)
+
+    def test_build_projected_fair_value_provider_uses_current_state_tables(self):
+        adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "fair_values": {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "as_of": "2026-04-21T18:00:00+00:00",
+                        "fair_yes_prob": 0.61,
+                        "calibrated_fair_yes_prob": 0.63,
+                    }
+                },
+                "market_mappings": {
+                    "pm-1|sb-1": {
+                        "polymarket_market_id": "pm-1",
+                        "sportsbook_event_id": "sb-1",
+                        "event_key": "event-1",
+                        "sport": "nba",
+                        "series": "playoffs",
+                        "game_id": "game-1",
+                        "normalized_market_type": "moneyline_full_game",
+                        "match_confidence": 0.98,
+                        "resolution_risk": 0.05,
+                        "is_active": True,
+                    }
+                },
+                "polymarket_markets": {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "raw_json": {
+                            "conditionId": "cond-1",
+                            "tokenIds": ["token-yes", "token-no"],
+                        },
+                    }
+                },
+            }[table]
+        )
+
+        with patch.object(
+            run_agent_loop,
+            "build_current_state_read_adapter",
+            return_value=adapter,
+        ):
+            provider = run_agent_loop._build_projected_fair_value_provider(
+                SimpleNamespace(
+                    opportunity_root="runtime/data",
+                    max_fair_value_age_seconds=900.0,
+                ),
+                fair_value_field="calibrated",
+            )
+
+        self.assertIsInstance(provider, ManifestFairValueProvider)
+        if not isinstance(provider, ManifestFairValueProvider):
+            self.fail("expected manifest fair value provider")
+        self.assertEqual(provider.max_age_seconds, 900.0)
+        self.assertEqual(provider.fair_value_field, "calibrated")
+        self.assertIn("token-yes:yes", provider.records)
+        self.assertIn("token-no:no", provider.records)
+        self.assertEqual(provider.records["token-yes:yes"].condition_id, "cond-1")
+        self.assertAlmostEqual(provider.records["token-no:no"].fair_value, 0.39)
+
+    def test_build_projected_fair_value_provider_rejects_missing_probability(self):
+        adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "fair_values": {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "as_of": "2026-04-21T18:00:00+00:00",
+                    }
+                },
+                "market_mappings": {},
+                "polymarket_markets": {
+                    "pm-1": {
+                        "market_id": "pm-1",
+                        "raw_json": {
+                            "conditionId": "cond-1",
+                            "tokenIds": ["token-yes", "token-no"],
+                        },
+                    }
+                },
+            }[table]
+        )
+
+        with patch.object(
+            run_agent_loop,
+            "build_current_state_read_adapter",
+            return_value=adapter,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "missing fair_yes_prob"):
+                run_agent_loop._build_projected_fair_value_provider(
+                    SimpleNamespace(
+                        opportunity_root="runtime/data",
+                        max_fair_value_age_seconds=900.0,
+                    ),
+                    fair_value_field="raw",
+                )
+
+    def test_main_run_mode_uses_projected_fair_values_without_manifest(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+        current_state_adapter = SimpleNamespace(read_table=lambda table: {})
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=current_state_adapter,
+            ) as build_read_adapter,
+            patch.object(
+                run_agent_loop,
+                "_build_projected_fair_value_provider",
+                return_value=ManifestFairValueProvider(records={}),
+            ) as build_projected_provider,
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                side_effect=AssertionError("manifest loader should not be used"),
+            ),
+            patch.object(
+                run_agent_loop,
+                "TradingEngine",
+                return_value=fake_engine,
+            ),
+            patch.object(run_agent_loop, "AgentOrchestrator") as orchestrator_ctor,
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--mode",
+                    "run",
+                    "--opportunity-root",
+                    "runtime/data",
+                    "--quiet",
+                ],
+            ):
+                result = run_agent_loop.main()
+
+        self.assertEqual(result, 0)
+        build_projected_provider.assert_called_once()
+        build_read_adapter.assert_called()
+        provider = orchestrator_ctor.call_args.kwargs["fair_value_provider"]
+        self.assertIsInstance(provider, ManifestFairValueProvider)
 
     def test_main_can_apply_venue_from_config_file(self):
         adapter = FakeAdapter()
@@ -797,8 +965,13 @@ class RunAgentLoopTests(unittest.TestCase):
             patch.object(run_agent_loop, "validate_runtime"),
             patch.object(
                 run_agent_loop,
-                "build_fair_value_provider",
-                return_value=SimpleNamespace(),
+                "_build_projected_fair_value_provider",
+                return_value=ManifestFairValueProvider(records={}),
+            ),
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=SimpleNamespace(read_table=lambda table: {}),
             ),
             patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
             patch.object(run_agent_loop, "AgentOrchestrator"),
@@ -812,10 +985,10 @@ class RunAgentLoopTests(unittest.TestCase):
                     "run_agent_loop.py",
                     "--venue",
                     "polymarket",
-                    "--fair-values-file",
-                    "runtime/fair-values.json",
                     "--mode",
                     "pair-run",
+                    "--opportunity-root",
+                    "runtime/data",
                     "--quantity",
                     "2.5",
                     "--quiet",

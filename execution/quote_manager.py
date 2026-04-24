@@ -52,19 +52,29 @@ class QuoteManager:
     ) -> OrderIntent:
         self._validate_proposal(contract, proposal)
         action = self._proposal_action(contract, proposal)
-        return OrderIntent(
-            contract=contract,
-            action=action,
-            price=proposal.price,
-            quantity=proposal.size,
-            metadata={
+        metadata = dict(proposal.metadata)
+        metadata.update(
+            {
                 "source": "quote_manager",
                 "proposal_market_id": proposal.market_id,
                 "proposal_side": proposal.side,
                 "proposal_action": proposal.action,
                 "tif": proposal.tif,
                 "rationale": proposal.rationale,
-            },
+                "post_only": proposal.post_only,
+                "reduce_only": proposal.reduce_only,
+                "expiration_ts": proposal.expiration_ts,
+            }
+        )
+        return OrderIntent(
+            contract=contract,
+            action=action,
+            price=proposal.price,
+            quantity=proposal.size,
+            post_only=proposal.post_only,
+            reduce_only=proposal.reduce_only,
+            expiration_ts=proposal.expiration_ts,
+            metadata=metadata,
         )
 
     def plan_quote(

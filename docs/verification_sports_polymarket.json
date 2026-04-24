@@ -5,7 +5,7 @@
   },
   "full_suite": {
     "command": "uv run --locked --extra research --extra postgres --extra polymarket python -m unittest discover -s tests -p \"test_*.py\"",
-    "result": "Ran 633 tests in 4.751s\n\nOK (skipped=1)"
+    "result": "Ran 650 tests in 7.671s\n\nOK (skipped=1)"
   },
   "docker_build": {
     "command": "docker build -t prediction-market-agent .",
@@ -43,13 +43,16 @@
       }
     },
     "live_current_state_build_fair_values": {
-      "command": "python -m scripts.train_models --model consensus --output <consensus_artifact.json> && python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> && python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root> && python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json> && python -m scripts.ingest_live_data build-opportunities --root <runtime_root> && python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>",
+      "command": "python -m scripts.train_models --model consensus --output <consensus_artifact.json> && python -m scripts.run_sportsbook_capture --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> --max-cycles 1 && python -m scripts.run_polymarket_capture market --asset-id <asset-id> --root <runtime_root> --max-sessions 1 && python -m scripts.run_current_projection --root <runtime_root> --max-cycles 1 && python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root> && python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json> && python -m scripts.ingest_live_data build-opportunities --root <runtime_root> && python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>",
       "observed": {
+        "sanctioned_capture_worker_path_used": true,
+        "current_projection_worker_used": true,
         "event_map_file_supported": true,
         "consensus_artifact_supported": true,
         "fair_values_source_health_status": "ok",
         "missing_identity_blocked": true,
         "build_opportunities_materialized": true,
+        "legacy_ingest_live_capture_paths_retired": true,
         "joined_inference_dataset_written": true,
         "joined_inference_dataset_registered": true
       }

@@ -257,9 +257,9 @@ class PairArbitrageTests(unittest.TestCase):
                 for item in orchestrator.engine.recovery_items(open_only=True)
             )
         )
-        self.assertEqual(adapter.global_snapshot_calls, 2)
-        self.assertEqual(adapter.contract_snapshot_calls, 1)
-        self.assertEqual(adapter.order_book_calls, 1)
+        self.assertEqual(adapter.global_snapshot_calls, 3)
+        self.assertEqual(adapter.contract_snapshot_calls, 5)
+        self.assertEqual(adapter.order_book_calls, 3)
 
     def test_run_best_pair_halts_when_second_leg_fails(self):
         adapter = PairArbAdapter(second_leg_accepts=False)

@@ -62,3 +62,18 @@ The diagrams are grounded in these implementation files:
 When behavior and diagrams disagree, **the code and tests win**.
 
 For live operator decisions under pressure, pair this diagram set with the quick reference in `docs/OPERATOR_RUNBOOK.md`.
+
+## Rendering workflow
+
+The canonical regeneration command is:
+
+```bash
+python3 scripts/render_diagrams.py
+```
+
+That script uses a pinned Mermaid CLI version and rewrites the checked-in generated artifacts in this folder:
+
+- `docs/diagrams/rendered/*.svg`
+- `docs/diagrams/RENDERED.md`
+
+Those files are versioned documentation artifacts in this repository, not throwaway local build output. When a diagram source changes, rerender and commit the generated artifacts together so reviewers can compare the Markdown source and the rendered output in the same change.

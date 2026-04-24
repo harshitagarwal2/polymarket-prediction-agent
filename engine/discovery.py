@@ -12,6 +12,7 @@ from adapters.types import (
     Contract,
     OrderAction,
     OrderIntent,
+    OutcomeSide,
     PlacementResult,
 )
 from forecasting.fair_value_engine import (
@@ -29,6 +30,8 @@ from opportunity.ranker import (
 from engine.contract_rules import ContractRuleFreezePolicy, contract_freeze_reasons
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.runner import EngineRunResult, TradingEngine
+from execution.models import OrderProposal
+from execution.quote_manager import QuoteManager
 from storage.journal import EventJournal
 from risk.limits import RiskDecision
 
@@ -660,6 +663,7 @@ class ScanCycleResult:
     policy_reasons: list[str] = field(default_factory=list)
     skipped_candidates: list[dict[str, object]] = field(default_factory=list)
     gate_trace: list[dict[str, object]] = field(default_factory=list)
+    shadow_quote_plan: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -1055,6 +1059,7 @@ class AgentOrchestrator:
                 "policy_reasons": cycle.policy_reasons,
                 "skipped_candidates": cycle.skipped_candidates,
                 "gate_trace": cycle.gate_trace,
+                "shadow_quote_plan": cycle.shadow_quote_plan,
                 "blocking_gate": self._last_blocking_gate(cycle),
                 "cycle_metrics": self._cycle_metrics(cycle),
                 **self._status_payload(),
@@ -1183,6 +1188,70 @@ class AgentOrchestrator:
             "candidate_rationale": candidate.rationale,
             "scanner_action": candidate.action.value,
         }
+
+    def _shadow_quote_side(self, contract: Contract, action: OrderAction) -> str:
+        if contract.outcome is OutcomeSide.YES:
+            return "buy_yes" if action is OrderAction.BUY else "sell_yes"
+        if contract.outcome is OutcomeSide.NO:
+            return "buy_no" if action is OrderAction.BUY else "sell_no"
+        raise ValueError("shadow quote plan requires a binary contract outcome")
+
+    def _shadow_order_proposal(
+        self,
+        candidate: OpportunityCandidate,
+        preview: EngineRunResult,
+    ) -> OrderProposal | None:
+        approved_intents = preview.risk.approved
+        if not approved_intents:
+            return None
+        intent = approved_intents[0]
+        return OrderProposal(
+            market_id=intent.contract.symbol,
+            side=self._shadow_quote_side(intent.contract, intent.action),
+            action="place",
+            price=intent.price,
+            size=intent.quantity,
+            tif="GTC",
+            rationale=candidate.rationale,
+            post_only=intent.post_only,
+            reduce_only=intent.reduce_only,
+            expiration_ts=intent.expiration_ts,
+        )
+
+    def _shadow_quote_plan_payload(
+        self,
+        candidate: OpportunityCandidate,
+        preview: EngineRunResult,
+    ) -> dict[str, object] | None:
+        proposal = self._shadow_order_proposal(candidate, preview)
+        if proposal is None:
+            return None
+        plan = QuoteManager(self.engine).plan_quote(
+            candidate.contract,
+            proposal,
+            open_orders=preview.context.open_orders,
+        )
+        payload: dict[str, object] = {
+            "contract_key": candidate.contract.market_key,
+            "action": plan.action,
+            "rationale": plan.rationale,
+            "proposal": {
+                "market_id": proposal.market_id,
+                "side": proposal.side,
+                "price": proposal.price,
+                "size": proposal.size,
+            },
+            "cancel_order_ids": [order.order_id for order in plan.cancel_orders],
+            "existing_order_ids": [order.order_id for order in plan.existing_orders],
+        }
+        if plan.submit_intent is not None:
+            payload["submit_intent"] = {
+                "market_key": plan.submit_intent.contract.market_key,
+                "action": plan.submit_intent.action.value,
+                "price": plan.submit_intent.price,
+                "quantity": plan.submit_intent.quantity,
+            }
+        return payload
 
     def _record_skipped_candidate(
         self,
@@ -1339,6 +1408,10 @@ class AgentOrchestrator:
             cycle.execution = preview
             cycle.policy_allowed = True
             cycle.policy_reasons = []
+            cycle.shadow_quote_plan = self._shadow_quote_plan_payload(
+                candidate,
+                preview,
+            )
             return candidate, preview_metadata
 
         return None
@@ -1358,21 +1431,34 @@ class AgentOrchestrator:
         selection = self._select_executable_candidate(cycle)
         if selection is not None and cycle.execution is not None:
             candidate, _preview_metadata = selection
-            cycle.execution = self.engine.run_precomputed(cycle.execution)
-            if not cycle.execution.risk.approved and cycle.execution.risk.rejected:
+            quote_proposal = self._shadow_order_proposal(candidate, cycle.execution)
+            quote_result = QuoteManager(self.engine).sync_quote(
+                candidate.contract,
+                quote_proposal,
+                open_orders=cycle.execution.context.open_orders,
+                reason="runtime execution shell",
+                metadata={
+                    "execution_shell_mode": "runtime",
+                    "candidate_market_key": candidate.contract.market_key,
+                },
+            )
+            cycle.execution = quote_result.execution or cycle.execution
+            if quote_result.execution is not None and (
+                not cycle.execution.risk.approved and cycle.execution.risk.rejected
+            ):
                 cycle.policy_allowed = False
                 cycle.policy_reasons = self._execution_rejection_reasons(
                     cycle.execution
                 )
-            if any(placement.accepted for placement in cycle.execution.placements):
+            placements = quote_result.placements
+            if any(placement.accepted for placement in placements):
                 self.policy_gate.record_execution(candidate)
-            placements = cycle.execution.placements
             accepted_count = sum(1 for placement in placements if placement.accepted)
             self._record_gate_trace(
                 cycle,
                 candidate,
-                stage="placement",
-                allowed=accepted_count > 0,
+                stage="execution_shell",
+                allowed=quote_result.action in {"place", "replace", "keep"},
                 reasons=list(
                     dict.fromkeys(
                         [
@@ -1383,6 +1469,7 @@ class AgentOrchestrator:
                     )
                 ),
                 metadata={
+                    "execution_shell_action": quote_result.action,
                     "placement_count": len(placements),
                     "accepted_count": accepted_count,
                     "order_ids": [
@@ -1430,6 +1517,26 @@ class AgentOrchestrator:
                 metadata={**metadata, "pair_leg": "no"},
             ),
         ]
+
+    def _proposal_from_intent(
+        self,
+        intent: OrderIntent,
+        *,
+        rationale: str,
+    ) -> OrderProposal:
+        return OrderProposal(
+            market_id=intent.contract.symbol,
+            side=self._shadow_quote_side(intent.contract, intent.action),
+            action="place",
+            price=intent.price,
+            size=intent.quantity,
+            tif="GTC",
+            rationale=rationale,
+            post_only=intent.post_only,
+            reduce_only=intent.reduce_only,
+            expiration_ts=intent.expiration_ts,
+            metadata=dict(intent.metadata),
+        )
 
     def _pair_preview_metadata(
         self, candidate: PairOpportunityCandidate, *, quantity: float
@@ -1481,14 +1588,55 @@ class AgentOrchestrator:
         if not cycle.policy_allowed:
             return cycle
 
-        execution = self.engine.run_precomputed(cycle.execution)
-        cycle.execution = execution
-        cycle.intents = list(execution.proposed)
-        cycle.risk = execution.risk
-        cycle.placements = execution.placements
-        if not execution.risk.approved and execution.risk.rejected:
+        approved_intents = list(cycle.execution.risk.approved)
+        expected_leg_count = len(approved_intents)
+        quote_manager = QuoteManager(self.engine)
+        placement_results: list[PlacementResult] = []
+        latest_execution = cycle.execution
+
+        for intent in approved_intents:
+            proposal = self._proposal_from_intent(
+                intent,
+                rationale=cycle.selected.rationale,
+            )
+            quote_result = quote_manager.sync_quote(
+                intent.contract,
+                proposal,
+                reason="paired arbitrage execution shell",
+                metadata={
+                    "pair_market_key": cycle.selected.market_key,
+                    **(intent.metadata if isinstance(intent.metadata, dict) else {}),
+                },
+            )
+            placement_results.extend(quote_result.placements)
+            if quote_result.execution is not None:
+                latest_execution = quote_result.execution
+                if (
+                    any(placement.accepted for placement in placement_results)
+                    and not latest_execution.risk.approved
+                    and latest_execution.risk.rejected
+                ):
+                    self.engine.halt(
+                        "paired arbitrage execution left partial exposure; operator intervention required",
+                        cycle.selected.yes_contract,
+                    )
+                    cycle.execution = latest_execution
+                    cycle.intents = list(latest_execution.proposed)
+                    cycle.risk = latest_execution.risk
+                    cycle.placements = placement_results
+                    cycle.policy_allowed = False
+                    cycle.policy_reasons = self._execution_rejection_reasons(
+                        latest_execution
+                    )
+                    return cycle
+
+        cycle.execution = latest_execution
+        cycle.intents = list(latest_execution.proposed)
+        cycle.risk = latest_execution.risk
+        cycle.placements = placement_results
+        if not latest_execution.risk.approved and latest_execution.risk.rejected:
             cycle.policy_allowed = False
-            cycle.policy_reasons = self._execution_rejection_reasons(execution)
+            cycle.policy_reasons = self._execution_rejection_reasons(latest_execution)
             return cycle
         accepted_count = sum(1 for placement in cycle.placements if placement.accepted)
         if accepted_count != len(cycle.placements):
@@ -1503,7 +1651,7 @@ class AgentOrchestrator:
                 )
             )
 
-        if accepted_count and accepted_count != len(cycle.risk.approved):
+        if accepted_count and accepted_count != expected_leg_count:
             self.engine.halt(
                 "paired arbitrage execution left partial exposure; operator intervention required",
                 cycle.selected.yes_contract,

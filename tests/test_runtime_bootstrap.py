@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
 from engine import runtime_bootstrap
@@ -15,6 +16,14 @@ class RuntimeBootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
             with (
+                patch.dict(
+                    "os.environ",
+                    {
+                        "PREDICTION_MARKET_POSTGRES_DSN": "",
+                        "POSTGRES_DSN": "",
+                        "DATABASE_URL": "",
+                    },
+                ),
                 patch.object(
                     runtime_bootstrap.FileCurrentStateReadAdapter,
                     "from_opportunity_root",
@@ -106,6 +115,27 @@ class RuntimeBootstrapTests(unittest.TestCase):
 
 
 class RunAgentLoopPostgresAuthorityTests(unittest.TestCase):
+    def test_validate_runtime_requires_opportunity_root_for_live_modes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            journal = Path(temp_dir) / "runtime" / "events.jsonl"
+            state = Path(temp_dir) / "runtime" / "safety-state.json"
+            args = SimpleNamespace(
+                venue="polymarket",
+                fair_values_file=None,
+                policy_file=None,
+                journal=str(journal),
+                state_file=str(state),
+                mode="run",
+                opportunity_root=None,
+            )
+
+            with patch.dict("os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=True):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "opportunity root must be provided",
+                ):
+                    run_agent_loop.validate_runtime(args)
+
     def test_validate_runtime_requires_postgres_for_live_mode_with_opportunity_root(
         self,
     ):
@@ -128,6 +158,77 @@ class RunAgentLoopPostgresAuthorityTests(unittest.TestCase):
                     "runtime projected current-state reads requires Postgres authority",
                 ):
                     run_agent_loop.validate_runtime(args)
+
+    def test_validate_runtime_allows_missing_fair_values_file_for_live_mode_with_postgres(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            journal = Path(temp_dir) / "runtime" / "events.jsonl"
+            state = Path(temp_dir) / "runtime" / "safety-state.json"
+            args = SimpleNamespace(
+                venue="polymarket",
+                fair_values_file=None,
+                policy_file=None,
+                journal=str(journal),
+                state_file=str(state),
+                mode="run",
+                opportunity_root=str(Path(temp_dir) / "data"),
+            )
+
+            with (
+                patch.dict("os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=True),
+                patch.object(
+                    run_agent_loop,
+                    "build_current_state_read_adapter",
+                    return_value=object(),
+                ),
+            ):
+                run_agent_loop.validate_runtime(args)
+
+    def test_build_adapter_derives_polymarket_live_user_markets_from_projected_state(
+        self,
+    ):
+        adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "pm-1": {"market_id": "pm-1"},
+                "pm-2": {"market_id": "pm-2"},
+            }
+            if table == "fair_values"
+            else {
+                "pm-1": {
+                    "market_id": "pm-1",
+                    "raw_json": {"conditionId": "cond-1"},
+                },
+                "pm-2": {
+                    "market_id": "pm-2",
+                    "raw_json": {"conditionId": "cond-2"},
+                },
+            }
+            if table == "polymarket_markets"
+            else {}
+        )
+
+        args = SimpleNamespace(
+            fair_values_file=None,
+            polymarket_live_user_markets=None,
+            polymarket_user_ws_host=None,
+            mode="run",
+            opportunity_root="runtime/data",
+        )
+
+        with (
+            patch.dict("os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=False),
+            patch.object(
+                runtime_bootstrap,
+                "build_current_state_read_adapter",
+                return_value=adapter,
+            ),
+        ):
+            built = runtime_bootstrap.build_adapter("polymarket", args)
+
+        self.assertEqual(
+            cast(Any, built).config.live_user_markets, ["cond-1", "cond-2"]
+        )
 
     def test_validate_runtime_keeps_preview_mode_file_backed_when_postgres_is_absent(
         self,

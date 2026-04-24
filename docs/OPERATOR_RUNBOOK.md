@@ -35,7 +35,9 @@ For the live data plane, Postgres plus projected current-state tables are author
 
 Do not treat selector-facing current JSON as capture-worker authority. When a DSN marker exists, runtime and ingest readers use the projected Postgres-backed read boundary first.
 
-For Polymarket live capture, use `run-polymarket-capture`. The legacy live `polymarket-bbo` path is deprecated and is not the supported production path.
+The sanctioned-entrypoint and reconciliation contract for this wave lives in [`docs/adr/authority-and-reconciliation.md`](adr/authority-and-reconciliation.md).
+
+For Polymarket live capture, use `run-polymarket-capture`, and for sportsbook live capture use `run-sportsbook-capture`. The legacy live `polymarket-markets`, `sportsbook-odds`, and `polymarket-bbo` subcommands on `ingest-live-data` are deprecated and are not the supported production path.
 
 ## Quick reference
 
@@ -146,7 +148,7 @@ Only after stage 2 is stable and well understood:
 run-agent-loop \
   --venue polymarket \
   --mode run \
-  --fair-values-file runtime/data/current/fair_value_manifest.json \
+  --opportunity-root runtime/data \
   --max-fair-value-age-seconds 900 \
   --interval-seconds 15 \
   --max-cycles 10
@@ -188,6 +190,7 @@ Before any continuous run:
 - `runtime/data/current/fair_value_manifest.json` exists
 - if you just ran `build-mappings`, `runtime/data/current/market_mappings.json` should exist for runtime selection and `runtime/data/current/market_mapping_manifest.json` should exist for structured mapping review/debugging
 - if you are using the research dataset builders, `runtime/data/processed/inference/joined_inference_dataset.jsonl` and/or `runtime/data/processed/training/historical_training_dataset.jsonl` should exist, with matching versioned snapshots under `runtime/data/datasets`
+- for `run` or `pair-run`, `--opportunity-root` must point at a Postgres-backed projected current-state root; those serious modes no longer depend on `--fair-values-file`
 - chosen state file path exists or can be created
 - chosen journal path exists or can be created
 - required venue credentials are present
@@ -215,11 +218,11 @@ For Polymarket run mode:
 
 - `POLYMARKET_PRIVATE_KEY` must be present
 - optional `POLYMARKET_FUNDER` and `POLYMARKET_ACCOUNT_ADDRESS` can be set when needed
-- live user-stream condition IDs are derived from the configured fair-value manifest when available
+- live user-stream condition IDs are derived from projected fair-value coverage plus current market metadata when `run`/`pair-run` uses `--opportunity-root`, or from the configured fair-value manifest in preview-only flows
 - optional `POLYMARKET_LIVE_USER_MARKETS` can override those derived condition IDs when you need to pin the user stream manually
 - optional `POLYMARKET_USER_WS_HOST` can override the default user websocket endpoint
 
-`run-agent-loop` fails fast when the fair-values file, policy file, or required credentials are missing.
+`run-agent-loop` fails fast when the policy file or required credentials are missing, and preview modes still fail fast when the fair-values file is missing.
 
 If a DSN marker is present, treat the projected Postgres-backed read boundary as authoritative even if older compatibility files still exist under `runtime/data/current/`.
 

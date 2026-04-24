@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from adapters.types import Contract, NormalizedOrder, OrderIntent
 
@@ -14,6 +15,10 @@ class OrderProposal:
     size: float
     tif: str
     rationale: str
+    post_only: bool = False
+    reduce_only: bool = False
+    expiration_ts: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

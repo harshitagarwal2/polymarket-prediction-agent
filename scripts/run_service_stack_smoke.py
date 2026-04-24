@@ -25,6 +25,13 @@ from storage.postgres.bootstrap import write_dsn_marker
 
 
 _DUMMY_POLYMARKET_PRIVATE_KEY = "0x" + "1" * 64
+_REQUIRED_READY_SOURCES = (
+    "projection_sportsbook_odds",
+    "projection_polymarket_market_catalog",
+    "projection_polymarket_market_channel",
+    "market_mappings",
+    "fair_values",
+)
 
 
 class _StaticOddsClient:
@@ -61,11 +68,61 @@ class _StaticCatalogClient:
             {
                 "id": "pm-1",
                 "conditionId": "pm-1",
+                "eventKey": "event-1",
+                "gameId": "game-1",
+                "sport": "nba",
+                "series": "playoffs",
+                "sportsMarketType": "moneyline",
+                "gameStartTime": "2026-05-21T20:00:00+00:00",
                 "question": "Will Home Team beat Away Team?",
                 "active": True,
                 "tokenIds": ["yes-token", "no-token"],
             }
         ]
+
+
+def _read_current_json(root: Path, name: str) -> dict[str, object]:
+    path = root / "current" / f"{name}.json"
+    if not path.exists():
+        raise RuntimeError(f"missing current-state table after smoke: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"current-state table is not a JSON object: {path}")
+    return payload
+
+
+def _build_readiness_summary(root: Path) -> dict[str, object]:
+    source_health = _read_current_json(root, "source_health")
+    ready_sources: dict[str, str] = {}
+    for source_name in _REQUIRED_READY_SOURCES:
+        record = source_health.get(source_name)
+        if not isinstance(record, dict):
+            raise RuntimeError(f"missing source health row after smoke: {source_name}")
+        status = str(record.get("status") or "")
+        if status != "ok":
+            raise RuntimeError(
+                f"source health not ready after smoke: {source_name}={status}"
+            )
+        ready_sources[source_name] = status
+
+    mapping_rows = _read_current_json(root, "market_mappings")
+    fair_value_rows = _read_current_json(root, "fair_values")
+    opportunity_rows = _read_current_json(root, "opportunities")
+    if not mapping_rows:
+        raise RuntimeError("market_mappings current-state table is empty after smoke")
+    if not fair_value_rows:
+        raise RuntimeError("fair_values current-state table is empty after smoke")
+    if not opportunity_rows:
+        raise RuntimeError("opportunities current-state table is empty after smoke")
+
+    return {
+        "source_health": ready_sources,
+        "counts": {
+            "market_mappings": len(mapping_rows),
+            "fair_values": len(fair_value_rows),
+            "opportunities": len(opportunity_rows),
+        },
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -141,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ingest_live_data.main(["build-fair-values", "--root", str(root), "--quiet"])
     ingest_live_data.main(["build-opportunities", "--root", str(root), "--quiet"])
+    readiness = _build_readiness_summary(root)
     runtime_process = subprocess.run(
         [
             sys.executable,
@@ -175,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
             "ok": True,
             "capture": capture_payload,
             "projection": projection_payload,
+            "readiness": readiness,
             "runtime": runtime_payload,
             "root": str(root),
         },
