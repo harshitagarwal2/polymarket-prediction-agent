@@ -37,11 +37,21 @@ def get_json(
     client: Any | None = None,
     follow_redirects: bool = True,
 ) -> Any:
-    httpx = _httpx()
     merged_headers = _request_headers(headers)
+    if client is not None:
+        response = client.get(
+            url,
+            params=params,
+            headers=merged_headers,
+            timeout=max(0.1, float(timeout_seconds)),
+            follow_redirects=follow_redirects,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    httpx = _httpx()
     if httpx is not None:
-        request = client.get if client is not None else httpx.get
-        response = request(
+        response = httpx.get(
             url,
             params=params,
             headers=merged_headers,

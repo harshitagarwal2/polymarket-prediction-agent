@@ -14,8 +14,14 @@ class RepositoryHardeningTests(unittest.TestCase):
             ".pre-commit-config.yaml",
             ".github/CODEOWNERS",
             ".github/dependabot.yml",
+            ".github/ISSUE_TEMPLATE/bug_report.yml",
+            ".github/ISSUE_TEMPLATE/feature_request.yml",
+            ".github/ISSUE_TEMPLATE/config.yml",
+            ".github/PULL_REQUEST_TEMPLATE.md",
             ".github/workflows/security.yml",
             ".github/workflows/release-artifacts.yml",
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.md",
             "SECURITY.md",
         ):
             with self.subTest(relative_path=relative_path):
@@ -25,6 +31,7 @@ class RepositoryHardeningTests(unittest.TestCase):
         text = (REPO_ROOT / ".github" / "dependabot.yml").read_text()
         self.assertIn("package-ecosystem: github-actions", text)
         self.assertIn("package-ecosystem: uv", text)
+        self.assertNotIn("labels:", text)
 
     def test_release_workflow_uses_locked_non_isolated_build(self):
         text = (
@@ -92,6 +99,20 @@ class RepositoryHardeningTests(unittest.TestCase):
     def test_compose_postgres_is_bound_to_localhost(self):
         text = (REPO_ROOT / "docker-compose.yml").read_text()
         self.assertIn('"127.0.0.1:5432:5432"', text)
+
+    def test_readme_links_community_docs(self):
+        text = (REPO_ROOT / "README.md").read_text()
+        self.assertIn("CONTRIBUTING.md", text)
+        self.assertIn("CODE_OF_CONDUCT.md", text)
+
+    def test_issue_template_and_pr_template_contracts_exist(self):
+        issue_config = (
+            REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml"
+        ).read_text()
+        pr_template = (REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text()
+        self.assertIn("Security policy", issue_config)
+        self.assertIn("Contribution guide", issue_config)
+        self.assertIn("## Summary", pr_template)
 
 
 if __name__ == "__main__":

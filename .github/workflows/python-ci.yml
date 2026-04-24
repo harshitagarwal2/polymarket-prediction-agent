@@ -136,11 +136,10 @@ jobs:
 
       - name: Run Postgres-backed smoke tests
         run: >-
-          uv run python -m unittest
-          tests.test_postgres_storage
-          tests.test_runtime_bootstrap
-          tests.test_sportsbook_capture_worker
-          tests.test_current_projection_worker
+          uv run python -m unittest discover -s tests -p "test_postgres_storage.py" &&
+          uv run python -m unittest discover -s tests -p "test_runtime_bootstrap.py" &&
+          uv run python -m unittest discover -s tests -p "test_sportsbook_capture_worker.py" &&
+          uv run python -m unittest discover -s tests -p "test_current_projection_worker.py"
 
   service-stack-smoke:
     runs-on: ubuntu-latest

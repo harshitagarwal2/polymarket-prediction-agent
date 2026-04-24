@@ -329,6 +329,30 @@ operator-cli force-refresh --state-file runtime/safety-state.json --reason "oper
 operator-cli resume --venue polymarket --symbol <token-id> --outcome yes --state-file runtime/safety-state.json
 ```
 
+### Sync a supervised quote shell
+
+Use `sync-quote` when you want the operator shell to cancel, replace, amend, or place one contract quote through the same supervised execution helpers that back the runtime-facing order shell.
+
+```bash
+operator-cli sync-quote \
+  --venue polymarket \
+  --symbol <token-id> \
+  --outcome yes \
+  --side buy_yes \
+  --action place \
+  --price 0.54 \
+  --quantity 5 \
+  --tif GTC \
+  --rationale "operator quote sync"
+```
+
+Operationally important points:
+
+- this is a **supervised shell**, not a bypass around runtime safety posture
+- it uses the execution helpers in `execution/quote_manager.py` and `execution/cancel_replace.py`
+- it is useful for controlled operator intervention when you want to align one quote with current intent without restarting the full runtime loop
+- the command journals the action through `operator_sync_quote`, so incident review can see what changed and why
+
 ### Emergency cleanup
 
 ```bash
@@ -376,6 +400,7 @@ The system may still:
 - refresh account truth
 - observe overlay state
 - cancel stale orders
+- run supervised quote-shell cleanup or replacement actions initiated explicitly by the operator
 - write journal events
 
 That is intentional. The design tries to stop new risk without blinding the operator.

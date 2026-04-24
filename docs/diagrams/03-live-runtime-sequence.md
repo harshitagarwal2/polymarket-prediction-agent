@@ -1,53 +1,46 @@
 # 03 — Live Runtime Sequence
 
-This diagram answers: **what happens during one live decision cycle?**
+This diagram answers: **what happens during one supervised `run-agent-loop` cycle?**
 
 ```mermaid
 sequenceDiagram
     participant O as Operator
+    participant CLI as run-agent-loop
+    participant B as runtime_bootstrap
+    participant A as Venue adapter
+    participant F as FairValueProvider
+    participant D as AgentOrchestrator
     participant E as TradingEngine
-    participant A as Adapter
-    participant C as AccountStateCache / OrderState
-    participant S as Strategy
-    participant R as RiskEngine
-    participant Q as ReconciliationEngine
+    participant G as PolicyGate + RiskEngine
+    participant J as Safety state / journal
 
-    O->>E: run_once(contract, fair_value)
-    E->>A: get_account_snapshot(contract)
-    A-->>E: AccountSnapshot
-    E->>C: sync snapshot into local caches
-    E->>A: get_order_book(contract)
-    A-->>E: OrderBookSnapshot
-    E->>Q: reconcile(contract)
-    Q-->>E: reconciliation_before
-    E->>S: generate_intents(context)
-    S-->>E: proposed intents
-    E->>R: evaluate(intents, position, open_orders)
-    R-->>E: approved / rejected
+    O->>CLI: start preview/run cycle
+    CLI->>B: load config, policy, adapter, current-state authority
+    B-->>CLI: adapter + fair value provider + kill-switch context
+    CLI->>A: list_markets()
+    A-->>CLI: live market summaries
+    CLI->>F: fair_value_for(market)
+    F-->>CLI: raw or calibrated fair values
+    CLI->>D: rank candidates
+    D->>E: preview_once(candidate)
+    E-->>D: preview context + reconciliation_before
+    D->>D: deterministic size()
+    D->>E: review_precomputed(preview)
+    E-->>D: approved / rejected intents
+    D->>G: execution policy + shared risk checks
+    G-->>D: allow or reject
 
-    alt engine halted
-        E-->>O: reject all trading
-    else snapshot incomplete
-        E-->>O: fail closed, no order placement
-    else safe to trade
-        loop approved intents
-            E->>A: place_limit_order(intent)
-            A-->>E: placement result
-            E->>C: record submitted order locally
-        end
-        E->>A: get_account_snapshot(contract)
-        A-->>E: fresh observed snapshot
-        E->>Q: reconcile(contract, observed_snapshot)
-        Q-->>E: reconciliation_after + policy
-        E->>C: sync observed snapshot
-        alt severe drift
-            E-->>O: latch safety halt
-        else ok/resync only
-            E-->>O: return result
-        end
+    alt preview mode
+        D-->>O: journal preview outcome only
+    else run mode
+        D->>E: run_precomputed()
+        E->>A: place/cancel/refresh as needed
+        A-->>E: venue truth and placement results
+        E->>J: persist safety state + events + runtime metrics
+        E-->>O: cycle result
     end
 ```
 
 ## Key design point
 
-The engine does **not** trust local memory first. It restores from venue truth first, then decides.
+The runtime still makes decisions from **live adapter state plus a fair-value provider**. The projected current-state substrate supports kill-switch context, builder workflows, and operator-side preview artifacts, but it does not replace the supervised runtime loop itself.

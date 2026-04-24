@@ -1,35 +1,32 @@
-# 05 — Research, Paper Execution, and Replay Loop
+# 05 — Research, Training, Paper Execution, and Replay Loop
 
-This diagram answers: **how do you improve the bot without using real money?**
+This diagram answers: **how do you improve the system without using real money?**
 
 ```mermaid
 flowchart LR
-    step[ReplayStep\nbook + fair_value + metadata]
-    broker[PaperBroker\npositions • resting orders • reserved cash]
-    context[StrategyContext]
-    strategy[Strategy\nFairValueBandStrategy]
-    risk[RiskEngine]
-    submit[submit_intents]
-    trades[PaperTrade events\nexecution-ledger rows]
-    nextstep[Next snapshot / step]
-    result[ReplayResult\nending cash + positions + events + execution_ledger]
+    capture[Captured sports / Polymarket inputs]
+    datasets[Dataset materialization\njoined-inference-dataset\nhistorical-training-dataset]
+    train[train-models\nconsensus • elo • bt • blend]
+    fairvalues[research / forecasting fair values]
+    benchmark[benchmark runner / suite]
+    paper[PaperBroker + replay]
+    attribution[run-replay-attribution\nexecution-label / attribution artifacts]
+    iterate[Model + policy iteration]
 
-    step --> broker
-    broker --> context
-    step --> context
-    context --> strategy
-    strategy --> risk
-    risk --> submit
-    submit --> broker
-    broker --> trades
-    trades --> nextstep
-    nextstep --> step
-    trades --> result
+    capture --> datasets
+    datasets --> train
+    train --> fairvalues
+    fairvalues --> benchmark
+    fairvalues --> paper
+    benchmark --> attribution
+    paper --> attribution
+    attribution --> iterate
+    iterate --> train
 ```
 
 ## Reality knobs in paper execution
 
-The paper broker already supports a few realism controls:
+The paper broker and replay path already support realism controls such as:
 
 - resting orders
 - partial fills
@@ -41,6 +38,4 @@ The paper broker already supports a few realism controls:
 - `stale_after_steps`
 - `price_move_bps_per_step`
 
-The replay result now feeds post-replay execution metrics and attribution summaries from those execution-ledger rows rather than re-deriving everything from strategy events alone.
-
-This loop is how you should develop strategy changes **before** touching live capital.
+The replay result now feeds attribution and execution-label outputs rather than leaving replay as only a single summary metric.

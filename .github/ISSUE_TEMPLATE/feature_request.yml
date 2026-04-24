@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest an improvement to the research, runtime, docs, or contributor workflow.
+title: "[Feature] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please describe the user, operator, or maintainer problem first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: The current workflow makes it hard to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you would like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. What other approaches did you consider?
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impacted area
+      description: Research, runtime, capture, projection, docs, CI, community workflow, or other.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and pull requests first.
+          required: true
+        - label: This request does not depend on posting secrets or private account data.
+          required: true

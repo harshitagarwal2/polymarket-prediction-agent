@@ -6,24 +6,31 @@ Machine-readable companion artifact: `docs/verification_sports_polymarket.json`
 
 ## Focused automated checks
 
-Command:
+Command sequence:
 
 ```bash
-python -m unittest \
-  tests.test_polymarket_capture_worker \
-  tests.test_current_projection_worker \
-  tests.test_ingest_live_data \
-  tests.test_postgres_storage \
-  tests.test_sportsbook_capture_worker \
-  tests.test_sportsbook_json_feed_provider \
-  tests.test_docs_sync \
-  tests.test_console_script_entrypoints
+set -euo pipefail
+for pattern in \
+  test_polymarket_capture_worker.py \
+  test_current_projection_worker.py \
+  test_ingest_live_data.py \
+  test_postgres_storage.py \
+  test_sportsbook_capture_worker.py \
+  test_sportsbook_json_feed_provider.py \
+  test_docs_sync.py \
+  test_console_script_entrypoints.py
+do
+  uv run --locked --extra research --extra postgres --extra polymarket \
+    python -m unittest discover -s tests -p "$pattern"
+done
 ```
 
 Observed result:
 
 ```text
-Ran 95 tests in 2.225s
+Aggregate across the discovery sequence:
+
+Ran 97 tests in 2.032s
 
 OK (skipped=1)
 ```
@@ -39,10 +46,22 @@ uv run --locked --extra research --extra postgres --extra polymarket python -m u
 Observed result:
 
 ```text
-Ran 624 tests in 4.897s
+Ran 633 tests in 4.751s
 
 OK (skipped=1)
 ```
+
+## Automated / CI-equivalent smoke — runtime image build
+
+Command:
+
+```bash
+docker build -t prediction-market-agent .
+```
+
+Observed behavior:
+
+- the runtime-capable image builds successfully with the checked-in extras and scripts
 
 ## Automated / CI-equivalent smoke — deterministic service stack
 
@@ -98,8 +117,6 @@ Observed output excerpt:
   "source": "sportsbook-devig:multiplicative:best-line"
 }
 ```
-
-## Manual QA — live current-state fair-value build with consensus artifact
 
 ## Manual QA — dedicated sportsbook capture worker
 
@@ -166,6 +183,7 @@ python -m scripts.train_models --model consensus --output <consensus_artifact.js
 python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root>
 python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root>
 python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json>
+python -m scripts.ingest_live_data build-opportunities --root <runtime_root>
 python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>
 ```
 
@@ -175,6 +193,7 @@ Observed behavior:
 - `build-mappings` blocks rows missing upstream `event_key` / `game_id`
 - `build-mappings` keeps the flat current-state selector rows in `runtime/data/current/market_mappings.json` and also writes `runtime/data/current/market_mapping_manifest.json` with structured `mapping_status`, `mapping_confidence`, `blocked_reason`, identity, and rule-semantics payloads
 - `build-fair-values --consensus-artifact ...` changes live fair-value output based on artifact half-life and writes current-state fair values plus `source_health`
+- `build-opportunities` materializes ranked executable opportunity rows from the same projected mapping, fair-value, and BBO boundary
 - a failing fair-value build marks `source_health["fair_values"]` red without partially overwriting the prior fair-values tables
 - `build-inference-dataset` writes `processed/inference/joined_inference_dataset.jsonl`, registers `joined-inference-dataset`, and keeps `source_health["joined_inference_dataset"]` in sync with the latest row count
 
@@ -218,6 +237,7 @@ Observed behavior:
 
 - `build-training-dataset` writes `processed/training/historical_training_dataset.jsonl`
 - the same command registers a versioned `historical-training-dataset` snapshot under `<runtime_root>/datasets`
+- the same materialization wave also keeps the versioned `historical-resolution-truth-dataset` snapshot explicit for downstream inspection
 - the materialized training rows keep a fixed schema even when optional market linkage fields are null
 - `train-models --training-dataset ...` consumes that snapshot without requiring the original capture-envelope JSON
 
@@ -249,8 +269,9 @@ Committed test coverage now also includes:
   - prove `historical-resolution-truth-dataset` is materialized and unresolved truth remains explicit and queryable
 - `tests.test_replay_attribution_cli.ReplayAttributionCliTests.test_cli_can_materialize_replay_execution_label_dataset`
   - proves replay execution label dataset materialization, including slippage/fillability fields
-
-## Manual QA — live Gamma capture
+- `tests.test_operator_controls.OperatorControlTests.test_sync_quote_places_via_execution_shell`
+  and `tests.test_operator_controls.OperatorControlTests.test_sync_quote_can_cancel_existing_order`
+  - prove the supervised `operator-cli sync-quote` entrypoint exercises the execution shell end to end
 
 ## Manual QA — dedicated Polymarket capture worker
 
@@ -276,23 +297,9 @@ Observed behavior:
 - selector-facing `runtime/data/current/*.json` compatibility snapshots remain owned by `run-current-projection`, not the capture worker
 - the supported live capture path is `run-polymarket-capture`, and the legacy live `polymarket-bbo` subcommand is retired
 
-## Manual QA — current-state projection worker
+## Manual QA — live Gamma capture
 
-Equivalent console entrypoint: `run-current-projection`
-
-Command shape:
-
-```bash
-python -m scripts.run_current_projection \
-  --root <runtime_root> \
-  --max-cycles 1
-```
-
-Observed behavior:
-
-- a failed worker cycle returns a non-zero exit code plus the latest worker payload
-- a successful worker cycle projects the raw sportsbook/Polymarket capture lanes back into `runtime/data/current/*.json` compatibility snapshots
-- runtime readers can then prefer the projected Postgres-backed view while keeping the legacy current-state files in sync
+Equivalent console entrypoint: `ingest-live-data --layer gamma`
 
 Command shape:
 
