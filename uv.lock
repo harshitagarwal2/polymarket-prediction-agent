@@ -1842,7 +1842,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.0" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.8" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.3.3" },
     { name = "py-clob-client", marker = "extra == 'polymarket'" },
     { name = "pyarrow", specifier = ">=14" },
     { name = "pykalshi", marker = "extra == 'kalshi'" },
