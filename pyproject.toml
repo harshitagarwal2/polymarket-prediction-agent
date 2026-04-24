@@ -30,7 +30,7 @@ dev = [
   "wheel>=0.43",
 ]
 research = [
-  "duckdb>=0.10",
+  "duckdb>=1.5.2",
 ]
 postgres = [
   "psycopg[binary]>=3.3.3",
