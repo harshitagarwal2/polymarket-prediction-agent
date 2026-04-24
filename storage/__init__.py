@@ -10,6 +10,7 @@ from storage.journal import (
 )
 from storage.current_state import FileBackedCurrentStateStore
 from .current_state_materializers import (  # pyright: ignore[reportMissingImports]
+    materialize_capture_owned_source_health_state,
     materialize_polymarket_bbo_state,
     materialize_polymarket_market_state,
     materialize_source_health_state,
@@ -17,7 +18,10 @@ from .current_state_materializers import (  # pyright: ignore[reportMissingImpor
     materialize_sportsbook_quote_state,
 )
 from .current_state_projectors import (  # pyright: ignore[reportMissingImports]
+    CAPTURE_OWNED_COMPATIBILITY_TABLES,
+    CAPTURE_OWNED_SOURCE_HEALTH_NAMES,
     SourceHealthUpdate,
+    merge_source_health_state,
     project_polymarket_bbo_state,
     project_polymarket_market_state,
     project_source_health_state,
@@ -74,6 +78,8 @@ from storage.source_health import SourceHealthRecord, SourceHealthStore
 
 __all__ = [
     "BBORepository",
+    "CAPTURE_OWNED_COMPATIBILITY_TABLES",
+    "CAPTURE_OWNED_SOURCE_HEALTH_NAMES",
     "CURRENT_STATE_TABLE_NAMES",
     "CurrentStateReadAdapter",
     "CurrentStateTableRepository",
@@ -112,12 +118,14 @@ __all__ = [
     "TradeAttributionRecord",
     "TradeAttributionRepository",
     "build_raw_capture",
+    "materialize_capture_owned_source_health_state",
     "materialize_polymarket_bbo_state",
     "materialize_polymarket_market_state",
     "materialize_source_health_state",
     "materialize_sportsbook_event_state",
     "materialize_sportsbook_quote_state",
     "market_row_from_summary",
+    "merge_source_health_state",
     "mapping_priority",
     "normalize_for_json",
     "order_book_row_from_snapshot",

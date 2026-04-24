@@ -10,6 +10,7 @@ from adapters.polymarket.normalizer import normalize_bbo_event, normalize_market
 from adapters.sportsbooks import normalize_odds_event
 from storage import (
     BBORepository,
+    CAPTURE_OWNED_COMPATIBILITY_TABLES,
     FileBackedCurrentStateStore,
     MarketRepository,
     ProjectedCurrentStateReadAdapter,
@@ -18,6 +19,7 @@ from storage import (
     SportsbookEventRepository,
     SportsbookOddsRecord,
     SportsbookOddsRepository,
+    materialize_capture_owned_source_health_state,
 )
 from storage.postgres import (
     SourceHealthRepository,
@@ -160,25 +162,19 @@ def _write_projection_checkpoint(
 def materialize_current_compatibility_tables(
     stores: CurrentProjectionStores,
     tables: Sequence[str] | None = None,
-) -> dict[str, dict[str, object]]:
+) -> dict[str, dict[str, Any]]:
     adapter = stores.read_adapter()
-    table_names = tuple(
-        tables
-        or (
-            "polymarket_markets",
-            "polymarket_bbo",
-            "sportsbook_events",
-            "sportsbook_odds",
-            "source_health",
-        )
-    )
-    materialized: dict[str, dict[str, object]] = {}
+    table_names = tuple(tables or CAPTURE_OWNED_COMPATIBILITY_TABLES)
+    materialized: dict[str, dict[str, Any]] = {}
     for table in table_names:
         payload = adapter.read_table(table)
-        materialized[table] = payload
         if table == "source_health":
-            stores.current_health.write_all(payload)
+            materialized[table] = materialize_capture_owned_source_health_state(
+                stores.current_health,
+                payload.values(),
+            )
         else:
+            materialized[table] = payload
             stores.current.write_table(table, payload)
     return materialized
 
@@ -422,6 +418,7 @@ def project_current_state_once(
 
 
 __all__ = [
+    "CAPTURE_OWNED_COMPATIBILITY_TABLES",
     "CurrentProjectionStores",
     "materialize_current_compatibility_tables",
     "project_current_state_once",

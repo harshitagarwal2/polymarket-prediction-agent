@@ -29,6 +29,11 @@ from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
 from forecasting.fair_value_engine import ManifestFairValueProvider
+from risk.kill_switch import (
+    KillSwitchState,
+    build_kill_switch_state,
+    format_kill_switch_reason,
+)
 from risk.limits import RiskEngine, RiskLimits
 from storage.current_projection import build_preview_runtime_context
 from storage.journal import EventJournal
@@ -40,6 +45,12 @@ def _required_env_vars(venue_name: str) -> list[str]:
     if venue_name == "kalshi":
         return ["KALSHI_API_KEY_ID", "KALSHI_PRIVATE_KEY_PATH"]
     raise ValueError(f"unsupported venue: {venue_name}")
+
+
+def _runtime_requires_postgres_authority(args) -> bool:
+    return getattr(args, "mode", None) in {"run", "pair-run"} and getattr(
+        args, "opportunity_root", None
+    ) not in (None, "")
 
 
 def validate_runtime(args) -> None:
@@ -69,6 +80,9 @@ def validate_runtime(args) -> None:
         private_key_path = Path(os.getenv("KALSHI_PRIVATE_KEY_PATH", ""))
         if not private_key_path.exists():
             raise RuntimeError(f"Kalshi private key file not found: {private_key_path}")
+
+    if _runtime_requires_postgres_authority(args):
+        build_current_state_read_adapter(args.opportunity_root, require_postgres=True)
 
     journal_path = Path(args.journal)
     state_path = Path(args.state_file)
@@ -146,13 +160,46 @@ def _build_preview_order_proposals(
     args,
     policy,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    read_adapter = build_current_state_read_adapter(args.opportunity_root)
+    read_adapter_kwargs = (
+        {"require_postgres": True} if _runtime_requires_postgres_authority(args) else {}
+    )
+    read_adapter = build_current_state_read_adapter(
+        args.opportunity_root,
+        **read_adapter_kwargs,
+    )
     context = build_preview_runtime_context(
         args.opportunity_root,
         policy=policy,
         read_adapter=read_adapter,
     )
     return list(context.preview_order_proposals), list(context.blocked_preview_orders)
+
+
+def _build_runtime_kill_switch(args) -> tuple[KillSwitchState, tuple[str, ...]]:
+    read_adapter_kwargs = (
+        {"require_postgres": True} if _runtime_requires_postgres_authority(args) else {}
+    )
+    read_adapter = build_current_state_read_adapter(
+        args.opportunity_root,
+        **read_adapter_kwargs,
+    )
+    source_health = (
+        read_adapter.read_table("source_health") if read_adapter is not None else {}
+    )
+    state = build_kill_switch_state(source_health=source_health)
+    return state, state.reasons()
+
+
+def _apply_runtime_kill_switch(engine, reason: str) -> None:
+    halter = getattr(engine, "halt", None)
+    if callable(halter):
+        halter(reason)
+        return
+    safety_state = getattr(engine, "safety_state", None)
+    if safety_state is None:
+        raise AttributeError("engine must expose halt() or safety_state")
+    setattr(safety_state, "halted", True)
+    setattr(safety_state, "reason", reason)
 
 
 def main() -> int:
@@ -299,6 +346,10 @@ def main() -> int:
                     trading_engine_policy.pending_submission_expiry_seconds
                 ),
             )
+        kill_switch_state, kill_switch_reasons = _build_runtime_kill_switch(args)
+        kill_switch_reason = format_kill_switch_reason(kill_switch_state)
+        if kill_switch_reason is not None:
+            _apply_runtime_kill_switch(engine, kill_switch_reason)
         orchestrator = AgentOrchestrator(
             adapter=adapter,
             engine=engine,
@@ -388,6 +439,8 @@ def main() -> int:
                 "last_selected": _selected_market_key(results[-1]) if results else None,
                 "engine_halted": engine.safety_state.halted,
                 "engine_paused": engine.safety_state.paused,
+                "kill_switch_active": bool(kill_switch_reasons),
+                "kill_switch_reasons": list(kill_switch_reasons),
                 "heartbeat_active": getattr(status, "heartbeat_active", None),
                 "heartbeat_running": getattr(status, "heartbeat_running", None),
                 "heartbeat_healthy_for_trading": getattr(

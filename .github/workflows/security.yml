@@ -1,0 +1,79 @@
+name: Security
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - "**"
+  schedule:
+    - cron: "0 9 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked audit tooling
+        run: uv sync --locked --extra dev
+
+      - name: Audit exact locked dependencies
+        run: >-
+          uv export --frozen --no-hashes --all-extras |
+          uv run --no-sync --
+          pip-audit --disable-pip --no-deps -r /dev/stdin
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          GITLEAKS_VERSION=8.24.2
+          GITLEAKS_ASSET="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          GITLEAKS_CHECKSUMS="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          gh release download "v${GITLEAKS_VERSION}" --repo gitleaks/gitleaks --pattern "$GITLEAKS_ASSET" --pattern "$GITLEAKS_CHECKSUMS"
+          grep " $GITLEAKS_ASSET$" "$GITLEAKS_CHECKSUMS" | shasum -a 256 --check
+          tar -xzf "$GITLEAKS_ASSET" -C /usr/local/bin gitleaks
+
+      - name: Scan for secrets
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+            gitleaks git --redact --log-opts="$RANGE"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            RANGE="${{ github.event.before }}..${{ github.sha }}"
+            gitleaks git --redact --log-opts="$RANGE"
+          else
+            gitleaks dir . --redact
+          fi

@@ -4,6 +4,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 
+RESOLUTION_STATUS_RESOLVED = "resolved"
+RESOLUTION_STATUS_UNRESOLVED = "unresolved"
+_ALLOWED_RESOLUTION_STATUSES = frozenset(
+    {RESOLUTION_STATUS_RESOLVED, RESOLUTION_STATUS_UNRESOLVED}
+)
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -144,6 +151,48 @@ class TrainingSetRow:
 
 
 @dataclass(frozen=True)
+class ResolutionTruthRow:
+    home_team: str
+    away_team: str
+    resolution_status: str
+    label: int | None = None
+    record_id: str | None = None
+    recorded_at: str | None = None
+    event_key: str | None = None
+    sport: str | None = None
+    series: str | None = None
+    game_id: str | None = None
+    sports_market_type: str | None = None
+    source: str | None = None
+    market_key: str | None = None
+    condition_id: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.resolution_status not in _ALLOWED_RESOLUTION_STATUSES:
+            raise ValueError("resolution_status must be one of: resolved, unresolved")
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "home_team": self.home_team,
+            "away_team": self.away_team,
+            "resolution_status": self.resolution_status,
+            "label": int(self.label) if self.label is not None else None,
+            "record_id": self.record_id,
+            "recorded_at": self.recorded_at,
+            "event_key": self.event_key,
+            "sport": self.sport,
+            "series": self.series,
+            "game_id": self.game_id,
+            "sports_market_type": self.sports_market_type,
+            "source": self.source,
+            "market_key": self.market_key,
+            "condition_id": self.condition_id,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass(frozen=True)
 class InferenceDatasetRow:
     record_id: str
     recorded_at: str
@@ -216,4 +265,56 @@ class InferenceDatasetRow:
             "inference_allowed": self.inference_allowed,
             "blocked_reason": self.blocked_reason,
             "blocked_reasons": list(self.blocked_reasons),
+        }
+
+
+@dataclass(frozen=True)
+class ReplayExecutionLabelRow:
+    record_id: str
+    recorded_at: str | None = None
+    case_name: str | None = None
+    market_id: str | None = None
+    order_id: str | None = None
+    action: str | None = None
+    filled: bool = False
+    requested_quantity: float | None = None
+    filled_quantity: float | None = None
+    fill_ratio: float | None = None
+    partial_fill: bool = False
+    wait_steps: int | None = None
+    resting: bool = False
+    stale_data_flag: bool = False
+    expected_edge_bps: float | None = None
+    realized_edge_bps: float | None = None
+    slippage_bps: float | None = None
+    visible_quantity: float | None = None
+    levels_consumed: int | None = None
+    price_move_bps: float | None = None
+    mapping_risk: float | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "record_id": self.record_id,
+            "recorded_at": self.recorded_at,
+            "case_name": self.case_name,
+            "market_id": self.market_id,
+            "order_id": self.order_id,
+            "action": self.action,
+            "filled": self.filled,
+            "requested_quantity": self.requested_quantity,
+            "filled_quantity": self.filled_quantity,
+            "fill_ratio": self.fill_ratio,
+            "partial_fill": self.partial_fill,
+            "wait_steps": self.wait_steps,
+            "resting": self.resting,
+            "stale_data_flag": self.stale_data_flag,
+            "expected_edge_bps": self.expected_edge_bps,
+            "realized_edge_bps": self.realized_edge_bps,
+            "slippage_bps": self.slippage_bps,
+            "visible_quantity": self.visible_quantity,
+            "levels_consumed": self.levels_consumed,
+            "price_move_bps": self.price_move_bps,
+            "mapping_risk": self.mapping_risk,
+            "metadata": self.metadata,
         }

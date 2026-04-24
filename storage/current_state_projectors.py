@@ -5,6 +5,26 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping
 
 
+CAPTURE_OWNED_COMPATIBILITY_TABLES = (
+    "polymarket_markets",
+    "polymarket_bbo",
+    "sportsbook_events",
+    "sportsbook_odds",
+    "source_health",
+)
+
+CAPTURE_OWNED_SOURCE_HEALTH_NAMES = frozenset(
+    {
+        "sportsbook_odds",
+        "polymarket_market_catalog",
+        "polymarket_market_channel",
+        "projection_sportsbook_odds",
+        "projection_polymarket_market_catalog",
+        "projection_polymarket_market_channel",
+    }
+)
+
+
 @dataclass(frozen=True)
 class SourceHealthUpdate:
     source_name: str
@@ -62,7 +82,24 @@ def _project_by_key(
 def _sportsbook_event_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     raw_json = payload.get("raw_json")
     if isinstance(raw_json, Mapping) and raw_json:
-        return dict(raw_json)
+        merged = dict(raw_json)
+        for field_name in (
+            "sportsbook_event_id",
+            "source",
+            "sport",
+            "league",
+            "home_team",
+            "away_team",
+            "start_time",
+            "event_key",
+            "series",
+            "game_id",
+        ):
+            if payload.get(field_name) not in (None, ""):
+                merged.setdefault(field_name, payload.get(field_name))
+        if payload.get("sportsbook_event_id") not in (None, ""):
+            merged.setdefault("id", payload.get("sportsbook_event_id"))
+        return merged
     return dict(payload)
 
 
@@ -165,7 +202,33 @@ def project_source_health_state(
     return projected
 
 
+def merge_source_health_state(
+    rows: Iterable[Any],
+    *,
+    existing: Mapping[str, Any] | None = None,
+    owned_source_names: Iterable[str] = CAPTURE_OWNED_SOURCE_HEALTH_NAMES,
+) -> dict[str, dict[str, Any]]:
+    owned_names = {str(source_name) for source_name in owned_source_names}
+    normalized_existing = project_source_health_state((), existing=existing)
+    merged = {
+        source_name: dict(payload)
+        for source_name, payload in normalized_existing.items()
+        if source_name not in owned_names
+    }
+    merged.update(
+        {
+            source_name: dict(payload)
+            for source_name, payload in project_source_health_state(rows).items()
+            if source_name in owned_names
+        }
+    )
+    return merged
+
+
 __all__ = [
+    "CAPTURE_OWNED_COMPATIBILITY_TABLES",
+    "CAPTURE_OWNED_SOURCE_HEALTH_NAMES",
+    "merge_source_health_state",
     "SourceHealthUpdate",
     "project_polymarket_bbo_state",
     "project_polymarket_market_state",

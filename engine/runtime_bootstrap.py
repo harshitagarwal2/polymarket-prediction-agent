@@ -8,6 +8,11 @@ from typing import TYPE_CHECKING, Any
 from adapters.base import TradingAdapter
 from adapters.kalshi import KalshiAdapter, KalshiConfig
 from adapters.polymarket import PolymarketAdapter, PolymarketConfig
+from storage.postgres.bootstrap import (
+    PostgresDsnNotConfiguredError,
+    require_postgres_dsn,
+    resolve_postgres_dsn,
+)
 from storage.current_read_adapter import (
     CurrentStateReadAdapter,
     FileCurrentStateReadAdapter,
@@ -50,22 +55,35 @@ def _load_manifest_condition_ids(path: str | None) -> list[str] | None:
     return condition_ids or None
 
 
-def _has_projected_state_marker(root: str | Path) -> bool:
+def _postgres_root(root: str | Path) -> Path:
     root_path = Path(root)
-    marker_dirs = (root_path, root_path / "postgres")
-    for marker_dir in marker_dirs:
-        for filename in ("postgres.dsn", ".postgres.dsn", "database_url.txt"):
-            if (marker_dir / filename).exists():
-                return True
-    return False
+    return root_path if root_path.name == "postgres" else root_path / "postgres"
+
+
+def _has_projected_state_authority(root: str | Path) -> bool:
+    root_path = Path(root)
+    try:
+        resolve_postgres_dsn(_postgres_root(root_path))
+    except PostgresDsnNotConfiguredError:
+        return False
+    return True
 
 
 def build_current_state_read_adapter(
     opportunity_root: str | Path | None,
+    *,
+    require_postgres: bool = False,
 ) -> CurrentStateReadAdapter | None:
     if opportunity_root in (None, ""):
         return None
-    if _has_projected_state_marker(opportunity_root):
+    postgres_root = _postgres_root(opportunity_root)
+    if require_postgres:
+        require_postgres_dsn(
+            postgres_root,
+            context="runtime projected current-state reads",
+        )
+        return ProjectedCurrentStateReadAdapter.from_root(opportunity_root)
+    if _has_projected_state_authority(opportunity_root):
         return ProjectedCurrentStateReadAdapter.from_root(opportunity_root)
     return FileCurrentStateReadAdapter.from_opportunity_root(opportunity_root)
 

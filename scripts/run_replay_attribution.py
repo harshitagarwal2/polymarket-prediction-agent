@@ -6,6 +6,10 @@ from pathlib import Path
 
 from engine.cli_output import add_quiet_flag, emit_json
 from research.benchmark_runner import run_benchmark_case
+from research.data.derived_datasets import (
+    build_replay_execution_label_rows,
+    materialize_replay_execution_label_dataset,
+)
 from research.schemas import (
     load_benchmark_case,
     load_packaged_benchmark_case,
@@ -26,6 +30,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output", default=None, help="Optional output path for attribution JSON"
+    )
+    parser.add_argument(
+        "--dataset-root",
+        default=None,
+        help="Optional runtime/data root where replay execution labels should be materialized",
+    )
+    parser.add_argument(
+        "--dataset-version",
+        default=None,
+        help="Optional explicit version for the replay execution label dataset snapshot",
     )
     add_quiet_flag(parser)
     return parser
@@ -54,6 +68,22 @@ def main() -> int:
         payload["attribution_summary"] = (
             report.replay_report.attribution_summary.to_payload()
         )
+    if args.dataset_root not in (None, ""):
+        label_rows = build_replay_execution_label_rows(
+            report.case_name,
+            report.replay_report.replay_result,
+            report.replay_report.trade_attributions,
+        )
+        latest_path, manifest = materialize_replay_execution_label_dataset(
+            root=args.dataset_root,
+            rows=label_rows,
+            version=args.dataset_version,
+        )
+        payload["replay_execution_label_dataset"] = {
+            "row_count": len(label_rows),
+            "output": str(latest_path),
+            "dataset_version": manifest.version,
+        }
     if args.output is not None:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)

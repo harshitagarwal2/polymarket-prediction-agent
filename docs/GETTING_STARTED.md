@@ -90,6 +90,27 @@ docker build -t polymarket-prediction-agent:v0.1.0 .
 docker run --rm polymarket-prediction-agent:v0.1.0
 ```
 
+That Docker path proves the benchmark and reproducibility workflow only. It is not the supported live worker stack.
+
+For the supervised service-stack substrate, the repo now also ships `.env.example` plus `docker-compose.yml`. The smallest local infrastructure smoke path is:
+
+```bash
+cp .env.example .env
+docker compose up -d postgres
+docker compose run --rm bootstrap-postgres
+docker compose --profile projection run --rm run-current-projection
+docker compose down -v
+```
+
+That Compose path validates the Postgres/bootstrap/projector substrate and DSN marker wiring. The bundled Postgres service is bound to `127.0.0.1` for local-only access, and the checked-in credentials are development defaults only. It does not replace the offline benchmark path above, and it is not by itself evidence that the full live worker/runtime stack is production-ready.
+
+For repo maintenance and CI-equivalent local quality gates, also install the dev tooling and hooks:
+
+```bash
+uv sync --locked --extra dev
+pre-commit install
+```
+
 What this gives you:
 
 - de-vigged fair values from sportsbook-style rows
@@ -204,14 +225,23 @@ uv sync --extra postgres
 export PREDICTION_MARKET_POSTGRES_DSN=postgresql://...
 
 python -m scripts.run_sportsbook_capture \
+  --provider theoddsapi \
   --sport basketball_nba \
   --market h2h \
   --event-map-file runtime/odds_event_map.json \
   --root runtime/data \
   --refresh-interval-seconds 60
+
+python -m scripts.run_sportsbook_capture \
+  --provider json_feed \
+  --provider-url https://example.com/sportsbook-feed.json \
+  --sport basketball_nba \
+  --market h2h \
+  --root runtime/data \
+  --refresh-interval-seconds 60
 ```
 
-That command keeps replacing `runtime/data/current/sportsbook_events.json` and `runtime/data/current/sportsbook_odds.json` with the latest snapshot for downstream selectors, appends sportsbook quote events through the postgres-layer capture store, and mirrors `source_health` into `runtime/data/current/source_health.json` plus the relational `source_health` / `source_health_events` tables under the configured Postgres DSN. Because it uses the Postgres repository layer directly, the worker needs the optional `postgres` dependency set plus a resolvable DSN from `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under the configured runtime root.
+That command owns raw sportsbook ingress only. It appends sportsbook quote events, checkpoints, and `source_health` rows through the Postgres capture store, and it does not own selector-facing `runtime/data/current/*.json`. `run_current_projection` owns the compatibility exports for capture-owned tables, and when a Postgres DSN marker is present the projected Postgres-backed reads are authoritative. Because the worker uses the Postgres repository layer directly, it needs the optional `postgres` dependency set plus a resolvable DSN from `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under the configured runtime root.
 
 For dedicated Polymarket capture and projection, the equivalent script entrypoints are:
 
@@ -227,6 +257,8 @@ python -m scripts.run_current_projection \
 ```
 
 `run_polymarket_capture` appends Polymarket market/user channel events into the Postgres-backed capture substrate and keeps `source_health` current for the dedicated capture lanes. `run_current_projection` then projects those raw capture rows back into `runtime/data/current/*.json` compatibility snapshots plus the projected current-state tables used by runtime readers.
+
+For live Polymarket capture, use `run_polymarket_capture`. The legacy live `polymarket-bbo` path is deprecated and is not the supported production path.
 
 The `--event-map-file` input enriches live sportsbook events with stable identity fields such as `event_key` and `game_id`. `build-mappings` now fails closed if that upstream identity is missing, keeps the flat runtime selector snapshot in `runtime/data/current/market_mappings.json`, and also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, event identity, and rule-semantics details for each mapping decision. `build-fair-values --consensus-artifact ...` uses the consensus artifact as deterministic inference configuration for the current-state fair-value snapshot builder, and the optional `--calibration-artifact ...` overlay adds sibling `calibrated_fair_yes_prob` / `calibrated_fair_value` outputs without changing the raw baseline fields. `build-inference-dataset` then writes the latest joined inference rows to `runtime/data/processed/inference/joined_inference_dataset.jsonl` and registers a versioned `joined-inference-dataset` snapshot. `build-training-dataset` writes `runtime/data/processed/training/historical_training_dataset.jsonl`, registers a versioned `historical-training-dataset` snapshot, and enables `train-models --training-dataset historical-training-dataset --dataset-root runtime/data/datasets` for downstream model fitting.
 
@@ -247,6 +279,12 @@ python -m scripts.ingest_live_data build-fair-values \
 ```
 
 If the config also points `runtime.calibration_artifact` at a histogram calibration payload, the same command writes raw live fair values to `runtime/data/current/fair_values.json`, includes `calibrated_fair_yes_prob` beside them, and emits `metadata.calibration` in `runtime/data/current/fair_value_manifest.json` for runtime policy selection.
+
+The ownership split for the live/current-state path is simple:
+
+- capture workers own raw ingress, checkpoints, and source-health
+- projector owns compatibility current-state exports for capture-owned tables
+- deterministic builders own mappings, fair values, opportunities, and dataset artifacts
 
 ### 4. Run a preview cycle
 
@@ -273,6 +311,13 @@ run-agent-loop \
 ```
 
 That path currently provides `configs/runtime_policy.preview.json`, keeps the loop in preview mode, points `run-agent-loop` at `runtime/data/current/fair_value_manifest.json`, and sets `opportunity_root` to `runtime/data`.
+
+For non-preview configuration surfaces, use the new staging/supervised artifacts instead:
+
+- `configs/runtime_policy.staging.json`
+- `configs/runtime_policy.production_supervised.json`
+- `configs/sports_nba.staging.yaml`
+- `configs/sports_nfl.staging.yaml`
 
 The sample config also carries the normal preview-loop defaults for `max_fair_value_age_seconds`, `interval_seconds`, and `max_cycles`, so you only need extra CLI flags when you want to override them.
 
@@ -444,7 +489,19 @@ Note that this config-driven helper path is for offline research captures. The l
 
 ## CI and local validation expectations
 
-GitHub Actions currently checks that `uv.lock` matches the dependency declarations, installs the package from the lockfile, compiles key modules with `python -m compileall -q`, runs the focused **Run advisory and docs contract regressions** unittest step, runs `python -m unittest discover -s tests -p "test_*.py"`, and also runs the separate reproducibility job.
+GitHub Actions currently checks that `uv.lock` matches the dependency declarations, installs the package plus dev tooling from the lockfile, compiles key modules with `python -m compileall -q`, checks formatting for the maintained repo-policy files with a scoped `ruff format --check`, runs the repo-wide serious `ruff check` gate, runs the configured `mypy` contract, runs the focused **Run advisory and docs contract regressions** unittest step, runs `python -m unittest discover -s tests -p "test_*.py"` under Coverage.py, runs deterministic service-stack and Compose substrate smoke paths, and also runs the separate reproducibility job.
+
+The separate security workflow audits the locked dependency graph with `pip-audit` and scans changed commit ranges with checksum-verified `gitleaks`.
+
+For a local approximation of the non-provider-specific repo gates, use:
+
+```bash
+make check
+make coverage
+make audit
+make smoke-service-stack
+make smoke-compose
+```
 
 If you are changing runtime or research behavior, that test suite is the baseline contract.
 

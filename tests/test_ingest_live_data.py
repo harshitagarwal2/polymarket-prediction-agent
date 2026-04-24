@@ -176,6 +176,12 @@ class IngestLiveDataTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
 
+    def test_live_parser_no_longer_registers_legacy_polymarket_bbo_command(self):
+        self.assertNotIn(
+            "polymarket-bbo",
+            ingest_live_data.build_new_parser().format_help(),
+        )
+
     def _seed_mapping_build_inputs(
         self,
         root: Path,
@@ -483,7 +489,9 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(payload["markets"][0]["sports_market_type"], "moneyline")
         self.assertIsNotNone(payload["markets"][0]["contract"])
 
-    def test_polymarket_ingest_preserves_raw_fallback_without_postgres_dsn(self):
+    def test_polymarket_live_market_subcommand_requires_postgres_and_bbo_is_retired(
+        self,
+    ):
         event_start = datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc)
         market_payload = [
             {
@@ -523,18 +531,22 @@ class IngestLiveDataTests(unittest.TestCase):
                 "fetch_open_markets",
                 return_value=market_payload,
             ):
-                ingest_live_data.main(
-                    [
-                        "polymarket-markets",
-                        "--sport",
-                        "nba",
-                        "--root",
-                        str(root),
-                        "--quiet",
-                    ]
-                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data polymarket-markets requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "polymarket-markets",
+                            "--sport",
+                            "nba",
+                            "--root",
+                            str(root),
+                            "--quiet",
+                        ]
+                    )
 
-            ingest_live_data.main(
+            result = ingest_live_data.main(
                 [
                     "polymarket-bbo",
                     "--input",
@@ -545,17 +557,9 @@ class IngestLiveDataTests(unittest.TestCase):
                 ]
             )
 
-            raw_market_files = list(
-                (root / "raw" / "polymarket" / "market_catalog").rglob("*.jsonl.gz")
-            )
-            raw_bbo_files = list(
-                (root / "raw" / "polymarket" / "market_channel").rglob("*.jsonl.gz")
-            )
+        self.assertEqual(result, 1)
 
-        self.assertEqual(len(raw_market_files), 1)
-        self.assertEqual(len(raw_bbo_files), 1)
-
-    def test_live_pipeline_subcommands_build_fair_values_and_opportunities(self):
+    def test_live_pipeline_subcommands_require_postgres_authority(self):
         event_start = datetime.now(timezone.utc) + timedelta(hours=2)
         market_payload = [
             {
@@ -632,7 +636,99 @@ class IngestLiveDataTests(unittest.TestCase):
                 "fetch_open_markets",
                 return_value=market_payload,
             ):
-                ingest_live_data.main(
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data polymarket-markets requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "polymarket-markets",
+                            "--sport",
+                            "nba",
+                            "--root",
+                            str(root),
+                            "--quiet",
+                        ]
+                    )
+
+            with (
+                patch.object(
+                    ingest_live_data.TheOddsApiClient,
+                    "fetch_upcoming",
+                    return_value=odds_payload,
+                ),
+                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data sportsbook-odds requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "sportsbook-odds",
+                            "--sport",
+                            "basketball_nba",
+                            "--market",
+                            "h2h",
+                            "--root",
+                            str(root),
+                            "--event-map-file",
+                            str(event_map_path),
+                            "--quiet",
+                        ]
+                    )
+
+            result = ingest_live_data.main(
+                [
+                    "polymarket-bbo",
+                    "--input",
+                    str(bbo_path),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+        self.assertEqual(result, 1)
+
+    def test_polymarket_markets_authoritative_path_skips_current_compatibility_exports(
+        self,
+    ):
+        event_start = datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc)
+        market_payload = [
+            {
+                "id": "pm-1",
+                "conditionId": "condition-1",
+                "question": "Will Home Team beat Away Team?",
+                "sport": "nba",
+                "eventKey": "event-1",
+                "gameId": "game-1",
+                "sports_market_type": "moneyline",
+                "active": True,
+                "gameStartTime": event_start.isoformat(),
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+
+            with (
+                patch.object(
+                    ingest_live_data.PolymarketMarketCatalogClient,
+                    "fetch_open_markets",
+                    return_value=market_payload,
+                ),
+                patch.object(
+                    ingest_live_data,
+                    "require_postgres_dsn",
+                    return_value="postgresql://user:pass@localhost:5432/db",
+                ),
+                patch(
+                    "storage.current_state_materializers.resolve_postgres_dsn",
+                    return_value="postgresql://user:pass@localhost:5432/db",
+                ),
+            ):
+                result = ingest_live_data.main(
                     [
                         "polymarket-markets",
                         "--sport",
@@ -643,58 +739,55 @@ class IngestLiveDataTests(unittest.TestCase):
                     ]
                 )
 
-            with (
-                patch.object(
-                    ingest_live_data.TheOddsApiClient,
-                    "fetch_upcoming",
-                    return_value=odds_payload,
-                ),
-                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
-            ):
-                ingest_live_data.main(
+            postgres_markets = json.loads(
+                (root / "postgres" / "polymarket_markets.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            postgres_health = json.loads(
+                (root / "postgres" / "source_health.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(postgres_markets), 1)
+        stored_market = next(iter(postgres_markets.values()))
+        self.assertEqual(stored_market["raw_json"]["id"], "pm-1")
+        self.assertEqual(postgres_health["polymarket_market_catalog"]["status"], "ok")
+        self.assertFalse((root / "current" / "polymarket_markets.json").exists())
+        self.assertFalse((root / "current" / "source_health.json").exists())
+
+    def test_retired_polymarket_bbo_command_returns_sanitized_json(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            bbo_path = Path(temp_dir) / "bbo.json"
+            bbo_path.write_text("[]", encoding="utf-8")
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                result = ingest_live_data.main(
                     [
-                        "sportsbook-odds",
-                        "--sport",
-                        "basketball_nba",
-                        "--market",
-                        "h2h",
+                        "polymarket-bbo",
+                        "--input",
+                        str(bbo_path),
                         "--root",
                         str(root),
-                        "--event-map-file",
-                        str(event_map_path),
-                        "--quiet",
                     ]
                 )
 
-            ingest_live_data.main(
-                [
-                    "polymarket-bbo",
-                    "--input",
-                    str(bbo_path),
-                    "--root",
-                    str(root),
-                    "--quiet",
-                ]
-            )
-            ingest_live_data.main(
-                ["build-mappings", "--market", "h2h", "--root", str(root), "--quiet"]
-            )
-            ingest_live_data.main(["build-fair-values", "--root", str(root), "--quiet"])
-            ingest_live_data.main(
-                ["build-opportunities", "--root", str(root), "--quiet"]
-            )
+            payload = json.loads(stdout.getvalue())
 
-            fair_values = json.loads(
-                (root / "current" / "fair_values.json").read_text()
-            )
-            opportunities = json.loads(
-                (root / "current" / "opportunities.json").read_text()
-            )
+        self.assertEqual(result, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "ingest-live-data polymarket-bbo is retired; use run-polymarket-capture market for live Polymarket capture",
+        )
+        self.assertEqual(payload["root"], str(root))
 
-        self.assertIn("pm-1", fair_values)
-        self.assertTrue(any(key.startswith("pm-1|") for key in opportunities))
-
-    def test_live_pipeline_subcommands_can_use_config_defaults(self):
+    def test_live_pipeline_subcommands_with_config_defaults_still_require_postgres(
+        self,
+    ):
         event_start = datetime.now(timezone.utc) + timedelta(hours=2)
         market_payload = [
             {
@@ -826,22 +919,6 @@ class IngestLiveDataTests(unittest.TestCase):
                 )
             )
 
-            with patch.object(
-                ingest_live_data.PolymarketMarketCatalogClient,
-                "fetch_open_markets",
-                return_value=market_payload,
-            ):
-                ingest_live_data.main(
-                    [
-                        "polymarket-markets",
-                        "--sport",
-                        "nba",
-                        "--root",
-                        str(root),
-                        "--quiet",
-                    ]
-                )
-
             with (
                 patch.object(
                     ingest_live_data.TheOddsApiClient,
@@ -850,70 +927,20 @@ class IngestLiveDataTests(unittest.TestCase):
                 ),
                 patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
             ):
-                ingest_live_data.main(
-                    [
-                        "sportsbook-odds",
-                        "--config-file",
-                        str(config_path),
-                        "--root",
-                        str(root),
-                        "--quiet",
-                    ]
-                )
-
-            ingest_live_data.main(
-                [
-                    "polymarket-bbo",
-                    "--input",
-                    str(bbo_path),
-                    "--root",
-                    str(root),
-                    "--quiet",
-                ]
-            )
-            ingest_live_data.main(
-                [
-                    "build-mappings",
-                    "--config-file",
-                    str(config_path),
-                    "--root",
-                    str(root),
-                    "--quiet",
-                ]
-            )
-            ingest_live_data.main(
-                [
-                    "build-fair-values",
-                    "--config-file",
-                    str(config_path),
-                    "--root",
-                    str(root),
-                    "--quiet",
-                ]
-            )
-
-            fair_values = json.loads(
-                (root / "current" / "fair_values.json").read_text()
-            )
-            mappings = json.loads(
-                (root / "current" / "market_mappings.json").read_text()
-            )
-            source_health = json.loads(
-                (root / "current" / "source_health.json").read_text()
-            )
-
-        self.assertEqual(list(mappings.keys()), ["pm-1|sb-1"])
-        self.assertEqual(fair_values["pm-1"]["model_name"], "consensus")
-        self.assertAlmostEqual(
-            fair_values["pm-1"]["calibrated_fair_yes_prob"],
-            1.0,
-        )
-        self.assertTrue(
-            source_health["fair_values"]["details"]["consensus_artifact_configured"]
-        )
-        self.assertTrue(
-            source_health["fair_values"]["details"]["calibration_artifact_configured"]
-        )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data sportsbook-odds requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "sportsbook-odds",
+                            "--config-file",
+                            str(config_path),
+                            "--root",
+                            str(root),
+                            "--quiet",
+                        ]
+                    )
 
     def test_sportsbook_odds_failure_returns_sanitized_json_without_traceback(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -921,8 +948,18 @@ class IngestLiveDataTests(unittest.TestCase):
             stdout = io.StringIO()
             with (
                 patch.object(
-                    ingest_live_data.TheOddsApiClient,
-                    "fetch_upcoming",
+                    ingest_live_data,
+                    "require_postgres_dsn",
+                    return_value="postgresql://example/test",
+                ),
+                patch.object(
+                    ingest_live_data.SportsbookCaptureStores,
+                    "from_root",
+                    return_value=object(),
+                ),
+                patch.object(
+                    ingest_live_data,
+                    "capture_sportsbook_odds_once",
                     side_effect=RuntimeError("https://example.com/?apiKey=secret"),
                 ),
                 patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
@@ -956,8 +993,18 @@ class IngestLiveDataTests(unittest.TestCase):
             stdout = io.StringIO()
             with (
                 patch.object(
-                    ingest_live_data.TheOddsApiClient,
-                    "fetch_upcoming",
+                    ingest_live_data,
+                    "require_postgres_dsn",
+                    return_value="postgresql://example/test",
+                ),
+                patch.object(
+                    ingest_live_data.SportsbookCaptureStores,
+                    "from_root",
+                    return_value=object(),
+                ),
+                patch.object(
+                    ingest_live_data,
+                    "capture_sportsbook_odds_once",
                     side_effect=RuntimeError("https://example.com/?apiKey=secret"),
                 ),
                 patch.object(
@@ -1872,6 +1919,19 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(record["identity"]["event_key"], "event-1")
         self.assertEqual(record["mapping_confidence"]["band"], "high")
         self.assertIsNone(record["blocked_reason"])
+        metadata = manifest_payload["metadata"]
+        self.assertIsInstance(metadata, dict)
+        if not isinstance(metadata, dict):
+            self.fail("expected mapping manifest metadata dict")
+        governance = metadata.get("governance")
+        provenance = metadata.get("provenance")
+        self.assertIsInstance(governance, dict)
+        self.assertIsInstance(provenance, dict)
+        if not isinstance(governance, dict) or not isinstance(provenance, dict):
+            self.fail("expected governance and provenance metadata")
+        self.assertEqual(governance["review_status"], "generated")
+        self.assertEqual(governance["effective_from"], manifest_payload["generated_at"])
+        self.assertEqual(len(provenance["hash"]), 64)
 
     def test_build_mappings_manifest_captures_blocked_reason_structure(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2682,6 +2742,118 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertIsNone(latest_rows[0]["market_key"])
         self.assertIsNone(latest_rows[0]["condition_id"])
         self.assertNotIn("market_market_count", latest_rows[0]["metadata"])
+
+    def test_build_training_dataset_preserves_unresolved_truth_rows_in_queryable_dataset(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            training_input = Path(temp_dir) / "sports-inputs.json"
+            captured_at = "2026-04-21T18:00:00Z"
+            training_input.write_text(
+                json.dumps(
+                    {
+                        "source": "sports-inputs",
+                        "captured_at": captured_at,
+                        "rows": [
+                            {
+                                "home_team": "Home Team",
+                                "away_team": "Away Team",
+                                "label": 1,
+                                "event_key": "event-1",
+                                "game_id": "game-1",
+                                "sport": "nba",
+                                "series": "playoffs",
+                                "sports_market_type": "moneyline",
+                                "selection_name": "Home Team",
+                                "bookmaker": "book-a",
+                                "decimal_odds": 1.8,
+                                "start_time": "2026-04-21T20:00:00Z",
+                            },
+                            {
+                                "home_team": "Home Team",
+                                "away_team": "Away Team",
+                                "event_key": "event-1",
+                                "game_id": "game-1",
+                                "sport": "nba",
+                                "series": "playoffs",
+                                "sports_market_type": "moneyline",
+                                "selection_name": "Home Team",
+                                "bookmaker": "book-b",
+                                "decimal_odds": 1.9,
+                                "start_time": "2026-04-21T20:00:00Z",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = ingest_live_data.main(
+                [
+                    "build-training-dataset",
+                    "--input",
+                    str(training_input),
+                    "--root",
+                    str(root),
+                    "--quiet",
+                ]
+            )
+
+            latest_training_rows = [
+                json.loads(line)
+                for line in (
+                    root
+                    / "processed"
+                    / "training"
+                    / "historical_training_dataset.jsonl"
+                )
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            latest_truth_rows = [
+                json.loads(line)
+                for line in (
+                    root
+                    / "processed"
+                    / "training"
+                    / "historical_resolution_truth_dataset.jsonl"
+                )
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+            registry = DatasetRegistry(root / "datasets")
+            training_manifest = registry.load_snapshot("historical-training-dataset")
+            truth_manifest = registry.load_snapshot(
+                "historical-resolution-truth-dataset"
+            )
+            truth_snapshot_rows = registry.read_rows(
+                "historical-resolution-truth-dataset"
+            )
+            source_health = json.loads(
+                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(latest_training_rows), 1)
+        self.assertEqual(len(latest_truth_rows), 2)
+        self.assertEqual(training_manifest.version, truth_manifest.version)
+        self.assertEqual(truth_manifest.record_count, 2)
+        self.assertEqual(truth_snapshot_rows, latest_truth_rows)
+        self.assertEqual(
+            [row["resolution_status"] for row in latest_truth_rows],
+            ["resolved", "unresolved"],
+        )
+        self.assertEqual(latest_truth_rows[0]["label"], 1)
+        self.assertIsNone(latest_truth_rows[1]["label"])
+        self.assertEqual(
+            source_health["historical_resolution_truth_dataset"]["details"][
+                "unresolved_row_count"
+            ],
+            1,
+        )
 
     def test_read_current_table_prefers_projected_state_when_postgres_authoritative(
         self,

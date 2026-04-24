@@ -14,6 +14,10 @@ DEFAULT_DSN_ENV_VARS = (
 )
 
 
+class PostgresDsnNotConfiguredError(RuntimeError):
+    pass
+
+
 def _marker_directory(root: str | Path) -> Path:
     root_path = Path(root)
     return root_path if root_path.name == "postgres" else root_path / "postgres"
@@ -39,7 +43,7 @@ def resolve_postgres_dsn(value: str | Path | None = None) -> str:
         env_dsn = _dsn_from_env()
         if env_dsn:
             return env_dsn
-        raise RuntimeError(
+        raise PostgresDsnNotConfiguredError(
             "Postgres DSN not configured. Set PREDICTION_MARKET_POSTGRES_DSN, "
             "POSTGRES_DSN, or DATABASE_URL, or pass a postgresql:// DSN directly."
         )
@@ -76,10 +80,19 @@ def resolve_postgres_dsn(value: str | Path | None = None) -> str:
     env_dsn = _dsn_from_env()
     if env_dsn:
         return env_dsn
-    raise RuntimeError(
+    raise PostgresDsnNotConfiguredError(
         f"Could not resolve a Postgres DSN from {candidate_path}. "
         "Pass a postgresql:// DSN, or provide a postgres.dsn/.postgres.dsn marker file."
     )
+
+
+def require_postgres_dsn(value: str | Path | None, *, context: str) -> str:
+    try:
+        return resolve_postgres_dsn(value)
+    except PostgresDsnNotConfiguredError as exc:
+        raise PostgresDsnNotConfiguredError(
+            f"{context} requires Postgres authority. {exc}"
+        ) from exc
 
 
 def connect_postgres(dsn: str):

@@ -1,11 +1,29 @@
 {
   "focused_tests": {
-    "command": "uv run --locked python -m unittest tests.test_sportsbook_capture_worker tests.test_build_sports_fair_values tests.test_run_agent_loop tests.test_research_architecture_scaffolding tests.test_ingest_live_data tests.test_polymarket_ws_sports",
-    "result": "Ran 97 tests in 0.970s\n\nOK"
+    "command": "python -m unittest tests.test_polymarket_capture_worker tests.test_current_projection_worker tests.test_ingest_live_data tests.test_postgres_storage tests.test_sportsbook_capture_worker tests.test_sportsbook_json_feed_provider tests.test_docs_sync tests.test_console_script_entrypoints",
+    "result": "Ran 95 tests in 2.225s\n\nOK (skipped=1)"
   },
   "full_suite": {
-    "command": "uv run --locked python -m unittest discover -s tests -p \"test_*.py\"",
-    "result": "Ran 568 tests in 4.600s\n\nOK (skipped=3)"
+    "command": "uv run --locked --extra research --extra postgres --extra polymarket python -m unittest discover -s tests -p \"test_*.py\"",
+    "result": "Ran 624 tests in 4.897s\n\nOK (skipped=1)"
+  },
+  "service_stack_smoke": {
+    "command": "make smoke-service-stack",
+    "observed": {
+      "capture_projection_runtime_read_chain": true,
+      "deterministic_builders_run_against_projected_state": true,
+      "run_agent_loop_preview_completed": true,
+      "projected_preview_context_available": true,
+      "postgres_authority_required": true
+    }
+  },
+  "compose_projection_smoke": {
+    "command": "docker compose config && docker compose up -d postgres && docker compose run --rm bootstrap-postgres && docker compose --profile projection run --rm run-current-projection && docker compose down -v",
+    "observed": {
+      "compose_config_valid": true,
+      "postgres_bootstrap_ordering_valid": true,
+      "projector_exits_zero": true
+    }
   },
   "manual_qa": {
     "config_driven_build_fair_values": {
@@ -27,13 +45,17 @@
       }
     },
     "dedicated_sportsbook_capture_worker": {
-      "command": "uv sync --extra postgres && export PREDICTION_MARKET_POSTGRES_DSN=postgresql://... && python -m scripts.run_sportsbook_capture --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> --max-cycles 1",
+      "command": "uv sync --extra postgres && export PREDICTION_MARKET_POSTGRES_DSN=postgresql://... && python -m scripts.run_sportsbook_capture --provider theoddsapi --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> --max-cycles 1",
+      "alternate_provider_command": "uv sync --extra postgres && export PREDICTION_MARKET_POSTGRES_DSN=postgresql://... && python -m scripts.run_sportsbook_capture --provider json_feed --provider-url <sportsbook_feed_url> --sport basketball_nba --market h2h --root <runtime_root> --max-cycles 1",
       "observed": {
         "requires_postgres_setup": true,
-        "current_snapshot_replaced": true,
-        "append_only_quote_events_written": true,
+        "raw_capture_and_checkpoints_written": true,
+        "worker_is_raw_ingress_only": true,
+        "quote_rows_materialized_by_projection": true,
         "provider_and_quote_timestamps_persisted": true,
-        "source_health_written_to_current_and_postgres_tables": true
+        "second_provider_path_supported": true,
+        "source_health_written_to_postgres_tables": true,
+        "selector_facing_current_json_owned_by_projector": true
       }
     },
     "dedicated_polymarket_capture_worker": {
@@ -42,7 +64,9 @@
         "requires_postgres_setup": true,
         "sanitized_failure_payload_supported": true,
         "raw_and_normalized_capture_supported": true,
-        "source_health_written": true
+        "source_health_written": true,
+        "compatibility_json_owned_by_projector": true,
+        "legacy_polymarket_bbo_subcommand_retired": true
       }
     },
     "current_projection_worker": {
@@ -50,7 +74,8 @@
       "observed": {
         "nonzero_exit_on_failed_cycle": true,
         "latest_worker_payload_emitted": true,
-        "compatibility_snapshots_materialized": true
+        "compatibility_snapshots_materialized": true,
+        "projected_reads_authoritative_when_dsn_marker_exists": true
       }
     },
     "live_current_state_build_fair_values_with_calibration": {
@@ -101,6 +126,45 @@
         "mode": "run",
         "policy_file": "configs/runtime_policy.preview.json",
         "result": 0
+      }
+    },
+    "dedicated_sportsbook_capture_worker": {
+      "automated_test": "tests.test_sportsbook_capture_worker + tests.test_sportsbook_json_feed_provider",
+      "observed": {
+        "raw_capture_and_checkpointing": true,
+        "json_feed_provider_supported": true,
+        "selector_facing_current_json_owned_by_projector": true
+      }
+    },
+    "dedicated_polymarket_capture_worker": {
+      "automated_test": "tests.test_polymarket_capture_worker",
+      "observed": {
+        "raw_and_normalized_capture_supported": true,
+        "sanitized_failure_payload_supported": true,
+        "legacy_polymarket_bbo_subcommand_retired": true
+      }
+    },
+    "current_projection_worker": {
+      "automated_test": "tests.test_current_projection_worker + tests.test_current_state_projectors",
+      "observed": {
+        "compatibility_snapshots_materialized": true,
+        "capture_owned_tables_projected": true,
+        "projected_reads_authoritative_when_dsn_marker_exists": true
+      }
+    },
+    "resolution_truth_and_training_dataset": {
+      "automated_test": "tests.test_ingest_live_data + tests.test_research_architecture_scaffolding",
+      "observed": {
+        "historical_resolution_truth_dataset_registered": true,
+        "unresolved_truth_preserved_explicitly": true,
+        "dataset_backed_training_supported": true
+      }
+    },
+    "replay_execution_label_dataset": {
+      "automated_test": "tests.test_replay_attribution_cli.ReplayAttributionCliTests.test_cli_can_materialize_replay_execution_label_dataset",
+      "observed": {
+        "replay_execution_label_dataset_registered": true,
+        "slippage_and_fillability_fields_materialized": true
       }
     },
     "training_bt_from_captured_rows": {

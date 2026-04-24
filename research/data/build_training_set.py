@@ -11,7 +11,11 @@ from research.data.capture_polymarket import (
     load_polymarket_capture,
 )
 from research.data.capture_sports_inputs import load_sports_input_capture
+from research.data.capture_sports_inputs import SportsInputCaptureEnvelope
 from research.data.schemas import PolymarketMarketRecord
+from research.data.schemas import RESOLUTION_STATUS_RESOLVED
+from research.data.schemas import RESOLUTION_STATUS_UNRESOLVED
+from research.data.schemas import ResolutionTruthRow
 from research.data.schemas import SportsInputRow
 from research.data.schemas import TrainingSetRow
 from research.features.joiners import merge_feature_namespaces
@@ -39,94 +43,187 @@ def build_training_set_rows(cases: list[SportsBenchmarkCase]) -> list[TrainingSe
     return rows
 
 
-def build_training_set_rows_from_sports_inputs(
+def _resolved_training_label(value: int | None) -> int | None:
+    if value in {0, 1}:
+        return int(value)
+    return None
+
+
+def _resolution_status(value: int | None) -> str:
+    return (
+        RESOLUTION_STATUS_RESOLVED
+        if _resolved_training_label(value) is not None
+        else RESOLUTION_STATUS_UNRESOLVED
+    )
+
+
+def _load_training_inputs(
+    path: str,
+    *,
+    polymarket_capture_path: str | None = None,
+) -> tuple[SportsInputCaptureEnvelope, list[PolymarketMarketRecord]]:
+    capture = load_sports_input_capture(path)
+    market_rows: list[PolymarketMarketRecord] = []
+    if polymarket_capture_path not in (None, ""):
+        market_rows = load_polymarket_capture(polymarket_capture_path).markets
+    else:
+        payload = json.loads(Path(path).read_text())
+        if isinstance(payload, dict) and isinstance(
+            payload.get("polymarket_markets"), list
+        ):
+            market_rows = build_polymarket_capture(
+                payload["polymarket_markets"],
+                layer=str(payload.get("polymarket_layer") or "training-set"),
+                captured_at=capture.captured_at,
+            ).markets
+    return capture, market_rows
+
+
+def _build_resolution_truth_row(
+    row: SportsInputRow,
+    *,
+    market_rows: list[PolymarketMarketRecord],
+    seen_record_ids: dict[str, int],
+) -> ResolutionTruthRow:
+    feature_metadata = build_team_strength_features(
+        home_team=str(row.home_team),
+        away_team=str(row.away_team),
+        selection_name=row.selection_name,
+        decimal_odds=row.decimal_odds,
+        implied_probability=row.implied_probability,
+        captured_at=row.captured_at,
+        start_time=row.start_time,
+    )
+    matched_markets = [
+        market for market in market_rows if _matches_market_record(row, market)
+    ]
+    selected_market = _select_training_market_match(matched_markets)
+    market_features = _build_market_feature_metadata(
+        row,
+        [selected_market] if selected_market is not None else [],
+    )
+    market_key = next(
+        (
+            market.market_key
+            for market in [selected_market]
+            if market is not None and market.market_key not in (None, "")
+        ),
+        None,
+    )
+    condition_id = next(
+        (
+            market.condition_id
+            for market in [selected_market]
+            if market is not None and market.condition_id not in (None, "")
+        ),
+        None,
+    )
+    recorded_at = _format_recorded_at(row.captured_at)
+    base_record_id = _build_training_record_id(
+        row,
+        recorded_at=recorded_at,
+        market_key=market_key,
+        condition_id=condition_id,
+    )
+    seen_count = seen_record_ids.get(base_record_id, 0) + 1
+    seen_record_ids[base_record_id] = seen_count
+    record_id = (
+        base_record_id if seen_count == 1 else f"{base_record_id}|dup-{seen_count:02d}"
+    )
+    resolved_label = _resolved_training_label(row.label)
+    metadata = {
+        **feature_metadata,
+        **merge_feature_namespaces(market=market_features),
+        "event_key": row.event_key,
+        "sport": row.sport,
+        "series": row.series,
+        "game_id": row.game_id,
+        "sports_market_type": row.sports_market_type,
+        "source": row.source,
+    }
+    if resolved_label is None and row.label is not None:
+        metadata["source_label"] = int(row.label)
+    return ResolutionTruthRow(
+        home_team=str(row.home_team),
+        away_team=str(row.away_team),
+        resolution_status=_resolution_status(row.label),
+        label=resolved_label,
+        record_id=record_id,
+        recorded_at=recorded_at,
+        event_key=row.event_key,
+        sport=row.sport,
+        series=row.series,
+        game_id=row.game_id,
+        sports_market_type=row.sports_market_type,
+        source=row.source,
+        market_key=market_key,
+        condition_id=condition_id,
+        metadata=metadata,
+    )
+
+
+def build_resolution_truth_rows_from_sports_inputs(
     rows: Iterable[SportsInputRow],
     *,
     polymarket_markets: Iterable[PolymarketMarketRecord] | None = None,
-) -> list[TrainingSetRow]:
+) -> list[ResolutionTruthRow]:
     market_rows = list(polymarket_markets or [])
-    training_rows: list[TrainingSetRow] = []
+    truth_rows: list[ResolutionTruthRow] = []
     seen_record_ids: dict[str, int] = {}
     for row in rows:
         if row.home_team in (None, "") or row.away_team in (None, ""):
             continue
-        if row.label not in {0, 1}:
+        truth_rows.append(
+            _build_resolution_truth_row(
+                row,
+                market_rows=market_rows,
+                seen_record_ids=seen_record_ids,
+            )
+        )
+    return truth_rows
+
+
+def build_training_set_rows_from_resolution_truth_rows(
+    rows: Iterable[ResolutionTruthRow],
+) -> list[TrainingSetRow]:
+    training_rows: list[TrainingSetRow] = []
+    for row in rows:
+        if row.resolution_status != RESOLUTION_STATUS_RESOLVED or row.label not in {
+            0,
+            1,
+        }:
             continue
-        feature_metadata = build_team_strength_features(
-            home_team=str(row.home_team),
-            away_team=str(row.away_team),
-            selection_name=row.selection_name,
-            decimal_odds=row.decimal_odds,
-            implied_probability=row.implied_probability,
-            captured_at=row.captured_at,
-            start_time=row.start_time,
-        )
-        matched_markets = [
-            market for market in market_rows if _matches_market_record(row, market)
-        ]
-        selected_market = _select_training_market_match(matched_markets)
-        market_features = _build_market_feature_metadata(
-            row,
-            [selected_market] if selected_market is not None else [],
-        )
-        market_key = next(
-            (
-                market.market_key
-                for market in [selected_market]
-                if market is not None and market.market_key not in (None, "")
-            ),
-            None,
-        )
-        condition_id = next(
-            (
-                market.condition_id
-                for market in [selected_market]
-                if market is not None and market.condition_id not in (None, "")
-            ),
-            None,
-        )
-        recorded_at = _format_recorded_at(row.captured_at)
-        base_record_id = _build_training_record_id(
-            row,
-            recorded_at=recorded_at,
-            market_key=market_key,
-            condition_id=condition_id,
-        )
-        seen_count = seen_record_ids.get(base_record_id, 0) + 1
-        seen_record_ids[base_record_id] = seen_count
-        record_id = (
-            base_record_id
-            if seen_count == 1
-            else f"{base_record_id}|dup-{seen_count:02d}"
-        )
         training_rows.append(
             TrainingSetRow(
-                home_team=str(row.home_team),
-                away_team=str(row.away_team),
+                home_team=row.home_team,
+                away_team=row.away_team,
                 label=int(row.label),
-                record_id=record_id,
-                recorded_at=recorded_at,
+                record_id=row.record_id,
+                recorded_at=row.recorded_at,
                 event_key=row.event_key,
                 sport=row.sport,
                 series=row.series,
                 game_id=row.game_id,
                 sports_market_type=row.sports_market_type,
                 source=row.source,
-                market_key=market_key,
-                condition_id=condition_id,
-                metadata={
-                    **feature_metadata,
-                    **merge_feature_namespaces(market=market_features),
-                    "event_key": row.event_key,
-                    "sport": row.sport,
-                    "series": row.series,
-                    "game_id": row.game_id,
-                    "sports_market_type": row.sports_market_type,
-                    "source": row.source,
-                },
+                market_key=row.market_key,
+                condition_id=row.condition_id,
+                metadata=dict(row.metadata),
             )
         )
     return training_rows
+
+
+def build_training_set_rows_from_sports_inputs(
+    rows: Iterable[SportsInputRow],
+    *,
+    polymarket_markets: Iterable[PolymarketMarketRecord] | None = None,
+) -> list[TrainingSetRow]:
+    truth_rows = build_resolution_truth_rows_from_sports_inputs(
+        rows,
+        polymarket_markets=polymarket_markets,
+    )
+    return build_training_set_rows_from_resolution_truth_rows(truth_rows)
 
 
 def _matches_market_record(row: SportsInputRow, market: PolymarketMarketRecord) -> bool:
@@ -240,21 +337,24 @@ def load_training_set_rows(
     *,
     polymarket_capture_path: str | None = None,
 ) -> list[TrainingSetRow]:
-    capture = load_sports_input_capture(path)
-    market_rows: list[PolymarketMarketRecord] = []
-    if polymarket_capture_path not in (None, ""):
-        market_rows = load_polymarket_capture(polymarket_capture_path).markets
-    else:
-        payload = json.loads(Path(path).read_text())
-        if isinstance(payload, dict) and isinstance(
-            payload.get("polymarket_markets"), list
-        ):
-            market_rows = build_polymarket_capture(
-                payload["polymarket_markets"],
-                layer=str(payload.get("polymarket_layer") or "training-set"),
-                captured_at=capture.captured_at,
-            ).markets
-    return build_training_set_rows_from_sports_inputs(
+    return build_training_set_rows_from_resolution_truth_rows(
+        load_resolution_truth_rows(
+            path,
+            polymarket_capture_path=polymarket_capture_path,
+        )
+    )
+
+
+def load_resolution_truth_rows(
+    path: str,
+    *,
+    polymarket_capture_path: str | None = None,
+) -> list[ResolutionTruthRow]:
+    capture, market_rows = _load_training_inputs(
+        path,
+        polymarket_capture_path=polymarket_capture_path,
+    )
+    return build_resolution_truth_rows_from_sports_inputs(
         capture.rows,
         polymarket_markets=market_rows,
     )

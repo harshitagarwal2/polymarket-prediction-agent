@@ -60,6 +60,8 @@ from llm import (
     write_llm_advisory_artifacts,
 )
 from llm.advisory_context import build_preview_runtime_context
+from execution import OrderProposal, QuoteManager
+from risk.kill_switch import extract_kill_switch_reasons
 from risk.cleanup import CleanupCoordinator
 from risk.limits import RiskEngine, RiskLimits
 
@@ -216,10 +218,15 @@ def _runtime_health_payload(state: EngineSafetyState) -> dict[str, Any]:
     else:
         runtime_state = "healthy"
 
+    kill_switch_reasons = extract_kill_switch_reasons(state.reason)
+    kill_switch_active = bool(kill_switch_reasons)
+
     return _normalize_payload(
         {
             "state": runtime_state,
             "reasons": reasons,
+            "kill_switch_active": kill_switch_active,
+            "kill_switch_reasons": list(kill_switch_reasons),
             "pending_cancel_count": len(state.pending_cancels),
             "pending_submission_count": len(state.pending_submissions),
             "pending_refresh_count": len(state.pending_refresh_requests),
@@ -773,6 +780,47 @@ def cmd_cancel_stale(args) -> int:
     return 0
 
 
+def cmd_sync_quote(args) -> int:
+    adapter = _build_adapter(args.venue)
+    contract = Contract(
+        venue=Venue(args.venue),
+        symbol=args.symbol,
+        outcome=OutcomeSide(args.outcome),
+    )
+    engine = TradingEngine(
+        adapter=adapter,
+        strategy=NoopStrategy(),
+        risk_engine=RiskEngine(RiskLimits()),
+        safety_state_path=args.state_file,
+    )
+    proposal = OrderProposal(
+        market_id=args.symbol,
+        side=args.side,
+        action=args.action,
+        price=args.price,
+        size=args.quantity,
+        tif=args.tif,
+        rationale=args.rationale,
+    )
+    result = QuoteManager(engine).sync_quote(
+        contract,
+        proposal,
+        reason=args.rationale,
+    )
+    payload = {
+        "venue": args.venue,
+        "symbol": args.symbol,
+        "outcome": args.outcome,
+        "shell_action": result.action,
+        "cancelled_order_ids": list(result.cancelled_order_ids),
+        "submitted_order_ids": list(result.submitted_order_ids),
+        "placement_count": len(result.placements),
+    }
+    _journal_action(args, "operator_sync_quote", payload)
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prediction-market operator CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -857,6 +905,28 @@ def build_parser() -> argparse.ArgumentParser:
     cancel_stale.add_argument("--journal", default=None)
     cancel_stale.add_argument("--state-file", default="runtime/safety-state.json")
     cancel_stale.set_defaults(func=cmd_cancel_stale)
+
+    sync_quote = subparsers.add_parser("sync-quote")
+    sync_quote.add_argument("--venue", choices=["polymarket", "kalshi"], required=True)
+    sync_quote.add_argument("--symbol", required=True)
+    sync_quote.add_argument("--outcome", choices=["yes", "no"], required=True)
+    sync_quote.add_argument(
+        "--side",
+        choices=["buy_yes", "sell_yes", "buy_no", "sell_no"],
+        required=True,
+    )
+    sync_quote.add_argument(
+        "--action",
+        choices=["place", "replace", "amend", "cancel"],
+        default="place",
+    )
+    sync_quote.add_argument("--price", type=float, default=0.0)
+    sync_quote.add_argument("--quantity", type=float, default=0.0)
+    sync_quote.add_argument("--tif", default="GTC")
+    sync_quote.add_argument("--rationale", default="operator quote sync")
+    sync_quote.add_argument("--journal", default=None)
+    sync_quote.add_argument("--state-file", default="runtime/safety-state.json")
+    sync_quote.set_defaults(func=cmd_sync_quote)
 
     build_llm_advisory = subparsers.add_parser("build-llm-advisory")
     build_llm_advisory.add_argument("--llm-input", required=True)

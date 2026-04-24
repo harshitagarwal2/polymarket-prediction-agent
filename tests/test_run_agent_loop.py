@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from adapters.polymarket import PolymarketAdapter, PolymarketConfig
 from engine.discovery import ManifestFairValueProvider
+from risk.kill_switch import KillSwitchState
 from scripts import run_agent_loop
 
 
@@ -1512,6 +1513,216 @@ class RunAgentLoopTests(unittest.TestCase):
             policy=None,
             read_adapter=current_state_adapter,
         )
+
+    def test_build_runtime_kill_switch_reads_projected_source_health(self):
+        adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "sportsbook_odds": {
+                    "source_name": "sportsbook_odds",
+                    "status": "red",
+                }
+            }
+            if table == "source_health"
+            else {}
+        )
+
+        with patch.object(
+            run_agent_loop,
+            "build_current_state_read_adapter",
+            return_value=adapter,
+        ):
+            state, reasons = run_agent_loop._build_runtime_kill_switch(
+                SimpleNamespace(mode="run", opportunity_root="runtime/data")
+            )
+
+        self.assertTrue(state.active)
+        self.assertEqual(reasons, ("source health red",))
+
+    def test_main_reports_kill_switch_when_source_health_is_red(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(
+                halted=False,
+                paused=False,
+                hold_new_orders=False,
+            )
+        )
+
+        def _halt(reason: str) -> None:
+            fake_engine.safety_state.halted = True
+            fake_engine.safety_state.reason = reason
+
+        fake_engine.halt = _halt
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+        current_state_adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "sportsbook_odds": {
+                    "source_name": "sportsbook_odds",
+                    "status": "red",
+                }
+            }
+            if table == "source_health"
+            else {}
+        )
+
+        stdout = io.StringIO()
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=current_state_adapter,
+            ),
+            patch.object(
+                run_agent_loop,
+                "TradingEngine",
+                return_value=fake_engine,
+            ),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+            patch.object(
+                run_agent_loop,
+                "_build_preview_order_proposals",
+                return_value=([], []),
+            ),
+            patch("sys.stdout", stdout),
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--fair-values-file",
+                    __file__,
+                    "--mode",
+                    "preview",
+                    "--opportunity-root",
+                    "runtime/data",
+                ],
+            ):
+                result = run_agent_loop.main()
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 0)
+        self.assertTrue(payload["engine_halted"])
+        self.assertTrue(payload["kill_switch_active"])
+        self.assertEqual(payload["kill_switch_reasons"], ["source health red"])
+
+    def test_build_runtime_kill_switch_uses_projected_source_health(self):
+        current_state_adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "sportsbook_odds": {
+                    "source_name": "sportsbook_odds",
+                    "status": "red",
+                }
+            }
+            if table == "source_health"
+            else {}
+        )
+
+        with patch.object(
+            run_agent_loop,
+            "build_current_state_read_adapter",
+            return_value=current_state_adapter,
+        ):
+            state, reasons = run_agent_loop._build_runtime_kill_switch(
+                SimpleNamespace(mode="run", opportunity_root="runtime/data")
+            )
+
+        self.assertIsInstance(state, KillSwitchState)
+        self.assertTrue(state.active)
+        self.assertIn("source health red", reasons)
+
+    def test_main_halts_engine_when_runtime_kill_switch_is_active(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=True, paused=False),
+            halt_reason=None,
+        )
+
+        def _halt(reason):
+            fake_engine.halt_reason = reason
+
+        fake_engine.halt = _halt
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+            halted=True,
+            pause_reason=None,
+            hold_new_orders=False,
+            hold_reason=None,
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(selected=None)
+        read_adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "sportsbook_odds": {
+                    "source_name": "sportsbook_odds",
+                    "status": "red",
+                }
+            }
+            if table == "source_health"
+            else {}
+        )
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=read_adapter,
+            ),
+            patch.object(
+                run_agent_loop,
+                "TradingEngine",
+                return_value=fake_engine,
+            ),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--fair-values-file",
+                    __file__,
+                    "--mode",
+                    "preview",
+                    "--opportunity-root",
+                    "runtime/data",
+                    "--quiet",
+                ],
+            ):
+                result = run_agent_loop.main()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(fake_engine.halt_reason, "kill switch: source health red")
 
     def test_main_preview_blocks_when_current_bbo_is_stale(self):
         adapter = FakeAdapter()

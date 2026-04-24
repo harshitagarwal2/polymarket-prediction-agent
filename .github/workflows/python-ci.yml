@@ -1,18 +1,28 @@
 name: Python CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - "**"
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: python-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  unittest:
+  quality:
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -23,12 +33,14 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Check lockfile
         run: uv lock --check
 
-      - name: Install package
-        run: uv sync --locked
+      - name: Install package and dev tooling
+        run: uv sync --locked --extra dev
 
       - name: Compile key modules
         run: >-
@@ -46,22 +58,60 @@ jobs:
           storage
           tests
 
+      - name: Check scoped formatting contract
+        run: make format-check
+
+      - name: Run serious lint gates
+        run: make lint
+
+      - name: Run configured mypy checks
+        run: make typecheck
+
       - name: Run advisory and docs contract regressions
+        run: make test-contracts
+
+      - name: Run unittest suite with coverage
+        run: uv run --extra dev coverage run -m unittest discover -s tests -p "test_*.py"
+
+      - name: Report coverage
         run: >-
-          uv run python -m unittest
-          tests.test_llm_advisory
-          tests.test_operator_advisory_cli
-          tests.test_docs_sync
-          tests.test_fair_value_loader
+          uv run --extra dev coverage report &&
+          uv run --extra dev coverage xml
 
-      - name: Run unittest suite
-        run: uv run python -m unittest discover -s tests -p "test_*.py"
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14
 
-  reproducibility:
+  postgres-smoke:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: prediction_market
+          POSTGRES_USER: prediction_market
+          POSTGRES_PASSWORD: prediction_market
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prediction_market -d prediction_market"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PREDICTION_MARKET_POSTGRES_DSN: postgresql://prediction_market:prediction_market@localhost:5432/prediction_market
+      PREDICTION_MARKET_POSTGRES_TEST_DSN: postgresql://prediction_market:prediction_market@localhost:5432/prediction_market
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -72,6 +122,119 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Check lockfile
+        run: uv lock --check
+
+      - name: Install Postgres and Polymarket dependencies
+        run: uv sync --locked --extra postgres --extra polymarket
+
+      - name: Bootstrap Postgres schema
+        run: uv run bootstrap-postgres --root runtime/data
+
+      - name: Run Postgres-backed smoke tests
+        run: >-
+          uv run python -m unittest
+          tests.test_postgres_storage
+          tests.test_runtime_bootstrap
+          tests.test_sportsbook_capture_worker
+          tests.test_current_projection_worker
+
+  service-stack-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: prediction_market
+          POSTGRES_USER: prediction_market
+          POSTGRES_PASSWORD: prediction_market
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prediction_market -d prediction_market"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PREDICTION_MARKET_POSTGRES_DSN: postgresql://prediction_market:prediction_market@localhost:5432/prediction_market
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Check lockfile
+        run: uv lock --check
+
+      - name: Install Postgres and Polymarket dependencies
+        run: uv sync --locked --extra postgres --extra polymarket
+
+      - name: Bootstrap Postgres schema
+        run: uv run bootstrap-postgres --root runtime/data
+
+      - name: Run deterministic service-stack smoke
+        run: make smoke-service-stack
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build runtime image
+        run: docker build -t prediction-market-agent .
+
+      - name: Validate compose config
+        run: docker compose config
+
+      - name: Bootstrap compose stack
+        run: docker compose up -d postgres && docker compose run --rm bootstrap-postgres
+
+      - name: Run projector compose smoke
+        run: docker compose --profile projection run --rm run-current-projection
+
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose down -v
+
+  reproducibility:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Check lockfile
         run: uv lock --check

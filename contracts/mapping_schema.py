@@ -9,6 +9,12 @@ ALLOWED_MAPPING_STATUSES = (
     "blocked",
 )
 ALLOWED_MAPPING_CONFIDENCE_BANDS = ("high", "medium", "low", "unscored")
+ALLOWED_MAPPING_MANIFEST_REVIEW_STATUSES = (
+    "generated",
+    "reviewed",
+    "approved",
+    "superseded",
+)
 REQUIRED_MAPPING_TARGET_FIELDS = (
     "sportsbook_event_id",
     "sportsbook_market_type",
@@ -22,6 +28,10 @@ def allowed_mapping_statuses() -> tuple[str, ...]:
 
 def allowed_mapping_confidence_bands() -> tuple[str, ...]:
     return ALLOWED_MAPPING_CONFIDENCE_BANDS
+
+
+def allowed_mapping_manifest_review_statuses() -> tuple[str, ...]:
+    return ALLOWED_MAPPING_MANIFEST_REVIEW_STATUSES
 
 
 def required_mapping_target_fields() -> tuple[str, ...]:

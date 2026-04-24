@@ -32,7 +32,6 @@ from services.capture.polymarket import (
     PolymarketCaptureStores,
     PolymarketMarketSnapshotRequest,
     hydrate_polymarket_market_snapshot,
-    persist_polymarket_bbo_input_events,
 )
 from storage import (
     BBORepository,
@@ -46,7 +45,6 @@ from storage import (
     OpportunityRecord,
     OpportunityRepository,
     ParquetStore,
-    PolymarketBBORecord,
     PolymarketMarketRecord,
     ProjectedCurrentStateReadAdapter,
     RawStore,
@@ -58,12 +56,15 @@ from storage import (
     SportsbookOddsRecord,
     SportsbookOddsRepository,
     best_mapping_rows,
-    materialize_polymarket_bbo_state,
     materialize_polymarket_market_state,
     materialize_source_health_state,
     mapping_priority,
 )
-from storage.postgres.bootstrap import resolve_postgres_dsn
+from storage.postgres.bootstrap import (
+    PostgresDsnNotConfiguredError,
+    require_postgres_dsn,
+    resolve_postgres_dsn,
+)
 from forecasting import FairValueEngine, ForecastCalibrator
 from opportunity import opportunity_from_prices, rank_opportunities
 from opportunity.models import Opportunity, normalize_blocked_reasons
@@ -73,7 +74,10 @@ from research.data.capture_polymarket import (
     build_polymarket_capture,
     write_polymarket_capture,
 )
-from research.data.build_training_set import load_training_set_rows
+from research.data.build_training_set import (
+    build_training_set_rows_from_resolution_truth_rows,
+    load_resolution_truth_rows,
+)
 from research.data.capture_sports_inputs import (
     build_sports_input_capture,
     write_sports_input_capture,
@@ -81,6 +85,7 @@ from research.data.capture_sports_inputs import (
 from research.data.derived_datasets import (
     build_joined_inference_rows,
     materialize_inference_dataset,
+    materialize_resolution_truth_dataset,
     materialize_training_dataset,
 )
 from research.data.odds_api import (
@@ -104,6 +109,39 @@ SPORT_KEY_BY_LEAGUE = {
     "nba": "basketball_nba",
     "nfl": "americanfootball_nfl",
 }
+
+_POSTGRES_AUTHORITY_REQUIRED_COMMANDS = frozenset(
+    {
+        "polymarket-markets",
+        "sportsbook-odds",
+    }
+)
+
+_RETIRED_LIVE_POLYMARKET_BBO_MESSAGE = (
+    "ingest-live-data polymarket-bbo is retired; use "
+    "run-polymarket-capture market for live Polymarket capture"
+)
+
+
+def _command_requires_postgres_authority(command: object) -> bool:
+    return str(command) in _POSTGRES_AUTHORITY_REQUIRED_COMMANDS
+
+
+def _retired_polymarket_bbo_exit(args_list: list[str]) -> int:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--root", default="runtime/data")
+    parser.add_argument("--quiet", action="store_true")
+    parsed, _ = parser.parse_known_args(args_list[1:])
+    emit_json(
+        {
+            "ok": False,
+            "error_kind": "RuntimeError",
+            "error_message": _RETIRED_LIVE_POLYMARKET_BBO_MESSAGE,
+            "root": parsed.root,
+        },
+        quiet=parsed.quiet,
+    )
+    return 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -145,11 +183,6 @@ def build_new_parser() -> argparse.ArgumentParser:
     pm_markets.add_argument("--limit", type=int, default=100)
     pm_markets.add_argument("--root", default="runtime/data")
     add_quiet_flag(pm_markets)
-
-    pm_bbo = subparsers.add_parser("polymarket-bbo")
-    pm_bbo.add_argument("--input", default=None)
-    pm_bbo.add_argument("--root", default="runtime/data")
-    add_quiet_flag(pm_bbo)
 
     sb_odds = subparsers.add_parser("sportsbook-odds")
     sb_odds.add_argument("--sport", default=None)
@@ -244,7 +277,12 @@ def _load_live_payload(args) -> object:
     return adapter._fetch_data_api(args.data_api_path, {"limit": args.limit})
 
 
-def _stores(root: str):
+def _stores(
+    root: str,
+    *,
+    require_postgres: bool = False,
+    authority_context: str = "ingest-live-data",
+):
     root_path = Path(root)
     postgres_root = root_path / "postgres"
 
@@ -280,19 +318,15 @@ def _stores(root: str):
             self.write_all(existing)
             return payload
 
-    use_postgres = True
-    try:
-        resolve_postgres_dsn(postgres_root)
-    except RuntimeError as exc:
-        if not any(
-            marker in str(exc)
-            for marker in (
-                "Postgres DSN not configured",
-                "Could not resolve a Postgres DSN",
-            )
-        ):
-            raise
-        use_postgres = False
+    if require_postgres:
+        require_postgres_dsn(postgres_root, context=authority_context)
+        use_postgres = True
+    else:
+        use_postgres = True
+        try:
+            resolve_postgres_dsn(postgres_root)
+        except PostgresDsnNotConfiguredError:
+            use_postgres = False
 
     stores = {
         "raw": RawStore(root_path / "raw"),
@@ -354,6 +388,19 @@ def _stores(root: str):
     return stores
 
 
+def _stores_for_command(args):
+    command = getattr(args, "command", None)
+    return _stores(
+        args.root,
+        require_postgres=_command_requires_postgres_authority(command),
+        authority_context=(
+            f"ingest-live-data {command}"
+            if command not in (None, "")
+            else "ingest-live-data"
+        ),
+    )
+
+
 def _current_read_adapter(stores) -> CurrentStateReadAdapter:
     return stores["current_read"]
 
@@ -407,6 +454,10 @@ def _utc_now() -> datetime:
 
 def _trace_id() -> str:
     return uuid4().hex
+
+
+def _dataset_version() -> str:
+    return _utc_now().strftime("%Y%m%dT%H%M%S%fZ")
 
 
 def _metrics_collector(root: str) -> RuntimeMetricsCollector:
@@ -711,7 +762,7 @@ def _run_polymarket_markets(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.polymarket.markets")
     metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
+    stores = _stores_for_command(args)
     observed_at = _utc_now()
     result = hydrate_polymarket_market_snapshot(
         PolymarketMarketSnapshotRequest(
@@ -804,74 +855,6 @@ def _run_polymarket_markets(args) -> int:
     return 0
 
 
-def _run_polymarket_bbo(args) -> int:
-    trace_id = _trace_id()
-    logger = build_structured_logger("ingest.polymarket.bbo")
-    metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
-    if args.input:
-        payload = json.loads(Path(args.input).read_text())
-        events = payload if isinstance(payload, list) else [payload]
-    else:
-        events = []
-    observed_at = _utc_now()
-    result = persist_polymarket_bbo_input_events(
-        [event for event in events if isinstance(event, dict)],
-        root=args.root,
-        stores=PolymarketCaptureStores(
-            source_health=stores["health_repo"],
-            postgres_root=Path(args.root) / "postgres",
-            raw=stores["raw"],
-        ),
-        observed_at=observed_at,
-        stale_after_ms=4_000,
-    )
-    rows = [dict(row) for row in result["normalized_rows"]]
-    records = [
-        PolymarketBBORecord(
-            market_id=str(row["market_id"]),
-            best_bid_yes=row.get("best_bid_yes"),
-            best_bid_yes_size=row.get("best_bid_yes_size"),
-            best_ask_yes=row.get("best_ask_yes"),
-            best_ask_yes_size=row.get("best_ask_yes_size"),
-            midpoint_yes=row.get("midpoint_yes"),
-            spread_yes=row.get("spread_yes"),
-            book_ts=str(row["book_ts"]),
-            source_age_ms=int(row.get("source_age_ms") or 0),
-            raw_hash=(
-                str(row["raw_hash"]) if row.get("raw_hash") not in (None, "") else None
-            ),
-        )
-        for row in rows
-    ]
-    for record in records:
-        stores["bbo"].upsert(record.market_id, record)
-    materialize_polymarket_bbo_state(stores["current"], records)
-    stores["parquet"].append_records("polymarket_bbo_history", observed_at, rows)
-    _update_source_health(
-        stores,
-        source_name="polymarket_market_channel",
-        stale_after_ms=4_000,
-        status="ok",
-    )
-    structured_log(
-        logger,
-        action="sync",
-        status="ok",
-        message="normalized bbo events",
-        trace_id=trace_id,
-    )
-    metrics.record(
-        component="ingest.polymarket.bbo",
-        action="sync",
-        status="ok",
-        trace_id=trace_id,
-        bbo_count=len(rows),
-    )
-    emit_json({"bbo_count": len(rows), "root": args.root}, quiet=args.quiet)
-    return 0
-
-
 def _run_sportsbook_odds(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.sportsbook.odds")
@@ -889,7 +872,18 @@ def _run_sportsbook_odds(args) -> int:
         market=market,
         event_map_file=_resolve_event_map_file(args.event_map_file, config),
     )
-    stores = SportsbookCaptureStores.from_root(args.root)
+    require_postgres = _command_requires_postgres_authority(
+        getattr(args, "command", None)
+    )
+    if require_postgres:
+        require_postgres_dsn(
+            Path(args.root) / "postgres",
+            context=f"ingest-live-data {args.command}",
+        )
+    stores = SportsbookCaptureStores.from_root(
+        args.root,
+        require_postgres=require_postgres,
+    )
     source = TheOddsApiCaptureSource(client=client)
     try:
         payload = capture_sportsbook_odds_once(request, source=source, stores=stores)
@@ -956,11 +950,15 @@ def _run_build_mappings(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("ingest.mappings")
     metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
+    stores = _stores_for_command(args)
     config = _load_optional_config(args.config_file)
     sportsbook_market = _resolve_sportsbook_market(args.market, config)
-    markets = _sorted_rows(stores["markets"].read_all())
-    events = stores["sb_events"].read_all()
+    if bool(stores.get("projected_authoritative")):
+        markets = _sorted_rows(_read_current_table(stores, "polymarket_markets"))
+        events = _read_current_table(stores, "sportsbook_events")
+    else:
+        markets = _sorted_rows(stores["markets"].read_all())
+        events = stores["sb_events"].read_all()
     mappings: list[dict] = []
     mapping_manifest_values: dict[str, dict[str, object]] = {}
     for market in markets:
@@ -974,6 +972,8 @@ def _run_build_mappings(args) -> int:
             or sportsbook_market
         )
         for event in events.values():
+            if not isinstance(event, dict):
+                continue
             event_payload = _mapping_event_payload(event)
             decision = map_contract_candidate(
                 market_payload,
@@ -1086,7 +1086,7 @@ def _run_build_fair_values(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("forecasting.fair_values")
     metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
+    stores = _stores_for_command(args)
     try:
         engine = _build_fair_value_engine(args)
         calibrator = _build_fair_value_calibrator(args)
@@ -1094,6 +1094,8 @@ def _run_build_fair_values(args) -> int:
         current_odds_rows = _read_current_table(stores, "sportsbook_odds")
         odds_rows = (
             _sorted_rows(current_odds_rows)
+            if bool(stores.get("projected_authoritative"))
+            else _sorted_rows(current_odds_rows)
             if current_odds_rows
             else _sorted_rows(stores["sb_odds"].read_all())
         )
@@ -1247,6 +1249,7 @@ def _run_build_fair_values(args) -> int:
         )
         return 0
     except Exception as exc:
+        error_kind = _safe_error_kind(exc)
         _best_effort(
             lambda: _update_source_health(
                 stores,
@@ -1254,7 +1257,7 @@ def _run_build_fair_values(args) -> int:
                 stale_after_ms=60_000,
                 status="red",
                 details={
-                    "error_kind": _safe_error_kind(exc),
+                    "error_kind": error_kind,
                     "consensus_artifact_configured": _artifact_configured(args),
                     "calibration_artifact_configured": _calibration_configured(args),
                 },
@@ -1276,7 +1279,7 @@ def _run_build_fair_values(args) -> int:
                 action="build",
                 status="error",
                 trace_id=trace_id,
-                error_kind=_safe_error_kind(exc),
+                error_kind=error_kind,
             )
         )
         raise
@@ -1286,10 +1289,16 @@ def _run_build_inference_dataset(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("research.inference_dataset")
     metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
+    stores = _stores_for_command(args)
     try:
         current_odds = _read_current_table(stores, "sportsbook_odds")
-        odds_table = current_odds if current_odds else stores["sb_odds"].read_all()
+        odds_table = (
+            current_odds
+            if bool(stores.get("projected_authoritative"))
+            else current_odds
+            if current_odds
+            else stores["sb_odds"].read_all()
+        )
         rows = build_joined_inference_rows(
             mappings=_read_current_table(stores, "market_mappings"),
             sportsbook_events=_read_current_table(stores, "sportsbook_events"),
@@ -1343,13 +1352,14 @@ def _run_build_inference_dataset(args) -> int:
         )
         return 0
     except Exception as exc:
+        error_kind = _safe_error_kind(exc)
         _best_effort(
             lambda: _update_source_health(
                 stores,
                 source_name="joined_inference_dataset",
                 stale_after_ms=60_000,
                 status="red",
-                details={"error_kind": _safe_error_kind(exc)},
+                details={"error_kind": error_kind},
                 success=False,
             )
         )
@@ -1360,15 +1370,26 @@ def _run_build_training_dataset(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("research.training_dataset")
     metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
+    stores = _stores_for_command(args)
     try:
-        rows = load_training_set_rows(
+        dataset_version = _dataset_version()
+        truth_rows = load_resolution_truth_rows(
             args.input,
             polymarket_capture_path=args.polymarket_input,
         )
+        rows = build_training_set_rows_from_resolution_truth_rows(truth_rows)
         latest_path, manifest = materialize_training_dataset(
             root=args.root,
             rows=rows,
+            version=dataset_version,
+        )
+        truth_latest_path, truth_manifest = materialize_resolution_truth_dataset(
+            root=args.root,
+            rows=truth_rows,
+            version=dataset_version,
+        )
+        unresolved_row_count = sum(
+            1 for row in truth_rows if row.resolution_status != "resolved"
         )
         _update_source_health(
             stores,
@@ -1379,6 +1400,21 @@ def _run_build_training_dataset(args) -> int:
                 "row_count": len(rows),
                 "dataset_name": manifest.dataset_name,
                 "dataset_version": manifest.version,
+                "truth_row_count": len(truth_rows),
+                "unresolved_row_count": unresolved_row_count,
+            },
+        )
+        _update_source_health(
+            stores,
+            source_name="historical_resolution_truth_dataset",
+            stale_after_ms=60_000,
+            status="ok",
+            details={
+                "row_count": len(truth_rows),
+                "resolved_row_count": len(rows),
+                "unresolved_row_count": unresolved_row_count,
+                "dataset_name": truth_manifest.dataset_name,
+                "dataset_version": truth_manifest.version,
             },
         )
         structured_log(
@@ -1394,24 +1430,41 @@ def _run_build_training_dataset(args) -> int:
             status="ok",
             trace_id=trace_id,
             row_count=len(rows),
+            truth_row_count=len(truth_rows),
+            unresolved_row_count=unresolved_row_count,
         )
         emit_json(
             {
                 "row_count": len(rows),
+                "truth_row_count": len(truth_rows),
+                "unresolved_row_count": unresolved_row_count,
                 "output": str(latest_path),
                 "dataset_version": manifest.version,
+                "truth_output": str(truth_latest_path),
+                "truth_dataset_version": truth_manifest.version,
             },
             quiet=args.quiet,
         )
         return 0
     except Exception as exc:
+        error_kind = _safe_error_kind(exc)
         _best_effort(
             lambda: _update_source_health(
                 stores,
                 source_name="historical_training_dataset",
                 stale_after_ms=60_000,
                 status="red",
-                details={"error_kind": _safe_error_kind(exc)},
+                details={"error_kind": error_kind},
+                success=False,
+            )
+        )
+        _best_effort(
+            lambda: _update_source_health(
+                stores,
+                source_name="historical_resolution_truth_dataset",
+                stale_after_ms=60_000,
+                status="red",
+                details={"error_kind": error_kind},
                 success=False,
             )
         )
@@ -1422,7 +1475,7 @@ def _run_build_opportunities(args) -> int:
     trace_id = _trace_id()
     logger = build_structured_logger("opportunity.build")
     metrics = _metrics_collector(args.root)
-    stores = _stores(args.root)
+    stores = _stores_for_command(args)
     fair_values = {
         str(market_id): row
         for market_id, row in _read_current_table(stores, "fair_values").items()
@@ -1653,9 +1706,10 @@ def _legacy_main(argv: list[str] | None = None) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] == "polymarket-bbo":
+        return _retired_polymarket_bbo_exit(args_list)
     commands = {
         "polymarket-markets",
-        "polymarket-bbo",
         "sportsbook-odds",
         "build-mappings",
         "build-fair-values",
@@ -1667,8 +1721,6 @@ def main(argv: list[str] | None = None) -> int:
         args = build_new_parser().parse_args(args_list)
         if args.command == "polymarket-markets":
             return _run_polymarket_markets(args)
-        if args.command == "polymarket-bbo":
-            return _run_polymarket_bbo(args)
         if args.command == "sportsbook-odds":
             return _run_sportsbook_odds(args)
         if args.command == "build-mappings":

@@ -9,21 +9,23 @@ Machine-readable companion artifact: `docs/verification_sports_polymarket.json`
 Command:
 
 ```bash
-uv run --locked python -m unittest \
-  tests.test_sportsbook_capture_worker \
-  tests.test_build_sports_fair_values \
-  tests.test_run_agent_loop \
-  tests.test_research_architecture_scaffolding \
+python -m unittest \
+  tests.test_polymarket_capture_worker \
+  tests.test_current_projection_worker \
   tests.test_ingest_live_data \
-  tests.test_polymarket_ws_sports
+  tests.test_postgres_storage \
+  tests.test_sportsbook_capture_worker \
+  tests.test_sportsbook_json_feed_provider \
+  tests.test_docs_sync \
+  tests.test_console_script_entrypoints
 ```
 
 Observed result:
 
 ```text
-Ran 97 tests in 0.970s
+Ran 95 tests in 2.225s
 
-OK
+OK (skipped=1)
 ```
 
 ## Full unit suite
@@ -31,16 +33,51 @@ OK
 Command:
 
 ```bash
-uv run --locked python -m unittest discover -s tests -p "test_*.py"
+uv run --locked --extra research --extra postgres --extra polymarket python -m unittest discover -s tests -p "test_*.py"
 ```
 
 Observed result:
 
 ```text
-Ran 568 tests in 4.600s
+Ran 624 tests in 4.897s
 
-OK (skipped=3)
+OK (skipped=1)
 ```
+
+## Automated / CI-equivalent smoke — deterministic service stack
+
+Command:
+
+```bash
+make smoke-service-stack
+```
+
+Observed behavior:
+
+- sportsbook capture raw ingress succeeds against a deterministic local source
+- Polymarket market snapshot + BBO seed the same Postgres authority path used by the projector
+- `build-mappings`, `build-fair-values`, and `build-opportunities` run against the projected current state
+- the real `run-agent-loop --mode preview` entrypoint completes against the deterministic smoke root
+- projected runtime preview reads back proposals/blocked state from projected authority
+
+## Automated / CI-equivalent smoke — compose bootstrap and projector ordering
+
+Command sequence:
+
+```bash
+docker compose config
+docker compose up -d postgres
+docker compose run --rm bootstrap-postgres
+docker compose --profile projection run --rm run-current-projection
+docker compose down -v
+```
+
+Observed behavior:
+
+- Compose config resolves successfully
+- Postgres becomes healthy before bootstrap runs
+- bootstrap applies migrations and writes the DSN marker successfully
+- projector exits `0` and emits the expected lane summary payload
 
 ## Manual QA — config-driven fair-value build
 
@@ -75,9 +112,18 @@ uv sync --extra postgres
 export PREDICTION_MARKET_POSTGRES_DSN=postgresql://...
 
 python -m scripts.run_sportsbook_capture \
+  --provider theoddsapi \
   --sport basketball_nba \
   --market h2h \
   --event-map-file <odds_event_map.json> \
+  --root <runtime_root> \
+  --max-cycles 1
+
+python -m scripts.run_sportsbook_capture \
+  --provider json_feed \
+  --provider-url <sportsbook_feed_url> \
+  --sport basketball_nba \
+  --market h2h \
   --root <runtime_root> \
   --max-cycles 1
 ```
@@ -86,7 +132,7 @@ Observed behavior:
 
 - continuous sportsbook capture no longer has to run through the monolithic `ingest_live_data` orchestration path
 - each cycle appends authoritative sportsbook raw envelopes and capture checkpoints into Postgres-backed storage
-- append-only sportsbook quote rows are still written to the postgres-layer `sportsbook_odds` store
+- the dedicated worker itself stays raw-ingress-only; projector replay owns materialized `sportsbook_odds` rows for the dedicated worker path
 - each normalized quote row preserves bookmaker-facing `source`, upstream `provider`, `source_ts`, `capture_ts`, and `source_age_ms`
 - `source_health` is written through the relational `source_health` / `source_health_events` tables reached through the configured Postgres DSN
 - selector-facing `runtime/data/current/*.json` is left to the dedicated projector worker rather than the capture worker
@@ -189,6 +235,21 @@ What it verifies:
 - a config file can override the CLI default preview mode by setting `runtime.preview_only: false`
 - the configured path still completes successfully in the test harness
 
+## Automated verification — capture, projection, truth, and replay surfaces
+
+Committed test coverage now also includes:
+
+- `tests.test_sportsbook_capture_worker` and `tests.test_sportsbook_json_feed_provider`
+  - proves raw sportsbook capture, checkpointing, and second-provider (`json_feed`) support
+- `tests.test_polymarket_capture_worker`
+  - proves dedicated Polymarket capture worker behavior and the retired legacy live BBO path
+- `tests.test_current_projection_worker` and `tests.test_current_state_projectors`
+  - prove capture-owned compatibility exports are written by projector replay and preserve projected identity fields
+- `tests.test_ingest_live_data` and `tests.test_research_architecture_scaffolding`
+  - prove `historical-resolution-truth-dataset` is materialized and unresolved truth remains explicit and queryable
+- `tests.test_replay_attribution_cli.ReplayAttributionCliTests.test_cli_can_materialize_replay_execution_label_dataset`
+  - proves replay execution label dataset materialization, including slippage/fillability fields
+
 ## Manual QA — live Gamma capture
 
 ## Manual QA — dedicated Polymarket capture worker
@@ -211,7 +272,9 @@ Observed behavior:
 
 - the dedicated Polymarket capture worker no longer needs to run through the end-to-end ingest CLI
 - capture failures return a non-zero exit code plus a sanitized JSON payload instead of leaking DSN details
-- successful market sessions append raw market envelopes and normalized BBO/catalog rows through the Postgres-backed capture stores
+- successful market sessions append raw market envelopes plus checkpoint/source-health updates through the Postgres-backed capture stores
+- selector-facing `runtime/data/current/*.json` compatibility snapshots remain owned by `run-current-projection`, not the capture worker
+- the supported live capture path is `run-polymarket-capture`, and the legacy live `polymarket-bbo` subcommand is retired
 
 ## Manual QA — current-state projection worker
 

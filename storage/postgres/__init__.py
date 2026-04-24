@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from adapters.types import MarketSummary, OrderBookSnapshot
-from storage.postgres.bootstrap import bootstrap_postgres, resolve_postgres_dsn
+from storage.postgres.bootstrap import (
+    PostgresDsnNotConfiguredError,
+    bootstrap_postgres,
+    require_postgres_dsn,
+    resolve_postgres_dsn,
+)
 from storage.postgres.models import (
     FairValueRecord,
     MarketMappingRecord,
@@ -121,8 +126,10 @@ __all__ = [
     "NormalizedOrderBookRow",
     "OpportunityRecord",
     "OpportunityRepository",
+    "PostgresDsnNotConfiguredError",
     "PolymarketBBORecord",
     "PolymarketMarketRecord",
+    "require_postgres_dsn",
     "SourceHealthRepository",
     "SportsbookEventRecord",
     "SportsbookEventRepository",

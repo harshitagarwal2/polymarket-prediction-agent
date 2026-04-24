@@ -1,0 +1,19 @@
+# Default ownership
+* @harshitagarwal2
+
+# CI and repo policy
+.github/ @harshitagarwal2
+SECURITY.md @harshitagarwal2
+pyproject.toml @harshitagarwal2
+uv.lock @harshitagarwal2
+
+# Runtime and operator surfaces
+engine/ @harshitagarwal2
+risk/ @harshitagarwal2
+scripts/ @harshitagarwal2
+storage/ @harshitagarwal2
+
+# Documentation and benchmarks
+docs/ @harshitagarwal2
+research/ @harshitagarwal2
+tests/ @harshitagarwal2
