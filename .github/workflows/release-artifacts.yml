@@ -37,7 +37,7 @@ jobs:
         run: uv run --no-sync python -m build --no-isolation
 
       - name: Upload Python distributions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-distributions
           path: dist/
@@ -50,7 +50,7 @@ jobs:
           docker save "$IMAGE_NAME" | gzip > prediction-market-agent-image.tar.gz
 
       - name: Upload Docker image archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-image-archive
           path: prediction-market-agent-image.tar.gz
