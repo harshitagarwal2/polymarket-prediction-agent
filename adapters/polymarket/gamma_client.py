@@ -49,12 +49,17 @@ def _coerce_json_list(value: Any) -> list[Any] | None:
 def list_markets(adapter: Any, limit: int = 100) -> list[MarketSummary]:
     items = None
     if hasattr(adapter, "_call_client"):
-        response = adapter._call_client("list markets", "get_simplified_markets")
+        try:
+            response = adapter._call_client("list markets", "get_simplified_markets")
+        except Exception:
+            response = None
         items = response.get("data") if isinstance(response, dict) else response
         if items is None and isinstance(response, dict):
             items = response.get("markets")
     if items is None:
-        timeout_seconds = getattr(getattr(adapter, "config", None), "request_timeout_seconds", 30.0)
+        timeout_seconds = getattr(
+            getattr(adapter, "config", None), "request_timeout_seconds", 30.0
+        )
         items = fetch_markets(limit=limit, timeout_seconds=timeout_seconds)
     summaries: list[MarketSummary] = []
 
