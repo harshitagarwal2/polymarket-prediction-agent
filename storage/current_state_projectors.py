@@ -8,6 +8,10 @@ from typing import Any, Iterable, Mapping
 CAPTURE_OWNED_COMPATIBILITY_TABLES = (
     "polymarket_markets",
     "polymarket_bbo",
+    "polymarket_orders",
+    "polymarket_fills",
+    "polymarket_positions",
+    "polymarket_balance",
     "sportsbook_events",
     "sportsbook_odds",
     "source_health",
@@ -18,9 +22,11 @@ CAPTURE_OWNED_SOURCE_HEALTH_NAMES = frozenset(
         "sportsbook_odds",
         "polymarket_market_catalog",
         "polymarket_market_channel",
+        "polymarket_user_channel",
         "projection_sportsbook_odds",
         "projection_polymarket_market_catalog",
         "projection_polymarket_market_channel",
+        "projection_polymarket_user_channel",
     }
 )
 
@@ -147,6 +153,38 @@ def project_sportsbook_quote_state(rows: Iterable[Any]) -> dict[str, dict[str, A
     return projected
 
 
+def project_polymarket_order_state(rows: Iterable[Any]) -> dict[str, dict[str, Any]]:
+    return _project_by_key(
+        rows,
+        key_fields=("order_id",),
+        value_builder=lambda payload: dict(payload),
+    )
+
+
+def project_polymarket_fill_state(rows: Iterable[Any]) -> dict[str, dict[str, Any]]:
+    return _project_by_key(
+        rows,
+        key_fields=("fill_id", "fill_key"),
+        value_builder=lambda payload: dict(payload),
+    )
+
+
+def project_polymarket_position_state(rows: Iterable[Any]) -> dict[str, dict[str, Any]]:
+    return _project_by_key(
+        rows,
+        key_fields=("contract_key",),
+        value_builder=lambda payload: dict(payload),
+    )
+
+
+def project_polymarket_balance_state(rows: Iterable[Any]) -> dict[str, dict[str, Any]]:
+    return _project_by_key(
+        rows,
+        key_fields=("balance_key",),
+        value_builder=lambda payload: dict(payload),
+    )
+
+
 def project_source_health_state(
     rows: Iterable[Any],
     *,
@@ -231,7 +269,11 @@ __all__ = [
     "merge_source_health_state",
     "SourceHealthUpdate",
     "project_polymarket_bbo_state",
+    "project_polymarket_balance_state",
+    "project_polymarket_fill_state",
     "project_polymarket_market_state",
+    "project_polymarket_order_state",
+    "project_polymarket_position_state",
     "project_source_health_state",
     "project_sportsbook_event_state",
     "project_sportsbook_quote_state",

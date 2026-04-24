@@ -484,6 +484,29 @@ class PendingCancelLiveTerminalAdapter(PendingCancelSubmitAdapter):
 
 
 class EngineRunnerTests(unittest.TestCase):
+    def test_build_context_can_use_projected_account_snapshot_provider(self):
+        adapter = SequencedAdapter()
+        provider_snapshot = AccountSnapshot(
+            venue=Venue.POLYMARKET,
+            balance=BalanceSnapshot(venue=Venue.POLYMARKET, available=88.0, total=88.0),
+            positions=[PositionSnapshot(contract=adapter.contract, quantity=2.0)],
+            open_orders=[],
+            fills=[],
+        )
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+            account_snapshot_provider=lambda contract=None: provider_snapshot,
+        )
+
+        context = engine.build_context(adapter.contract, fair_value=0.60)
+
+        self.assertEqual(context.balance.available, 88.0)
+        self.assertEqual(context.position.quantity, 2.0)
+
     def test_run_once_reconciles_against_updated_venue_state(self):
         adapter = SequencedAdapter()
         engine = TradingEngine(
@@ -717,9 +740,7 @@ class EngineRunnerTests(unittest.TestCase):
             self.fail("expected linked market risk graph snapshot")
         self.assertEqual(context.risk_graph.market_key, adapter.contract.market_key)
         self.assertEqual(context.risk_graph.linked_event_key, "event:event-1")
-        self.assertEqual(
-            context.risk_graph.mutually_exclusive_group_key, "winner"
-        )
+        self.assertEqual(context.risk_graph.mutually_exclusive_group_key, "winner")
 
     def test_live_terminal_marker_removes_order_until_snapshot_confirms(self):
         adapter = TerminalDeltaAdapter()

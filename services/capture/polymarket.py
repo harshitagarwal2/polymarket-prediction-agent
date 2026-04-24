@@ -9,6 +9,13 @@ from typing import Any, Protocol, Sequence
 
 from adapters.polymarket.market_catalog import PolymarketMarketCatalogClient
 from adapters.polymarket.normalizer import normalize_bbo_event, normalize_market_row
+from adapters.types import (
+    AccountSnapshot,
+    serialize_balance_snapshot,
+    serialize_fill_snapshot,
+    serialize_normalized_order,
+    serialize_position_snapshot,
+)
 from storage.raw import RawStore
 from storage.postgres import (
     SourceHealthRepository,
@@ -421,6 +428,23 @@ def _payload_checkpoint_value(payload: dict[str, Any], observed_at: datetime) ->
     return observed_at.astimezone(timezone.utc).isoformat()
 
 
+def serialize_account_snapshot(snapshot: AccountSnapshot) -> dict[str, Any]:
+    return {
+        "venue": snapshot.venue.value,
+        "balance": serialize_balance_snapshot(snapshot.balance),
+        "positions": [
+            serialize_position_snapshot(position) for position in snapshot.positions
+        ],
+        "open_orders": [
+            serialize_normalized_order(order) for order in snapshot.open_orders
+        ],
+        "fills": [serialize_fill_snapshot(fill) for fill in snapshot.fills],
+        "complete": snapshot.complete,
+        "issues": list(snapshot.issues),
+        "observed_at": snapshot.observed_at.astimezone(timezone.utc).isoformat(),
+    }
+
+
 def persist_polymarket_user_message(
     message: dict[str, Any],
     *,
@@ -429,6 +453,7 @@ def persist_polymarket_user_message(
     stale_after_ms: int,
     order_payloads: Sequence[dict[str, Any]] = (),
     fill_payloads: Sequence[dict[str, Any]] = (),
+    account_snapshot_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _safe_append_raw_capture_event(
         stores,
@@ -473,6 +498,29 @@ def persist_polymarket_user_message(
             captured_at=observed_at,
         )
         checkpoint_candidates.append(_payload_checkpoint_value(payload, observed_at))
+    if account_snapshot_payload is not None:
+        _safe_append_raw_capture_event(
+            stores,
+            source="polymarket",
+            layer="user_channel",
+            entity_type="user_account_snapshot",
+            entity_key="account",
+            operation="snapshot",
+            payload=account_snapshot_payload,
+            captured_at=observed_at,
+        )
+        checkpoint_candidates.append(
+            _payload_checkpoint_value(account_snapshot_payload, observed_at)
+        )
+    account_snapshot_complete = bool(
+        account_snapshot_payload is not None
+        and account_snapshot_payload.get("complete", True)
+    )
+    account_snapshot_issues = (
+        list(account_snapshot_payload.get("issues", []))
+        if isinstance(account_snapshot_payload, dict)
+        else []
+    )
     checkpoint_value = (
         checkpoint_candidates[-1]
         if checkpoint_candidates
@@ -490,19 +538,23 @@ def persist_polymarket_user_message(
         stores,
         source_name="polymarket_user_channel",
         stale_after_ms=stale_after_ms,
-        status="ok",
+        status="ok" if account_snapshot_complete else "red",
         observed_at=observed_at,
         details={
             "order_count": len(order_payloads),
             "fill_count": len(fill_payloads),
+            "account_snapshot": account_snapshot_payload is not None,
+            "account_snapshot_complete": account_snapshot_complete,
+            "account_snapshot_issues": account_snapshot_issues,
             "checkpoint": checkpoint,
         },
-        success=True,
+        success=account_snapshot_complete,
     )
     return {
         "ok": True,
         "order_count": len(order_payloads),
         "fill_count": len(fill_payloads),
+        "account_snapshot": account_snapshot_payload is not None,
         "checkpoint": checkpoint,
         "source_health": health,
     }

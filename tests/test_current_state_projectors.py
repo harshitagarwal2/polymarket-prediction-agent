@@ -460,6 +460,71 @@ class CurrentStateProjectorTests(unittest.TestCase):
                     }
                 }
             ),
+            polymarket_orders=_StubRepository(
+                {
+                    "order-1": {
+                        "order_id": "order-1",
+                        "contract_key": "asset-1:yes",
+                        "contract": {
+                            "venue": "polymarket",
+                            "symbol": "asset-1",
+                            "outcome": "yes",
+                            "title": None,
+                        },
+                        "action": "buy",
+                        "price": 0.45,
+                        "quantity": 2.0,
+                        "remaining_quantity": 2.0,
+                        "status": "resting",
+                    }
+                }
+            ),
+            polymarket_fills=_StubRepository(
+                {
+                    "fill-1": {
+                        "fill_id": "fill-1",
+                        "order_id": "order-1",
+                        "contract_key": "asset-1:yes",
+                        "contract": {
+                            "venue": "polymarket",
+                            "symbol": "asset-1",
+                            "outcome": "yes",
+                            "title": None,
+                        },
+                        "action": "buy",
+                        "price": 0.45,
+                        "quantity": 0.5,
+                        "fee": 0.0,
+                    }
+                }
+            ),
+            polymarket_positions=_StubRepository(
+                {
+                    "asset-1:yes": {
+                        "contract_key": "asset-1:yes",
+                        "contract": {
+                            "venue": "polymarket",
+                            "symbol": "asset-1",
+                            "outcome": "yes",
+                            "title": None,
+                        },
+                        "quantity": 1.0,
+                        "average_price": 0.44,
+                        "mark_price": 0.46,
+                    }
+                }
+            ),
+            polymarket_balance=_StubRepository(
+                {
+                    "polymarket:USDC": {
+                        "balance_key": "polymarket:USDC",
+                        "venue": "polymarket",
+                        "available": 100.0,
+                        "total": 100.0,
+                        "currency": "USDC",
+                    }
+                }
+            ),
         )
 
         self.assertEqual(
@@ -478,6 +543,10 @@ class CurrentStateProjectorTests(unittest.TestCase):
         source_health = adapter.read_table("source_health")
         polymarket_markets = adapter.read_table("polymarket_markets")
         sportsbook_odds = adapter.read_table("sportsbook_odds")
+        polymarket_orders = adapter.read_table("polymarket_orders")
+        polymarket_fills = adapter.read_table("polymarket_fills")
+        polymarket_positions = adapter.read_table("polymarket_positions")
+        polymarket_balance = adapter.read_table("polymarket_balance")
         self.assertIsInstance(source_health, dict)
         self.assertIsInstance(polymarket_markets, dict)
         self.assertIsInstance(sportsbook_odds, dict)
@@ -494,6 +563,10 @@ class CurrentStateProjectorTests(unittest.TestCase):
             "Market 1",
         )
         self.assertEqual(current_quote["price_decimal"], 1.8)
+        self.assertIn("order-1", polymarket_orders)
+        self.assertIn("fill-1", polymarket_fills)
+        self.assertIn("asset-1:yes", polymarket_positions)
+        self.assertIn("polymarket:USDC", polymarket_balance)
 
 
 if __name__ == "__main__":

@@ -187,6 +187,124 @@ class PaperBrokerTests(unittest.TestCase):
         self.assertEqual(filled_trades[0].requested_quantity, 5.0)
         self.assertEqual(filled_trades[0].metadata, {"mapping_risk": 0.2})
 
+    def test_pending_cancel_can_still_fill_before_latency_expires(self):
+        contract = make_contract()
+        resting_book = OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.44, quantity=10)],
+            asks=[PriceLevel(price=0.60, quantity=10)],
+        )
+        crossing_book = OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.44, quantity=10)],
+            asks=[PriceLevel(price=0.49, quantity=10)],
+        )
+        broker = PaperBroker(
+            cash=100,
+            config=PaperExecutionConfig(
+                resting_fill_delay_steps=0,
+                cancel_latency_steps=2,
+            ),
+        )
+
+        broker.submit_intents(
+            resting_book,
+            [
+                OrderIntent(
+                    contract=contract,
+                    action=OrderAction.BUY,
+                    price=0.50,
+                    quantity=5.0,
+                )
+            ],
+        )
+        order = broker.open_orders_for(contract)[0]
+        self.assertTrue(broker.request_cancel(order.order_id))
+
+        first_trades = broker.advance(crossing_book)
+        self.assertEqual(len(first_trades), 1)
+        self.assertTrue(first_trades[0].cancel_race_fill)
+        self.assertEqual(first_trades[0].cancel_requested_step, 0)
+        self.assertEqual(first_trades[0].cancel_effective_step, 2)
+
+        broker.advance(resting_book)
+        broker.advance(resting_book)
+        self.assertFalse(broker.open_orders_for(contract))
+
+    def test_effective_cancel_blocks_fill_at_boundary_step(self):
+        contract = make_contract()
+        resting_book = OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.44, quantity=10)],
+            asks=[PriceLevel(price=0.60, quantity=10)],
+        )
+        crossing_book = OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.44, quantity=10)],
+            asks=[PriceLevel(price=0.49, quantity=10)],
+        )
+        broker = PaperBroker(
+            cash=100,
+            config=PaperExecutionConfig(
+                resting_fill_delay_steps=0,
+                cancel_latency_steps=0,
+            ),
+        )
+
+        broker.submit_intents(
+            resting_book,
+            [
+                OrderIntent(
+                    contract=contract,
+                    action=OrderAction.BUY,
+                    price=0.50,
+                    quantity=5.0,
+                )
+            ],
+        )
+        order = broker.open_orders_for(contract)[0]
+        self.assertTrue(broker.request_cancel(order.order_id))
+
+        trades = broker.advance(crossing_book)
+
+        self.assertEqual(trades, [])
+        self.assertFalse(broker.open_orders_for(contract))
+
+    def test_cancel_requested_resting_row_is_not_tagged_as_cancel_race_fill(self):
+        contract = make_contract()
+        resting_book = OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.44, quantity=10)],
+            asks=[PriceLevel(price=0.60, quantity=10)],
+        )
+        broker = PaperBroker(
+            cash=100,
+            config=PaperExecutionConfig(
+                resting_fill_delay_steps=0,
+                cancel_latency_steps=2,
+            ),
+        )
+
+        broker.submit_intents(
+            resting_book,
+            [
+                OrderIntent(
+                    contract=contract,
+                    action=OrderAction.BUY,
+                    price=0.50,
+                    quantity=5.0,
+                )
+            ],
+        )
+        order = broker.open_orders_for(contract)[0]
+        self.assertTrue(broker.request_cancel(order.order_id))
+
+        trades = broker.advance(resting_book)
+
+        self.assertEqual(len(trades), 1)
+        self.assertFalse(trades[0].filled)
+        self.assertFalse(trades[0].cancel_race_fill)
+
 
 if __name__ == "__main__":
     unittest.main()

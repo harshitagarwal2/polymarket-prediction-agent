@@ -26,8 +26,9 @@ Before calling a branch production-ready, all of the following must be true:
 Operators should be able to inspect:
 
 - capture source health via projected `source_health`
-- projector lane status (`projection_sportsbook_odds`, `projection_polymarket_market_catalog`, `projection_polymarket_market_channel`)
+- projector lane status (`projection_sportsbook_odds`, `projection_polymarket_market_catalog`, `projection_polymarket_market_channel`, `projection_polymarket_user_channel`)
 - fair value artifact freshness through `runtime/data/current/fair_value_manifest.json`
+- projected account truth through `runtime/data/current/polymarket_orders.json`, `polymarket_fills.json`, `polymarket_positions.json`, and `polymarket_balance.json`
 - runtime preview/state via `operator-cli status`
 - pending cancels, pending submissions, recovery items, and refresh requests through the persisted safety state
 

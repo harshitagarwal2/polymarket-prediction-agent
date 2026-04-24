@@ -129,6 +129,33 @@ class TradeAttributionRecord:
 
 
 @dataclass(frozen=True)
+class PolymarketOrderRecord:
+    order_id: str
+    contract_key: str
+    payload: dict
+
+
+@dataclass(frozen=True)
+class PolymarketFillRecord:
+    fill_key: str
+    order_id: str
+    contract_key: str
+    payload: dict
+
+
+@dataclass(frozen=True)
+class PolymarketPositionRecord:
+    contract_key: str
+    payload: dict
+
+
+@dataclass(frozen=True)
+class PolymarketBalanceRecord:
+    balance_key: str
+    payload: dict
+
+
+@dataclass(frozen=True)
 class ModelRegistryRecord:
     model_name: str
     model_version: str

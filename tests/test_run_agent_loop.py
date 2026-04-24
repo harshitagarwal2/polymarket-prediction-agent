@@ -420,6 +420,113 @@ class RunAgentLoopTests(unittest.TestCase):
                     fair_value_field="raw",
                 )
 
+    def test_projected_account_snapshot_provider_reads_current_state_tables(self):
+        now_iso = datetime.now(timezone.utc).isoformat()
+        adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "source_health": {
+                    "polymarket_user_channel": {
+                        "status": "ok",
+                        "last_success_at": now_iso,
+                        "stale_after_ms": 60000,
+                        "details": {
+                            "account_snapshot": True,
+                            "account_snapshot_complete": True,
+                            "account_snapshot_issues": [],
+                        },
+                    },
+                    "projection_polymarket_user_channel": {
+                        "status": "ok",
+                        "last_success_at": now_iso,
+                        "stale_after_ms": 60000,
+                    },
+                },
+                "polymarket_balance": {
+                    "polymarket:USDC": {
+                        "venue": "polymarket",
+                        "available": 100.0,
+                        "total": 100.0,
+                        "currency": "USDC",
+                        "snapshot_cohort_id": "cohort-1",
+                        "snapshot_observed_at": now_iso,
+                    }
+                },
+                "polymarket_orders": {
+                    "order-1": {
+                        "order_id": "order-1",
+                        "contract": {
+                            "venue": "polymarket",
+                            "symbol": "asset-1",
+                            "outcome": "yes",
+                            "title": None,
+                        },
+                        "action": "buy",
+                        "price": 0.45,
+                        "quantity": 2.0,
+                        "remaining_quantity": 2.0,
+                        "status": "resting",
+                        "created_at": "2026-04-21T18:00:00+00:00",
+                        "updated_at": "2026-04-21T18:00:00+00:00",
+                        "post_only": False,
+                        "reduce_only": False,
+                        "expiration_ts": None,
+                        "client_order_id": None,
+                        "snapshot_cohort_id": "cohort-1",
+                        "snapshot_observed_at": now_iso,
+                    }
+                },
+                "polymarket_positions": {
+                    "asset-1:yes": {
+                        "contract": {
+                            "venue": "polymarket",
+                            "symbol": "asset-1",
+                            "outcome": "yes",
+                            "title": None,
+                        },
+                        "quantity": 1.0,
+                        "average_price": 0.44,
+                        "mark_price": 0.46,
+                        "snapshot_cohort_id": "cohort-1",
+                        "snapshot_observed_at": now_iso,
+                    }
+                },
+                "polymarket_fills": {
+                    "fill-1": {
+                        "order_id": "order-1",
+                        "contract": {
+                            "venue": "polymarket",
+                            "symbol": "asset-1",
+                            "outcome": "yes",
+                            "title": None,
+                        },
+                        "action": "buy",
+                        "price": 0.45,
+                        "quantity": 0.5,
+                        "fee": 0.0,
+                        "fill_id": "fill-1",
+                        "snapshot_cohort_id": "cohort-1",
+                        "snapshot_observed_at": now_iso,
+                    }
+                },
+            }[table]
+        )
+
+        with patch.object(
+            run_agent_loop,
+            "build_current_state_read_adapter",
+            return_value=adapter,
+        ):
+            provider = run_agent_loop._build_projected_account_snapshot_provider(
+                SimpleNamespace(opportunity_root="runtime/data")
+            )
+            snapshot = provider(None)
+
+        self.assertTrue(snapshot.complete)
+        self.assertEqual(snapshot.balance.available, 100.0)
+        self.assertEqual(len(snapshot.open_orders), 1)
+        self.assertEqual(len(snapshot.positions), 1)
+        self.assertEqual(len(snapshot.fills), 1)
+
     def test_main_run_mode_uses_projected_fair_values_without_manifest(self):
         adapter = FakeAdapter()
         fake_engine = SimpleNamespace(

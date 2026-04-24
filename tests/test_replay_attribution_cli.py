@@ -141,6 +141,9 @@ class ReplayAttributionCliTests(unittest.TestCase):
             self.assertIn("decision_best_ask", rows[0])
             self.assertIn("decision_midpoint", rows[0])
             self.assertEqual(rows[0]["replay_step_index"], 0)
+            self.assertIn("cancel_requested_step", rows[0])
+            self.assertIn("cancel_effective_step", rows[0])
+            self.assertIn("cancel_race_fill", rows[0])
 
 
 if __name__ == "__main__":

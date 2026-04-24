@@ -29,6 +29,7 @@ from engine.accounting import (
     compare_truth_summaries,
     summarize_account_snapshot,
 )
+from engine.config_loader import load_config_file, nested_config_value
 from engine import (
     OrderLifecycleManager,
     OrderLifecyclePolicy,
@@ -67,6 +68,30 @@ from risk.limits import RiskEngine, RiskLimits
 
 
 DEFAULT_LLM_ADVISORY_PATH = "runtime/data/current/llm_advisory.json"
+
+
+def _load_operator_policy(args):
+    policy_file = getattr(args, "policy_file", None)
+    if policy_file in (None, ""):
+        config_file = getattr(args, "config_file", None)
+        if config_file not in (None, ""):
+            payload = load_config_file(config_file)
+            policy_value = nested_config_value(payload, "runtime", "policy_file")
+            if isinstance(policy_value, str) and policy_value.strip():
+                policy_file = policy_value.strip()
+    return load_runtime_policy(policy_file) if policy_file else None
+
+
+def _operator_risk_limits(policy) -> RiskLimits:
+    if policy is not None:
+        return policy.risk_limits.build()
+    return RiskLimits()
+
+
+def _operator_engine_kwargs(policy) -> dict[str, Any]:
+    if policy is None:
+        return {}
+    return dict(policy.trading_engine.build_kwargs())
 
 
 def _normalize_payload(value: Any) -> Any:
@@ -289,12 +314,13 @@ def _market_state_payload(adapter) -> dict[str, Any] | None:
     return _normalize_payload(getter().__dict__)
 
 
-def _tracking_engine(args, adapter) -> TradingEngine:
+def _tracking_engine(args, adapter, *, policy=None) -> TradingEngine:
     return TradingEngine(
         adapter=adapter,
         strategy=NoopStrategy(),
-        risk_engine=RiskEngine(RiskLimits()),
+        risk_engine=RiskEngine(_operator_risk_limits(policy)),
         safety_state_path=getattr(args, "state_file", "runtime/safety-state.json"),
+        **_operator_engine_kwargs(policy),
     )
 
 
@@ -666,7 +692,7 @@ def cmd_resume(args) -> int:
     engine = TradingEngine(
         adapter=adapter,
         strategy=NoopStrategy(),
-        risk_engine=RiskEngine(RiskLimits()),
+        risk_engine=RiskEngine(_operator_risk_limits(None)),
         resume_confirmation_required=args.resume_confirmation_required,
         safety_state_path=args.state_file,
     )
@@ -703,7 +729,7 @@ def cmd_cancel_all(args) -> int:
     adapter = _build_adapter(args.venue)
     venue = Venue.POLYMARKET if args.venue == "polymarket" else Venue.KALSHI
     contract = _parse_contract(args, venue)
-    engine = _tracking_engine(args, adapter)
+    engine = _tracking_engine(args, adapter, policy=None)
     open_orders = adapter.list_open_orders(contract)
     for order in open_orders:
         engine.track_cancel_request(
@@ -742,13 +768,19 @@ def cmd_cancel_all(args) -> int:
 
 
 def cmd_cancel_stale(args) -> int:
-    adapter = _build_adapter(args.venue)
+    policy = _load_operator_policy(args)
+    adapter = _build_adapter(args.venue, args, policy=policy)
     venue = Venue.POLYMARKET if args.venue == "polymarket" else Venue.KALSHI
     contract = _parse_contract(args, venue)
-    engine = _tracking_engine(args, adapter)
+    engine = _tracking_engine(args, adapter, policy=policy)
+    lifecycle_policy = (
+        policy.order_lifecycle_policy.build()
+        if policy is not None and args.max_order_age_seconds == 30.0
+        else OrderLifecyclePolicy(max_order_age_seconds=args.max_order_age_seconds)
+    )
     manager = OrderLifecycleManager(
         adapter=adapter,
-        policy=OrderLifecyclePolicy(max_order_age_seconds=args.max_order_age_seconds),
+        policy=lifecycle_policy,
         cancel_handler=engine.request_cancel_order,
     )
     decisions = manager.cancel_stale_orders(contract)
@@ -781,7 +813,8 @@ def cmd_cancel_stale(args) -> int:
 
 
 def cmd_sync_quote(args) -> int:
-    adapter = _build_adapter(args.venue)
+    policy = _load_operator_policy(args)
+    adapter = _build_adapter(args.venue, args, policy=policy)
     contract = Contract(
         venue=Venue(args.venue),
         symbol=args.symbol,
@@ -790,8 +823,9 @@ def cmd_sync_quote(args) -> int:
     engine = TradingEngine(
         adapter=adapter,
         strategy=NoopStrategy(),
-        risk_engine=RiskEngine(RiskLimits()),
+        risk_engine=RiskEngine(_operator_risk_limits(policy)),
         safety_state_path=args.state_file,
+        **_operator_engine_kwargs(policy),
     )
     proposal = OrderProposal(
         market_id=args.symbol,
@@ -904,6 +938,8 @@ def build_parser() -> argparse.ArgumentParser:
     cancel_stale.add_argument("--max-order-age-seconds", type=float, default=30.0)
     cancel_stale.add_argument("--journal", default=None)
     cancel_stale.add_argument("--state-file", default="runtime/safety-state.json")
+    cancel_stale.add_argument("--policy-file", default=None)
+    cancel_stale.add_argument("--config-file", default=None)
     cancel_stale.set_defaults(func=cmd_cancel_stale)
 
     sync_quote = subparsers.add_parser("sync-quote")
@@ -926,6 +962,8 @@ def build_parser() -> argparse.ArgumentParser:
     sync_quote.add_argument("--rationale", default="operator quote sync")
     sync_quote.add_argument("--journal", default=None)
     sync_quote.add_argument("--state-file", default="runtime/safety-state.json")
+    sync_quote.add_argument("--policy-file", default=None)
+    sync_quote.add_argument("--config-file", default=None)
     sync_quote.set_defaults(func=cmd_sync_quote)
 
     build_llm_advisory = subparsers.add_parser("build-llm-advisory")

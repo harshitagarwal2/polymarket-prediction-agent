@@ -13,6 +13,7 @@ from services.capture.polymarket import (
     PolymarketMarketSnapshotRequest,
     hydrate_polymarket_market_snapshot,
     persist_polymarket_bbo_rows,
+    serialize_account_snapshot,
     persist_polymarket_user_message,
     record_polymarket_capture_failure,
 )
@@ -264,6 +265,7 @@ class PolymarketUserCaptureWorker:
                 if payload == "PONG":
                     continue
                 observed_at = datetime.now(timezone.utc)
+                account_snapshot = self.adapter.get_account_snapshot(None)
                 last_result = persist_polymarket_user_message(
                     payload,
                     stores=self.stores,
@@ -271,6 +273,9 @@ class PolymarketUserCaptureWorker:
                     stale_after_ms=self.config.stale_after_ms,
                     order_payloads=self.adapter._iter_live_order_payloads(payload),
                     fill_payloads=self.adapter._iter_live_fill_payloads(payload),
+                    account_snapshot_payload=serialize_account_snapshot(
+                        account_snapshot
+                    ),
                 )
                 processed += 1
             return last_result

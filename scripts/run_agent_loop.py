@@ -4,8 +4,18 @@ import argparse
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
+from adapters.types import (
+    AccountSnapshot,
+    BalanceSnapshot,
+    Contract,
+    Venue,
+    deserialize_balance_snapshot,
+    deserialize_fill_snapshot,
+    deserialize_normalized_order,
+    deserialize_position_snapshot,
+)
 from engine import OrderLifecycleManager, OrderLifecyclePolicy
 from engine.cli_output import add_quiet_flag, emit_json
 from engine.config_loader import load_config_file, nested_config_value
@@ -210,6 +220,36 @@ def _optional_probability(
     return _required_probability(value, market_id=market_id, field_name=field_name)
 
 
+def _source_health_issue(
+    row: dict[str, Any] | None,
+    *,
+    source_name: str,
+    now: datetime,
+) -> str | None:
+    if row is None:
+        return f"{source_name} health row missing"
+    status = str(row.get("status") or "")
+    if status != "ok":
+        return f"{source_name} unhealthy: {status}"
+    stale_after_ms = row.get("stale_after_ms")
+    last_seen_at = row.get("last_seen_at") or row.get("last_success_at")
+    parsed_seen = _parse_runtime_timestamp(last_seen_at)
+    if parsed_seen is None:
+        return f"{source_name} missing timestamp"
+    if isinstance(stale_after_ms, bool) or not isinstance(
+        stale_after_ms, (int, float, str)
+    ):
+        stale_after = 0
+    else:
+        try:
+            stale_after = int(stale_after_ms)
+        except (TypeError, ValueError):
+            stale_after = 0
+    if stale_after > 0 and (now - parsed_seen).total_seconds() * 1000 > stale_after:
+        return f"{source_name} stale"
+    return None
+
+
 def _projected_condition_id(row: dict[str, object]) -> str | None:
     raw_market = row.get("raw_json")
     condition_id = row.get("condition_id")
@@ -353,6 +393,153 @@ def _build_projected_fair_value_provider(
         max_age_seconds=args.max_fair_value_age_seconds,
         fair_value_field=fair_value_field,
     )
+
+
+def _build_projected_account_snapshot_provider(args):
+    def _provider(contract: Contract | None) -> AccountSnapshot:
+        read_adapter = build_current_state_read_adapter(
+            args.opportunity_root,
+            require_postgres=True,
+        )
+        if read_adapter is None:
+            raise RuntimeError(
+                "runtime projected account-truth reads require opportunity root"
+            )
+        source_health = read_adapter.read_table("source_health")
+        account_health = source_health.get("projection_polymarket_user_channel")
+        capture_health = source_health.get("polymarket_user_channel")
+        issues: list[str] = []
+        now = datetime.now(timezone.utc)
+        observed_at = now
+        if isinstance(account_health, dict):
+            observed_at = (
+                _parse_runtime_timestamp(
+                    account_health.get("last_success_at")
+                    or account_health.get("last_seen_at")
+                )
+                or observed_at
+            )
+        projection_issue = _source_health_issue(
+            cast(dict[str, Any] | None, account_health)
+            if isinstance(account_health, dict)
+            else None,
+            source_name="projection_polymarket_user_channel",
+            now=now,
+        )
+        if projection_issue is not None:
+            issues.append(projection_issue)
+        capture_issue = _source_health_issue(
+            cast(dict[str, Any] | None, capture_health)
+            if isinstance(capture_health, dict)
+            else None,
+            source_name="polymarket_user_channel",
+            now=now,
+        )
+        if capture_issue is not None:
+            issues.append(capture_issue)
+        if isinstance(capture_health, dict):
+            details = capture_health.get("details")
+            if isinstance(details, dict):
+                if not bool(details.get("account_snapshot", False)):
+                    issues.append(
+                        "projected account truth missing captured account snapshot"
+                    )
+                if not bool(details.get("account_snapshot_complete", True)):
+                    issues.append("projected account truth incomplete at capture")
+                issue_list = details.get("account_snapshot_issues")
+                if isinstance(issue_list, list):
+                    issues.extend(str(item) for item in issue_list if str(item))
+
+        balance_rows = read_adapter.read_table("polymarket_balance")
+        if not balance_rows:
+            issues.append("projected account truth missing balance snapshot")
+            balance = BalanceSnapshot(venue=Venue.POLYMARKET, available=0.0, total=0.0)
+        else:
+            balance_payload = next(iter(balance_rows.values()))
+            if not isinstance(balance_payload, dict):
+                raise RuntimeError("projected account balance row invalid")
+            balance = deserialize_balance_snapshot(balance_payload)
+
+        orders = [
+            deserialize_normalized_order(payload)
+            for payload in read_adapter.read_table("polymarket_orders").values()
+            if isinstance(payload, dict)
+        ]
+        positions = [
+            deserialize_position_snapshot(payload)
+            for payload in read_adapter.read_table("polymarket_positions").values()
+            if isinstance(payload, dict)
+        ]
+        fills = [
+            deserialize_fill_snapshot(payload)
+            for payload in read_adapter.read_table("polymarket_fills").values()
+            if isinstance(payload, dict)
+        ]
+
+        cohort_ids = {
+            str(payload.get("snapshot_cohort_id") or "")
+            for table_rows in (
+                balance_rows.values(),
+                read_adapter.read_table("polymarket_orders").values(),
+                read_adapter.read_table("polymarket_positions").values(),
+                read_adapter.read_table("polymarket_fills").values(),
+            )
+            for payload in table_rows
+            if isinstance(payload, dict)
+            and payload.get("snapshot_cohort_id") not in (None, "")
+        }
+        if len(cohort_ids) > 1:
+            issues.append("projected account truth spans multiple snapshot cohorts")
+
+        snapshot_observed_candidates = [
+            _parse_runtime_timestamp(payload.get("snapshot_observed_at"))
+            for table_rows in (
+                balance_rows.values(),
+                read_adapter.read_table("polymarket_orders").values(),
+                read_adapter.read_table("polymarket_positions").values(),
+                read_adapter.read_table("polymarket_fills").values(),
+            )
+            for payload in table_rows
+            if isinstance(payload, dict)
+        ]
+        snapshot_observed_candidates = [
+            candidate
+            for candidate in snapshot_observed_candidates
+            if candidate is not None
+        ]
+        if snapshot_observed_candidates:
+            unique_observed = {
+                candidate.isoformat() for candidate in snapshot_observed_candidates
+            }
+            if len(unique_observed) > 1:
+                issues.append(
+                    "projected account truth spans multiple snapshot timestamps"
+                )
+            observed_at = max(snapshot_observed_candidates)
+
+        if contract is not None:
+            orders = [
+                order for order in orders if order.contract.symbol == contract.symbol
+            ]
+            positions = [
+                position
+                for position in positions
+                if position.contract.symbol == contract.symbol
+            ]
+            fills = [fill for fill in fills if fill.contract.symbol == contract.symbol]
+
+        return AccountSnapshot(
+            venue=balance.venue,
+            balance=balance,
+            positions=positions,
+            open_orders=orders,
+            fills=fills,
+            complete=not issues,
+            issues=issues,
+            observed_at=observed_at,
+        )
+
+    return _provider
 
 
 def _build_preview_order_proposals(
@@ -522,12 +709,18 @@ def main() -> int:
             pair_quantity = policy.strategy.base_quantity
 
         _seed_event_exposure_registry(risk_engine, seeded_provider)
+        account_snapshot_provider = (
+            _build_projected_account_snapshot_provider(args)
+            if _runtime_requires_postgres_authority(args)
+            else None
+        )
         if trading_engine_policy is None:
             engine = TradingEngine(
                 adapter=adapter,
                 strategy=strategy,
                 risk_engine=risk_engine,
                 safety_state_path=args.state_file,
+                account_snapshot_provider=account_snapshot_provider,
             )
         else:
             engine = TradingEngine(
@@ -535,6 +728,7 @@ def main() -> int:
                 strategy=strategy,
                 risk_engine=risk_engine,
                 safety_state_path=args.state_file,
+                account_snapshot_provider=account_snapshot_provider,
                 cancel_retry_interval_seconds=(
                     trading_engine_policy.cancel_retry_interval_seconds
                 ),

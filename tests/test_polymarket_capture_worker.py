@@ -8,6 +8,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from adapters.types import (
+    AccountSnapshot,
+    BalanceSnapshot,
+    Contract,
+    FillSnapshot,
+    NormalizedOrder,
+    OrderAction,
+    OrderStatus,
+    OutcomeSide,
+    PositionSnapshot,
+    Venue,
+)
 from services.capture import polymarket as polymarket_capture
 from scripts import run_polymarket_capture
 from services.capture.polymarket import (
@@ -137,6 +149,41 @@ class _FakeUserAdapter:
 
     def _iter_live_fill_payloads(self, payload):
         return [item for item in payload.get("fills", []) if isinstance(item, dict)]
+
+    def get_account_snapshot(self, contract=None):
+        contract = contract or Contract(
+            venue=Venue.POLYMARKET, symbol="asset-1", outcome=OutcomeSide.YES
+        )
+        return AccountSnapshot(
+            venue=Venue.POLYMARKET,
+            balance=BalanceSnapshot(
+                venue=Venue.POLYMARKET,
+                available=100.0,
+                total=100.0,
+            ),
+            positions=[PositionSnapshot(contract=contract, quantity=1.0)],
+            open_orders=[
+                NormalizedOrder(
+                    order_id="order-1",
+                    contract=contract,
+                    action=OrderAction.BUY,
+                    price=0.45,
+                    quantity=2.0,
+                    remaining_quantity=2.0,
+                    status=OrderStatus.RESTING,
+                )
+            ],
+            fills=[
+                FillSnapshot(
+                    order_id="order-1",
+                    contract=contract,
+                    action=OrderAction.BUY,
+                    price=0.45,
+                    quantity=0.5,
+                    fill_id="fill-1",
+                )
+            ],
+        )
 
 
 class PolymarketCaptureWorkerTests(unittest.TestCase):
@@ -344,9 +391,15 @@ class PolymarketCaptureWorkerTests(unittest.TestCase):
 
         self.assertEqual(results[-1]["order_count"], 1)
         self.assertEqual(results[-1]["fill_count"], 1)
+        self.assertTrue(results[-1]["account_snapshot"])
         self.assertEqual(
             [event["entity_type"] for event in raw_events],
-            ["user_stream_envelope", "user_order", "user_fill"],
+            [
+                "user_stream_envelope",
+                "user_order",
+                "user_fill",
+                "user_account_snapshot",
+            ],
         )
         self.assertEqual(checkpoints[0]["checkpoint_name"], "user_stream")
         self.assertEqual(

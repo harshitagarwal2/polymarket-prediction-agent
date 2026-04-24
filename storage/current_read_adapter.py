@@ -6,8 +6,12 @@ from pathlib import Path
 from typing import Protocol
 
 from .current_state_projectors import (  # pyright: ignore[reportMissingImports]
+    project_polymarket_balance_state,
     project_polymarket_bbo_state,
+    project_polymarket_fill_state,
     project_polymarket_market_state,
+    project_polymarket_order_state,
+    project_polymarket_position_state,
     project_source_health_state,
     project_sportsbook_event_state,
     project_sportsbook_quote_state,
@@ -18,6 +22,10 @@ from storage.postgres.repositories import (
     MappingRepository,
     MarketRepository,
     OpportunityRepository,
+    PolymarketBalanceRepository,
+    PolymarketFillRepository,
+    PolymarketOrderRepository,
+    PolymarketPositionRepository,
     SourceHealthRepository,
     SportsbookEventRepository,
     SportsbookOddsRepository,
@@ -29,6 +37,10 @@ CURRENT_STATE_TABLE_NAMES = (
     "market_mappings",
     "fair_values",
     "polymarket_bbo",
+    "polymarket_orders",
+    "polymarket_fills",
+    "polymarket_positions",
+    "polymarket_balance",
     "sportsbook_events",
     "sportsbook_odds",
     "source_health",
@@ -116,6 +128,10 @@ class ProjectedCurrentStateReadAdapter:
     source_health: CurrentStateTableRepository
     polymarket_markets: CurrentStateTableRepository
     sportsbook_odds: CurrentStateTableRepository | None = None
+    polymarket_orders: CurrentStateTableRepository | None = None
+    polymarket_fills: CurrentStateTableRepository | None = None
+    polymarket_positions: CurrentStateTableRepository | None = None
+    polymarket_balance: CurrentStateTableRepository | None = None
 
     @classmethod
     def from_root(
@@ -134,6 +150,10 @@ class ProjectedCurrentStateReadAdapter:
             sportsbook_odds=SportsbookOddsRepository(postgres_root),
             source_health=SourceHealthRepository(postgres_root),
             polymarket_markets=MarketRepository(postgres_root),
+            polymarket_orders=PolymarketOrderRepository(postgres_root),
+            polymarket_fills=PolymarketFillRepository(postgres_root),
+            polymarket_positions=PolymarketPositionRepository(postgres_root),
+            polymarket_balance=PolymarketBalanceRepository(postgres_root),
         )
 
     def read_table(self, table: str) -> dict[str, object]:
@@ -171,6 +191,50 @@ class ProjectedCurrentStateReadAdapter:
                 else _coerce_table_payload(self.source_health.read_all())
             )
             return _coerce_table_payload(project_source_health_state((), existing=rows))
+        if table == "polymarket_orders":
+            if self.polymarket_orders is None:
+                return {}
+            current_rows = _read_current_if_available(self.polymarket_orders)
+            rows = (
+                current_rows
+                if current_rows is not None
+                else _coerce_table_payload(self.polymarket_orders.read_all())
+            )
+            return _coerce_table_payload(project_polymarket_order_state(rows.values()))
+        if table == "polymarket_fills":
+            if self.polymarket_fills is None:
+                return {}
+            current_rows = _read_current_if_available(self.polymarket_fills)
+            rows = (
+                current_rows
+                if current_rows is not None
+                else _coerce_table_payload(self.polymarket_fills.read_all())
+            )
+            return _coerce_table_payload(project_polymarket_fill_state(rows.values()))
+        if table == "polymarket_positions":
+            if self.polymarket_positions is None:
+                return {}
+            current_rows = _read_current_if_available(self.polymarket_positions)
+            rows = (
+                current_rows
+                if current_rows is not None
+                else _coerce_table_payload(self.polymarket_positions.read_all())
+            )
+            return _coerce_table_payload(
+                project_polymarket_position_state(rows.values())
+            )
+        if table == "polymarket_balance":
+            if self.polymarket_balance is None:
+                return {}
+            current_rows = _read_current_if_available(self.polymarket_balance)
+            rows = (
+                current_rows
+                if current_rows is not None
+                else _coerce_table_payload(self.polymarket_balance.read_all())
+            )
+            return _coerce_table_payload(
+                project_polymarket_balance_state(rows.values())
+            )
         if table == "market_mappings":
             current_rows = _read_current_if_available(self.mappings)
             if current_rows is not None:

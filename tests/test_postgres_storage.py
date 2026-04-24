@@ -28,6 +28,10 @@ from storage.postgres import (
     MarketRepository,
     ModelRegistryRepository,
     OpportunityRepository,
+    PolymarketBalanceRepository,
+    PolymarketFillRepository,
+    PolymarketOrderRepository,
+    PolymarketPositionRepository,
     SourceHealthRepository,
     SportsbookEventRepository,
     SportsbookOddsRepository,
@@ -149,6 +153,10 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                       raw_capture_events,
                       source_health_events,
                       capture_checkpoints,
+                      polymarket_orders_current,
+                      polymarket_fills_current,
+                      polymarket_positions_current,
+                      polymarket_balance_current,
                       opportunities_current,
                       fair_values_current,
                       market_mappings_current,
@@ -208,6 +216,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                 "002_projection_substrate.sql",
                 "003_capture_substrate.sql",
                 "004_sportsbook_capture_timestamps.sql",
+                "005_account_truth_projection.sql",
             ],
         )
 
@@ -222,6 +231,10 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
         trade_repo = TradeAttributionRepository(dsn=self.dsn)
         model_repo = ModelRegistryRepository(dsn=self.dsn)
         health_repo = SourceHealthRepository(dsn=self.dsn)
+        order_repo = PolymarketOrderRepository(dsn=self.dsn)
+        fill_repo = PolymarketFillRepository(dsn=self.dsn)
+        position_repo = PolymarketPositionRepository(dsn=self.dsn)
+        balance_repo = PolymarketBalanceRepository(dsn=self.dsn)
 
         market_repo.upsert(
             "pm-1",
@@ -390,6 +403,73 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                 "details": {"rows": 1},
             },
         )
+        order_repo.replace_all(
+            {
+                "order-1": {
+                    "order_id": "order-1",
+                    "contract_key": "yes-token:yes",
+                    "contract": {
+                        "venue": "polymarket",
+                        "symbol": "yes-token",
+                        "outcome": "yes",
+                        "title": None,
+                    },
+                    "action": "buy",
+                    "price": 0.45,
+                    "quantity": 2.0,
+                    "remaining_quantity": 2.0,
+                    "status": "resting",
+                    "created_at": "2026-04-22T18:00:00+00:00",
+                    "updated_at": "2026-04-22T18:00:00+00:00",
+                }
+            }
+        )
+        fill_repo.replace_all(
+            {
+                "fill-1": {
+                    "fill_id": "fill-1",
+                    "order_id": "order-1",
+                    "contract_key": "yes-token:yes",
+                    "contract": {
+                        "venue": "polymarket",
+                        "symbol": "yes-token",
+                        "outcome": "yes",
+                        "title": None,
+                    },
+                    "action": "buy",
+                    "price": 0.45,
+                    "quantity": 0.5,
+                    "fee": 0.0,
+                }
+            }
+        )
+        position_repo.replace_all(
+            {
+                "yes-token:yes": {
+                    "contract_key": "yes-token:yes",
+                    "contract": {
+                        "venue": "polymarket",
+                        "symbol": "yes-token",
+                        "outcome": "yes",
+                        "title": None,
+                    },
+                    "quantity": 1.0,
+                    "average_price": 0.44,
+                    "mark_price": 0.46,
+                }
+            }
+        )
+        balance_repo.replace_all(
+            {
+                "polymarket:USDC": {
+                    "balance_key": "polymarket:USDC",
+                    "venue": "polymarket",
+                    "available": 100.0,
+                    "total": 100.0,
+                    "currency": "USDC",
+                }
+            }
+        )
         upsert_capture_checkpoint(
             "sportsbook_odds",
             "theoddsapi",
@@ -419,6 +499,10 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             "runtime/models/consensus-v1.json",
         )
         self.assertEqual(health_repo.read_all()["fair_values"]["status"], "ok")
+        self.assertIn("order-1", order_repo.read_all())
+        self.assertIn("fill-1", fill_repo.read_all())
+        self.assertIn("yes-token:yes", position_repo.read_all())
+        self.assertIn("polymarket:USDC", balance_repo.read_all())
 
         with connect_postgres(self.dsn) as connection:
             with connection.cursor() as cursor:

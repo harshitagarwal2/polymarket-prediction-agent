@@ -340,6 +340,7 @@ class ReplayBrokerConfig:
     slippage_bps: float = 0.0
     resting_max_fill_ratio_per_step: float | None = None
     resting_fill_delay_steps: int = 0
+    cancel_latency_steps: int = 0
     stale_after_steps: int = 0
     price_move_bps_per_step: float = 0.0
 
@@ -350,6 +351,7 @@ class ReplayBrokerConfig:
             "slippage_bps": self.slippage_bps,
             "resting_max_fill_ratio_per_step": self.resting_max_fill_ratio_per_step,
             "resting_fill_delay_steps": self.resting_fill_delay_steps,
+            "cancel_latency_steps": self.cancel_latency_steps,
             "stale_after_steps": self.stale_after_steps,
             "price_move_bps_per_step": self.price_move_bps_per_step,
         }
@@ -376,6 +378,7 @@ class ReplayBrokerConfig:
                 else None
             ),
             resting_fill_delay_steps=int(payload.get("resting_fill_delay_steps", 0)),
+            cancel_latency_steps=int(payload.get("cancel_latency_steps", 0)),
             stale_after_steps=int(payload.get("stale_after_steps", 0)),
             price_move_bps_per_step=_coerce_finite_float(
                 "replay_case.broker.price_move_bps_per_step",

@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from adapters.base import AdapterHealth
@@ -30,6 +30,7 @@ from adapters.types import (
     Venue,
 )
 from engine.runner import TradingEngine
+from engine.runtime_policy import RuntimePolicy
 from engine.safety_state import PendingCancelState
 from engine.strategies import FairValueBandStrategy
 from risk.limits import RiskEngine, RiskLimits
@@ -183,6 +184,23 @@ class PlaceableAdapter(PauseAdapter):
     def place_limit_order(self, intent):
         self.place_calls += 1
         return PlacementResult(True, order_id="placed-1", status=OrderStatus.RESTING)
+
+
+class _CapturingQuoteManager:
+    captured_engine = None
+
+    def __init__(self, engine):
+        _CapturingQuoteManager.captured_engine = engine
+
+    def sync_quote(self, contract, proposal, reason=None):
+        return SimpleNamespace(
+            action="place",
+            cancelled_order_ids=(),
+            submitted_order_ids=("placed-1",),
+            placements=[
+                PlacementResult(True, order_id="placed-1", status=OrderStatus.RESTING)
+            ],
+        )
 
 
 class OperatorControlTests(unittest.TestCase):
@@ -655,6 +673,151 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(payload["shell_action"], "place")
             self.assertEqual(payload["submitted_order_ids"], ["placed-1"])
+
+    def test_sync_quote_uses_runtime_policy_file_for_engine_and_adapter(self):
+        adapter = PlaceableAdapter()
+        stdout = io.StringIO()
+        args = argparse.Namespace(
+            venue="polymarket",
+            symbol="token-1",
+            outcome="yes",
+            side="buy_yes",
+            action="place",
+            price=0.5,
+            quantity=1.0,
+            tif="GTC",
+            rationale="operator quote sync",
+            journal=None,
+            state_file="runtime/safety-state.json",
+            policy_file="configs/runtime_policy.staging.json",
+            config_file=None,
+        )
+
+        real_build_adapter = operator_cli._build_adapter
+        captured: dict[str, object] = {}
+
+        def fake_build_adapter(venue_name, adapter_args=None, *, policy=None):
+            captured["policy"] = policy
+            return adapter
+
+        with (
+            patch.object(
+                operator_cli, "_build_adapter", side_effect=fake_build_adapter
+            ),
+            patch.object(operator_cli, "QuoteManager", _CapturingQuoteManager),
+            patch("sys.stdout", stdout),
+        ):
+            result = operator_cli.cmd_sync_quote(args)
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 0)
+        self.assertEqual(payload["shell_action"], "place")
+        self.assertIsInstance(captured["policy"], RuntimePolicy)
+        engine = cast(TradingEngine, _CapturingQuoteManager.captured_engine)
+        self.assertEqual(engine.risk_engine.limits.max_contracts_per_market, 5)
+        self.assertEqual(engine.cancel_retry_interval_seconds, 5.0)
+
+    def test_sync_quote_can_load_policy_from_config_file(self):
+        adapter = PlaceableAdapter()
+        stdout = io.StringIO()
+        args = argparse.Namespace(
+            venue="polymarket",
+            symbol="token-1",
+            outcome="yes",
+            side="buy_yes",
+            action="place",
+            price=0.5,
+            quantity=1.0,
+            tif="GTC",
+            rationale="operator quote sync",
+            journal=None,
+            state_file="runtime/safety-state.json",
+            policy_file=None,
+            config_file="configs/sports_nba.staging.yaml",
+        )
+
+        captured: dict[str, object] = {}
+
+        def fake_build_adapter(venue_name, adapter_args=None, *, policy=None):
+            captured["policy"] = policy
+            return adapter
+
+        with (
+            patch.object(
+                operator_cli, "_build_adapter", side_effect=fake_build_adapter
+            ),
+            patch.object(operator_cli, "QuoteManager", _CapturingQuoteManager),
+            patch("sys.stdout", stdout),
+        ):
+            result = operator_cli.cmd_sync_quote(args)
+
+        self.assertEqual(result, 0)
+        self.assertIsInstance(captured["policy"], RuntimePolicy)
+
+    def test_cancel_stale_uses_policy_order_lifecycle_when_policy_file_supplied(self):
+        adapter = CancelTrackingAdapter()
+        args = argparse.Namespace(
+            venue="polymarket",
+            symbol="token-1",
+            outcome="yes",
+            max_order_age_seconds=30.0,
+            journal=None,
+            state_file="runtime/safety-state.json",
+            policy_file="configs/runtime_policy.staging.json",
+            config_file=None,
+        )
+        captured: dict[str, object] = {}
+
+        class _FakeLifecycleManager:
+            def __init__(self, *, adapter, policy, cancel_handler):
+                captured["policy"] = policy
+
+            def cancel_stale_orders(self, contract):
+                return []
+
+        with (
+            patch.object(operator_cli, "_build_adapter", return_value=adapter),
+            patch.object(operator_cli, "OrderLifecycleManager", _FakeLifecycleManager),
+            patch("sys.stdout", io.StringIO()),
+        ):
+            result = operator_cli.cmd_cancel_stale(args)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(cast(Any, captured["policy"]).max_order_age_seconds, 30.0)
+
+    def test_tracking_engine_reuses_supplied_adapter(self):
+        adapter = PlaceableAdapter()
+        engine = operator_cli._tracking_engine(
+            argparse.Namespace(state_file="runtime/safety-state.json"),
+            adapter,
+            policy=None,
+        )
+
+        self.assertIs(engine.adapter, adapter)
+
+    def test_resume_and_cancel_all_do_not_expose_policy_args(self):
+        parser = operator_cli.build_parser()
+        subparsers_action = next(
+            action
+            for action in parser._actions
+            if getattr(action, "choices", None) is not None
+        )
+        choices = cast(Any, subparsers_action.choices)
+
+        resume = choices["resume"]
+        cancel_all = choices["cancel-all"]
+
+        resume_options = {
+            option for action in resume._actions for option in action.option_strings
+        }
+        cancel_all_options = {
+            option for action in cancel_all._actions for option in action.option_strings
+        }
+
+        self.assertNotIn("--policy-file", resume_options)
+        self.assertNotIn("--config-file", resume_options)
+        self.assertNotIn("--policy-file", cancel_all_options)
+        self.assertNotIn("--config-file", cancel_all_options)
 
     def test_sync_quote_can_cancel_existing_order(self):
         adapter = CancelTrackingAdapter()
