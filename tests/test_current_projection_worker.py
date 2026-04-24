@@ -629,7 +629,7 @@ class CurrentProjectionWorkerTests(unittest.TestCase):
             source_health["projection_polymarket_user_channel"]["status"], "red"
         )
 
-    def test_project_current_state_once_rejects_newer_non_snapshot_after_account_snapshot(
+    def test_project_current_state_once_processes_last_snapshot_in_window(
         self,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -710,19 +710,27 @@ class CurrentProjectionWorkerTests(unittest.TestCase):
                     },
                 ),
             ):
-                with self.assertRaisesRegex(
-                    RuntimeError,
-                    "received newer non-matching events after the latest snapshot",
-                ):
-                    project_current_state_once(root)
+                result = project_current_state_once(root)
 
             source_health = json.loads(
                 (root / "current" / "source_health.json").read_text(encoding="utf-8")
             )
+            current_balance = json.loads(
+                (root / "current" / "polymarket_balance.json").read_text(
+                    encoding="utf-8"
+                )
+            )
 
+        self.assertTrue(result["ok"])
         self.assertEqual(
             source_health["projection_polymarket_user_channel"]["status"], "red"
         )
+        self.assertTrue(
+            source_health["projection_polymarket_user_channel"]["details"][
+                "trailing_unmatched_events"
+            ]
+        )
+        self.assertIn("polymarket:USDC", current_balance)
 
     def test_project_current_state_ignores_repository_audit_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:

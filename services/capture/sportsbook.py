@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from adapters.sportsbooks import (
+    SPORTSGAMEODDS_EVENTS_URL,
     SportsbookJsonFeedClient,
+    SportsGameOddsClient,
     TheOddsApiClient,
     normalize_odds_event,
 )
@@ -132,7 +134,11 @@ class SportsbookCaptureSource(Protocol):
     ) -> dict[str, Any]: ...
 
 
-SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS = ("theoddsapi", "json_feed")
+SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS = (
+    "theoddsapi",
+    "json_feed",
+    "sportsgameodds",
+)
 SPORTSBOOK_CAPTURE_RAW_LAYER = "odds_api"
 
 
@@ -245,6 +251,20 @@ def _coalesce_string(event: dict[str, Any], *keys: str) -> str | None:
         value = event.get(key)
         if value not in (None, ""):
             return str(value)
+    return None
+
+
+def _nested_string(payload: dict[str, Any], *paths: str) -> str | None:
+    for path in paths:
+        current: Any = payload
+        found = True
+        for part in path.split("."):
+            if not isinstance(current, dict) or part not in current:
+                found = False
+                break
+            current = current[part]
+        if found and current not in (None, ""):
+            return str(current)
     return None
 
 
@@ -509,6 +529,263 @@ class SportsbookJsonFeedCaptureSource:
         if provider_event_id not in (None, ""):
             metadata["provider_event_id"] = provider_event_id
         return metadata
+
+
+class SportsGameOddsCaptureSource(SportsbookJsonFeedCaptureSource):
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        feed_url: str | None = None,
+        client: SportsGameOddsClient | None = None,
+    ) -> None:
+        resolved_client = client
+        if resolved_client is None:
+            if api_key in (None, ""):
+                raise ValueError("api_key is required when client is not provided")
+            if feed_url not in (None, "", SPORTSGAMEODDS_EVENTS_URL):
+                raise ValueError(
+                    "sportsgameodds feed_url must be the official events endpoint"
+                )
+            resolved_client = SportsGameOddsClient(
+                api_key=api_key,
+                feed_url=feed_url or SPORTSGAMEODDS_EVENTS_URL,
+            )
+        super().__init__(provider_name="sportsgameodds", client=resolved_client)
+
+    def fetch_upcoming(self, sport: str, market_type: str) -> list[dict[str, Any]]:
+        events = self._client.fetch_upcoming("", "")
+        return [
+            event
+            for event in events
+            if self._matches_requested_sport(event, sport)
+            and self._matches_requested_market(event, market_type)
+        ]
+
+    def _matches_requested_sport(self, event: dict[str, Any], sport: str) -> bool:
+        if sport in (None, ""):
+            return True
+        requested_tokens = {str(sport).strip().lower()}
+        if "_" in str(sport):
+            requested_tokens.update(
+                part for part in str(sport).strip().lower().split("_") if part
+            )
+        observed_tokens = {
+            token
+            for token in (
+                _coalesce_string(event, "sport_key", "sport", "sportKey"),
+                _coalesce_string(event, "league_name", "leagueName", "leagueID"),
+            )
+            if token not in (None, "")
+            for token in {str(token).strip().lower()}
+        }
+        return bool(requested_tokens & observed_tokens)
+
+    def _matches_requested_market(
+        self, event: dict[str, Any], market_type: str
+    ) -> bool:
+        if market_type in (None, ""):
+            return True
+        requested = str(market_type).strip().lower()
+        aliases = {requested}
+        if requested == "h2h":
+            aliases.add("moneyline")
+        odds = event.get("odds")
+        if not isinstance(odds, dict):
+            return False
+        for odd_key, odd_payload in odds.items():
+            candidates = {str(odd_key).strip().lower()}
+            if isinstance(odd_payload, dict):
+                for value in (
+                    odd_payload.get("market_type"),
+                    odd_payload.get("market"),
+                    odd_payload.get("betType"),
+                ):
+                    if value not in (None, ""):
+                        candidates.add(str(value).strip().lower())
+            if aliases & candidates:
+                return True
+        return False
+
+    def _selection_name(
+        self,
+        odd_key: str,
+        odd_payload: dict[str, Any],
+        *,
+        home_team: str,
+        away_team: str,
+    ) -> str | None:
+        direct = _coalesce_string(odd_payload, "selection", "name", "side")
+        if direct not in (None, ""):
+            return direct
+        normalized_key = odd_key.strip().lower()
+        if normalized_key.endswith("home"):
+            return home_team
+        if normalized_key.endswith("away"):
+            return away_team
+        return None
+
+    def _extract_bookmaker_price(
+        self, bookmaker_payload: dict[str, Any]
+    ) -> float | int | None:
+        odds_payload = bookmaker_payload.get("odds")
+        if isinstance(odds_payload, dict):
+            price = _coalesce_decimal_price(
+                odds_payload,
+                "decimal",
+                "decimal_price",
+                "decimal_odds",
+                "price",
+            )
+            if price is None:
+                price = _coalesce_american_price(
+                    odds_payload,
+                    "american",
+                    "american_price",
+                    "american_odds",
+                )
+            if price is not None:
+                return price
+        price = _coalesce_decimal_price(
+            bookmaker_payload,
+            "decimal",
+            "decimal_price",
+            "decimal_odds",
+            "price",
+        )
+        if price is None:
+            price = _coalesce_american_price(
+                bookmaker_payload,
+                "american",
+                "american_price",
+                "american_odds",
+            )
+        return price
+
+    def _canonical_bookmakers(
+        self,
+        event: dict[str, Any],
+        *,
+        market_type: str,
+        home_team: str,
+        away_team: str,
+        last_update: str | None,
+    ) -> list[dict[str, Any]]:
+        bookmaker_rows: dict[str, dict[str, Any]] = {}
+        odds = event.get("odds")
+        if not isinstance(odds, dict):
+            return []
+        for odd_key, odd_payload in odds.items():
+            if not isinstance(odd_payload, dict):
+                continue
+            candidates = {str(odd_key).strip().lower()}
+            for value in (
+                odd_payload.get("market_type"),
+                odd_payload.get("market"),
+                odd_payload.get("betType"),
+            ):
+                if value not in (None, ""):
+                    candidates.add(str(value).strip().lower())
+            if market_type == "h2h":
+                candidates.add("moneyline")
+            if market_type not in candidates and not (
+                {"h2h", "moneyline"} & candidates and market_type == "h2h"
+            ):
+                continue
+            selection = self._selection_name(
+                str(odd_key), odd_payload, home_team=home_team, away_team=away_team
+            )
+            if selection in (None, ""):
+                continue
+            by_bookmaker = odd_payload.get("byBookmaker")
+            if not isinstance(by_bookmaker, dict):
+                continue
+            for bookmaker_id, bookmaker_payload in by_bookmaker.items():
+                if not isinstance(bookmaker_payload, dict):
+                    continue
+                price = self._extract_bookmaker_price(bookmaker_payload)
+                if price in (None, ""):
+                    continue
+                bookmaker_name = str(bookmaker_id)
+                entry = bookmaker_rows.setdefault(
+                    bookmaker_name,
+                    {
+                        "key": bookmaker_name,
+                        "title": bookmaker_name,
+                        "last_update": _coalesce_string(
+                            bookmaker_payload,
+                            "updated_at",
+                            "updatedAt",
+                            "last_update",
+                        )
+                        or last_update,
+                        "markets": [{"key": market_type, "outcomes": []}],
+                    },
+                )
+                entry["markets"][0]["outcomes"].append(
+                    {"name": str(selection), "price": price}
+                )
+        return [
+            entry
+            for entry in bookmaker_rows.values()
+            if entry["markets"][0]["outcomes"]
+        ]
+
+    def event_id(self, event: dict[str, Any]) -> str:
+        event_id = _coalesce_string(event, "eventID", "external_id", "id")
+        if event_id in (None, ""):
+            raise ValueError("sportsgameodds event is missing a stable event id")
+        return event_id
+
+    def _canonical_event(
+        self,
+        event: dict[str, Any],
+        *,
+        sport: str,
+        market_type: str,
+    ) -> dict[str, Any]:
+        home_team = (
+            _coalesce_string(event, "homeTeamName", "home", "home_team")
+            or _nested_string(event, "teams.home.team.name")
+            or ""
+        )
+        away_team = (
+            _coalesce_string(event, "awayTeamName", "away", "away_team")
+            or _nested_string(event, "teams.away.team.name")
+            or ""
+        )
+        odds = event.get("odds")
+        last_update = _coalesce_string(
+            event,
+            "updatedAt",
+            "startsAt",
+            "startTime",
+            "start_time",
+        ) or _nested_string(event, "status.startsAt")
+        bookmakers = self._canonical_bookmakers(
+            event,
+            market_type=market_type,
+            home_team=home_team,
+            away_team=away_team,
+            last_update=last_update,
+        )
+        canonical_event = {
+            "id": self.event_id(event),
+            "sport_key": _coalesce_string(event, "sport_key", "sport", "sportKey")
+            or sport,
+            "sport_title": _coalesce_string(
+                event, "league_name", "leagueName", "leagueID"
+            ),
+            "home_team": home_team,
+            "away_team": away_team,
+            "commence_time": _coalesce_string(
+                event, "startTime", "startsAt", "start_time"
+            )
+            or _nested_string(event, "status.startsAt"),
+            "bookmakers": bookmakers,
+        }
+        canonical_event["provider_event_id"] = self.event_id(event)
+        return canonical_event
 
 
 @dataclass(frozen=True)

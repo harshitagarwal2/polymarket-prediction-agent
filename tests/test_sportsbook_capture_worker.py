@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from scripts import ingest_live_data, run_sportsbook_capture
 from services.capture import (
+    SportsGameOddsCaptureSource,
     SportsbookCaptureRequest,
     SportsbookCaptureStores,
     SportsbookCaptureWorker,
@@ -814,6 +815,118 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
                     "1",
                 ]
             )
+
+    def test_run_sportsbook_capture_main_supports_sportsgameodds_provider(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stores = SportsbookCaptureStores.from_root(root)
+            with (
+                patch.object(
+                    SportsGameOddsCaptureSource,
+                    "fetch_upcoming",
+                    return_value=[
+                        {
+                            "eventID": "sgo-1",
+                            "leagueID": "NBA",
+                            "status": {"startsAt": "2026-04-21T20:00:00+00:00"},
+                            "teams": {
+                                "home": {"team": {"name": "Home Team"}},
+                                "away": {"team": {"name": "Away Team"}},
+                            },
+                            "odds": {
+                                "moneyline-home": {
+                                    "market_type": "h2h",
+                                    "byBookmaker": {
+                                        "alt-book": {
+                                            "updated_at": "2026-04-21T18:04:30+00:00",
+                                            "odds": {"decimal": 1.9},
+                                        }
+                                    },
+                                },
+                                "moneyline-away": {
+                                    "market_type": "h2h",
+                                    "byBookmaker": {
+                                        "alt-book": {
+                                            "updated_at": "2026-04-21T18:04:30+00:00",
+                                            "odds": {"decimal": 2.1},
+                                        }
+                                    },
+                                },
+                            },
+                        }
+                    ],
+                ),
+                patch(
+                    "scripts.run_sportsbook_capture.SportsbookCaptureStores.from_root",
+                    return_value=stores,
+                ),
+                patch.dict(
+                    "os.environ", {"SPORTSGAMEODDS_API_KEY": "test-key"}, clear=False
+                ),
+            ):
+                result = run_sportsbook_capture.main(
+                    [
+                        "--provider",
+                        "sportsgameodds",
+                        "--sport",
+                        "basketball_nba",
+                        "--market",
+                        "h2h",
+                        "--root",
+                        str(root),
+                        "--max-cycles",
+                        "1",
+                        "--quiet",
+                    ]
+                )
+
+            raw_files = list((root / "raw").rglob("*.jsonl.gz"))
+
+        self.assertEqual(result, 0)
+        self.assertTrue(raw_files)
+
+    def test_run_sportsbook_capture_main_resolves_provider_from_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stores = SportsbookCaptureStores.from_root(root)
+            config_path = Path(temp_dir) / "capture.yaml"
+            config_path.write_text(
+                "capture:\n"
+                "  provider: sportsgameodds\n"
+                "  provider_url: https://api.sportsgameodds.com/v2/events\n"
+                "  api_key_env: SPORTSGAMEODDS_API_KEY\n"
+                "  sport_key: basketball_nba\n"
+                "runtime:\n"
+                "  sportsbook_market: h2h\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(
+                    SportsGameOddsCaptureSource,
+                    "fetch_upcoming",
+                    return_value=[],
+                ),
+                patch(
+                    "scripts.run_sportsbook_capture.SportsbookCaptureStores.from_root",
+                    return_value=stores,
+                ),
+                patch.dict(
+                    "os.environ", {"SPORTSGAMEODDS_API_KEY": "test-key"}, clear=False
+                ),
+            ):
+                result = run_sportsbook_capture.main(
+                    [
+                        "--config-file",
+                        str(config_path),
+                        "--root",
+                        str(root),
+                        "--max-cycles",
+                        "1",
+                        "--quiet",
+                    ]
+                )
+
+        self.assertEqual(result, 0)
 
     def test_worker_does_not_materialize_selector_facing_current_state(self):
         with tempfile.TemporaryDirectory() as temp_dir:

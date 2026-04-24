@@ -2,6 +2,8 @@ league: nba
 venue: polymarket
 capture:
   sport_key: basketball_nba
+  provider: theoddsapi
+  api_key_env: THE_ODDS_API_KEY
   market_source: gamma
   book_source: clob
   trade_source: data-api

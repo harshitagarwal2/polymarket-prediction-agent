@@ -16,7 +16,8 @@ Before calling a branch production-ready, all of the following must be true:
 4. `make smoke-compose` passes.
 5. `docker build -t prediction-market-agent .` passes.
 6. `operator-cli status` reflects the expected runtime safety state for the supervised target configuration.
-7. Verification artifacts under:
+7. If local watchdog automation is enabled, `operator-cli status --output runtime/data/current/runtime_status.json` writes the expected machine-readable payload.
+8. Verification artifacts under:
    - `docs/VERIFICATION_SPORTS_POLYMARKET.md`
    - `docs/verification_sports_polymarket.json`
    are refreshed from the exact branch state being claimed as ready.

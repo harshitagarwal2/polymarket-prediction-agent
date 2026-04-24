@@ -91,6 +91,14 @@ class DocsSyncTests(unittest.TestCase):
                     path.read_text(),
                 )
 
+    def test_operator_docs_reference_status_output_sidecar(self):
+        for path in (
+            REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+            REPO_ROOT / "docs" / "PRODUCTION_READINESS.md",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("runtime_status.json", path.read_text())
+
     def test_docs_reference_policy_guidance_for_advisory_preview_alignment(self):
         for path in DOCS_WITH_POLICY_GUIDANCE:
             with self.subTest(path=path):
@@ -149,6 +157,16 @@ class DocsSyncTests(unittest.TestCase):
                     self.assertIn("source_health_events", text)
                 if path == REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md":
                     self.assertIn("bootstrap-postgres", text)
+
+    def test_docs_reference_second_sportsbook_source_and_schedule_feed_helper(self):
+        for path in (
+            REPO_ROOT / "README.md",
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("sportsgameodds", text)
+                self.assertIn("build_event_map_from_schedule_feed", text)
 
     def test_verification_json_mentions_dedicated_sportsbook_worker(self):
         text = VERIFICATION_JSON_PATH.read_text()
