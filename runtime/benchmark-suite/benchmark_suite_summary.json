@@ -1,5 +1,6 @@
 {
   "aggregate": {
+    "attribution_ledger_row_count": 3,
     "average_accuracy": 1.0,
     "average_brier_score": 0.21216797381669605,
     "average_calibrated_accuracy": null,
@@ -15,6 +16,7 @@
     "average_expected_calibration_error": 0.0,
     "average_log_loss": 0.6169768221439359,
     "average_model_residual_bps": -166.6667,
+    "average_realized_edge_bps": 966.6667,
     "average_replay_complete_fill_rate": 1.0,
     "average_replay_fill_rate": 1.0,
     "average_replay_fill_ratio": 1.0,
@@ -24,6 +26,7 @@
     "average_replay_slippage_bps": 0.0,
     "average_replay_wait_steps": 0.0,
     "average_signal_edge_bps": 966.6667,
+    "average_value_capture_bps": 966.6667,
     "calibrated_case_count": 0,
     "edge_ledger_row_count": 4,
     "execution_ledger_row_count": 3,
@@ -308,9 +311,99 @@
       }
     },
     "replay_case_count": 2,
+    "replay_resting_trade_count": 0,
     "replay_stale_data_count": 0,
     "successful_cases": 3,
     "total_cases": 3
+  },
+  "attribution_ledger": {
+    "row_count": 3,
+    "rows": [
+      {
+        "case_name": "sports-benchmark-round-trip",
+        "case_path": "/Users/harshita/tp/prediction-market-agent/research/fixtures/sports_benchmark_round_trip.json",
+        "closing_edge_bps": 1500.0,
+        "execution_drag_bps": 0.0,
+        "expected_edge_bps": 1000.0,
+        "fill_ratio": 1.0,
+        "filled_quantity": 5.0,
+        "mapping_risk": 0.0,
+        "market_id": "token-round-trip:yes",
+        "model_error": 0.0,
+        "model_residual_bps": 500.0,
+        "notes": {
+          "fill_step": 1,
+          "reason": "book crossed",
+          "submitted_step": 1
+        },
+        "pnl": 0.75,
+        "realized_edge_bps": 1000.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "signal_edge_bps": 1000.0,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "trade_id": "paper-1:fill-1:0",
+        "value_capture_bps": 1000.0,
+        "wait_steps": 0
+      },
+      {
+        "case_name": "sports-benchmark-round-trip",
+        "case_path": "/Users/harshita/tp/prediction-market-agent/research/fixtures/sports_benchmark_round_trip.json",
+        "closing_edge_bps": -100.0,
+        "execution_drag_bps": 0.0,
+        "expected_edge_bps": 900.0,
+        "fill_ratio": 1.0,
+        "filled_quantity": 5.0,
+        "mapping_risk": 0.0,
+        "market_id": "token-round-trip:yes",
+        "model_error": 0.0,
+        "model_residual_bps": -1000.0,
+        "notes": {
+          "fill_step": 2,
+          "reason": "book crossed",
+          "submitted_step": 2
+        },
+        "pnl": -0.05,
+        "realized_edge_bps": 900.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "signal_edge_bps": 900.0,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "trade_id": "paper-2:fill-2:1",
+        "value_capture_bps": 900.0,
+        "wait_steps": 0
+      },
+      {
+        "case_name": "sports-benchmark-tiny",
+        "case_path": "/Users/harshita/tp/prediction-market-agent/research/fixtures/sports_benchmark_tiny.json",
+        "closing_edge_bps": 1000.0,
+        "execution_drag_bps": 0.0,
+        "expected_edge_bps": 1000.0,
+        "fill_ratio": 1.0,
+        "filled_quantity": 5.0,
+        "mapping_risk": 0.0,
+        "market_id": "token-home:yes",
+        "model_error": 0.0,
+        "model_residual_bps": 0.0,
+        "notes": {
+          "fill_step": 1,
+          "reason": "book crossed",
+          "submitted_step": 1
+        },
+        "pnl": 0.5,
+        "realized_edge_bps": 1000.0,
+        "requested_quantity": 5.0,
+        "resting": false,
+        "signal_edge_bps": 1000.0,
+        "slippage_bps": 0.0,
+        "stale_data_flag": false,
+        "trade_id": "paper-1:fill-1:0",
+        "value_capture_bps": 1000.0,
+        "wait_steps": 0
+      }
+    ]
   },
   "case_results": [
     {

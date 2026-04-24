@@ -30,9 +30,12 @@
 - Average replay slippage (bps): 0.0000
 - Replay stale rows: 0
 - Average signal edge (bps): 966.6667
+- Average realized edge (bps): 966.6667
 - Average execution drag (bps): 0.0000
 - Average model residual (bps): -166.6667
 - Average closing edge (bps): 800.0000
+- Average value capture (bps): 966.6667
+- Resting replay trades: 0
 - Edge ledger rows: 4
 - Execution ledger rows: 3
 
@@ -83,7 +86,7 @@ Percentile bootstrap confidence intervals are computed on the mean paired loss d
 
 ## Replay attribution summary
 
-| Case | Trades | Avg Signal Edge (bps) | Avg Execution Drag (bps) | Avg Model Residual (bps) | Avg Closing Edge (bps) | Total PnL |
-|---|---:|---:|---:|---:|---:|---:|
-| sports-benchmark-round-trip | 2 | 950.0000 | 0.0000 | -250.0000 | 700.0000 | 0.7000 |
-| sports-benchmark-tiny | 1 | 1000.0000 | 0.0000 | 0.0000 | 1000.0000 | 0.5000 |
+| Case | Trades | Avg Signal Edge (bps) | Avg Realized Edge (bps) | Avg Execution Drag (bps) | Avg Model Residual (bps) | Avg Closing Edge (bps) | Avg Value Capture (bps) | Resting Trades | Total PnL |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| sports-benchmark-round-trip | 2 | 950.0000 | 950.0000 | 0.0000 | -250.0000 | 700.0000 | 950.0000 | 0 | 0.7000 |
+| sports-benchmark-tiny | 1 | 1000.0000 | 1000.0000 | 0.0000 | 0.0000 | 1000.0000 | 1000.0000 | 0 | 0.5000 |
