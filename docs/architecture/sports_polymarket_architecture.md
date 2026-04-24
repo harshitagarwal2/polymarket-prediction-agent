@@ -1,313 +1,161 @@
 # Sports + Polymarket Architecture
 
-This document is a **target architecture** for extending the current repo into a cleaner sports-modeling and Polymarket execution workspace. It builds on the current verified runtime described in `docs/ARCHITECTURE.md`: deterministic discovery, policy-gated execution, supervised operation, and offline fair-value generation.
+This document now describes the **current implemented sports + Polymarket architecture** in this repo. It complements `docs/ARCHITECTURE.md` by zooming in on the sports-input, Polymarket-capture, projection, deterministic-builder, and supervised-runtime paths that are active today.
 
-The core rule does not change: **the runtime stays deterministic and policy-driven**. LLMs can help with research, operator workflows, and offline analysis, but they do not directly decide whether to buy or sell.
+The core rule still does not change: **the runtime stays deterministic and policy-driven**. LLMs can help with research, dashboards, and operator workflows, but they do not directly decide whether to buy or sell.
 
-## Architectural decisions
-
-Keep this as **one repo**, but separate responsibilities cleanly:
-
-- keep venue I/O in `adapters/`
-- keep supervised runtime behavior in `engine/`, `risk/`, and `runtime/`
-- keep data capture, feature engineering, model training, evaluation, and fair-value generation in `research/`
-- keep raw live captures, large historical datasets, model checkpoints, and runtime state **out of git**
-
-The repo should keep code, configs, docs, tests, tiny fixtures, and manifest schemas in git. It should **not** use `runtime/` as an ML training warehouse.
-
-## Recommended target tree
-
-```text
-prediction-market-agent/
-├── adapters/
-│   ├── polymarket/
-│   │   ├── gamma_client.py
-│   │   ├── clob_client.py
-│   │   ├── ws_market.py
-│   │   ├── ws_sports.py
-│   │   ├── ws_user.py
-│   │   └── normalize.py
-│   └── types.py
-├── engine/
-│   ├── discovery.py
-│   ├── runner.py
-│   ├── runtime_policy.py
-│   ├── reconciliation.py
-│   ├── order_state.py
-│   └── safety_store.py
-├── risk/
-│   ├── limits.py
-│   └── cleanup.py
-├── research/
-│   ├── data/
-│   │   ├── capture_polymarket.py
-│   │   ├── capture_sports_inputs.py
-│   │   ├── schemas.py
-│   │   └── build_training_set.py
-│   ├── features/
-│   │   ├── market_features.py
-│   │   ├── sports_features.py
-│   │   └── joiners.py
-│   ├── models/
-│   │   ├── elo.py
-│   │   ├── bradley_terry.py
-│   │   ├── blend.py
-│   │   └── calibration.py
-│   ├── train/
-│   │   ├── train_elo.py
-│   │   ├── train_bt.py
-│   │   └── train_blend.py
-│   ├── eval/
-│   │   ├── walk_forward.py
-│   │   ├── metrics.py
-│   │   ├── dm_test.py
-│   │   └── reports.py
-│   ├── replay/
-│   ├── fixtures/
-│   └── fair_values.py
-├── runtime/
-│   ├── state/
-│   ├── cache/
-│   ├── journals/
-│   └── fair_values/
-├── scripts/
-│   ├── ingest_live_data.py
-│   ├── train_models.py
-│   ├── build_fair_values.py
-│   ├── run_agent_loop.py
-│   └── operator_cli.py
-├── configs/
-│   ├── sports_nba.yaml
-│   ├── sports_nfl.yaml
-│   └── runtime_policy.preview.json
-├── tests/
-├── docs/
-├── Dockerfile
-├── Makefile
-├── pyproject.toml
-└── README.md
-```
-
-## Diagram 1 — Offline training and runtime boundary
-
-This diagram answers: **how should offline sports research connect to the supervised Polymarket runtime without letting training logic leak into execution?**
+## Current architecture in one view
 
 ```mermaid
 flowchart LR
-    subgraph Sources[External sources]
-        gamma[Gamma market metadata]
-        clob[CLOB books and price history]
-        dataapi[Trade / data API history]
-        ws[WebSocket market and user feeds]
-        sports[External sports inputs]
+    subgraph sources[External sources]
+        odds[Sportsbook providers]
+        gamma[Polymarket Gamma / market catalog]
+        marketws[Polymarket market websocket]
+        userws[Polymarket user websocket]
     end
 
-    subgraph Research[Offline research layer]
-        capture[research/data capture + schemas]
-        features[research/features]
-        train[research/models + research/train]
-        eval[research/eval walk-forward + calibration + DM]
-        fv[research/fair_values.py]
+    subgraph capture[Dedicated capture workers]
+        sbcap[run-sportsbook-capture]
+        pmcap[run-polymarket-capture market]
+        pmuser[run-polymarket-capture user]
     end
 
-    subgraph Runtime[Deterministic runtime layer]
-        manifest[runtime fair-value manifest]
-        discovery[engine.discovery]
-        gate[execution policy gate + sizing]
-        risk[risk.limits]
-        runner[engine.runner]
-        adapter[adapters/polymarket]
-        state[runtime state + journals + operator control]
+    subgraph substrate[Postgres capture substrate]
+        raw[raw_capture_events]
+        checkpoints[capture_checkpoints]
+        health[source_health]
     end
 
-    gamma --> capture
-    clob --> capture
-    dataapi --> capture
-    ws --> capture
-    sports --> capture
-    capture --> features --> train --> eval --> fv --> manifest
-    manifest --> discovery --> gate --> risk --> runner --> adapter --> state
+    subgraph projection[Projection + current-state]
+        projector[run-current-projection]
+        current[Projected current-state tables\ncompatibility JSON in runtime/data/current]
+    end
+
+    subgraph builders[Deterministic builders]
+        mappings[build-mappings]
+        fairvalues[build-fair-values]
+        opps[build-opportunities]
+        datasets[build-inference-dataset\nbuild-training-dataset]
+    end
+
+    subgraph runtime[Supervised runtime + operator]
+        loop[run-agent-loop]
+        cli[operator-cli]
+        state[safety-state.json\nevents.jsonl\nllm_advisory.json]
+    end
+
+    subgraph research[Offline research]
+        bench[benchmark + replay]
+        train[train-models]
+    end
+
+    odds --> sbcap
+    gamma --> pmcap
+    marketws --> pmcap
+    userws --> pmuser
+
+    sbcap --> raw
+    pmcap --> raw
+    pmuser --> raw
+    sbcap --> checkpoints
+    pmcap --> checkpoints
+    pmuser --> checkpoints
+    sbcap --> health
+    pmcap --> health
+    pmuser --> health
+
+    raw --> projector
+    checkpoints --> projector
+    health --> projector
+    projector --> current
+
+    current --> mappings
+    current --> fairvalues
+    current --> opps
+    current --> datasets
+
+    fairvalues --> loop
+    health --> loop
+    loop --> state
+    cli --> state
+    current --> cli
+
+    datasets --> train
+    fairvalues --> bench
+    train --> fairvalues
 ```
 
-The important boundary is between `research/` and the supervised runtime. Research can ingest, fit, calibrate, and evaluate. Runtime consumes a manifest and stays deterministic.
+## The important implementation boundary
 
-## Diagram 2 — Live ingestion and supervised operation loop
+The architecture now has a clean split between:
 
-This diagram answers: **how should Polymarket data ingestion, fair-value generation, and supervised execution connect during a live sports workflow?**
+- **capture/projection/builders**, which own the data substrate and deterministic materialization path, and
+- **the supervised runtime**, which still lists live venue markets, applies runtime policy, and reconciles against venue truth.
+
+That means the projected current-state tables help power deterministic builders, operator preview context, advisory generation, and kill-switch health, but they do not replace the live adapter-driven runtime loop.
+
+## Current package responsibilities
+
+### Capture and projection
+
+- `services/capture/sportsbook.py` and `services/capture/worker.py` own sportsbook raw ingress
+- `services/capture/polymarket.py` and `services/capture/polymarket_worker.py` own Polymarket market/user raw ingress
+- `services/projection/current_state.py` replays raw lanes into current-state compatibility tables
+- `services/projection/worker.py` runs the projection loop
+
+### Contract, forecasting, opportunity, and execution layers
+
+- `contracts/` owns match identity, confidence, resolution rules, and mapping manifests
+- `forecasting/` owns fair-value engines, calibration, consensus, scoring, dashboards, and ML helpers
+- `opportunity/` owns executable edge, fillability, and market ranking
+- `execution/` owns deterministic order proposals and supervised quote-shell helpers
+
+### Runtime and operator control
+
+- `scripts/run_agent_loop.py` builds adapters, fair-value providers, policy gates, and the supervised runtime loop
+- `engine/runtime_bootstrap.py` chooses projected current-state authority when a DSN marker exists
+- `engine/discovery.py` owns ranking, scan-cycle journaling, deterministic sizing, and policy gating
+- `engine/runner.py` owns reconciliation, safety state, and placement/recovery behavior
+- `scripts/operator_cli.py` owns supervised inspection and intervention
+
+## Current sports + Polymarket live path
 
 ```mermaid
 sequenceDiagram
-    participant G as Gamma / CLOB / Data API / WebSockets
-    participant C as research/data capture jobs
-    participant F as research/fair_values.py
-    participant D as engine.discovery
-    participant E as TradingEngine
-    participant R as RiskEngine
-    participant A as adapters/polymarket
-    participant O as Operator CLI / safety state
+    participant SB as Sportsbook capture
+    participant PM as Polymarket capture
+    participant PJ as Projection worker
+    participant B as Deterministic builders
+    participant RT as run-agent-loop
+    participant OP as operator-cli
 
-    G->>C: market metadata, books, trades, snapshots
-    C->>C: normalize + persist offline research inputs
-    C->>F: build runtime-ready fair values
-    F->>D: fair-value manifest
-    D->>E: ranked candidate + fair value
-    E->>R: deterministic checks and sizing
-    R-->>E: approve / reject
-    alt approved and supervised run mode
-        E->>A: preview or place orders
-        A-->>E: venue truth and results
-        E->>O: persist journals, safety state, recovery state
-    else rejected or paused
-        E->>O: record fail-closed reason
-    end
+    SB->>PJ: raw sportsbook envelopes + checkpoints + source_health
+    PM->>PJ: raw Polymarket envelopes + checkpoints + source_health
+    PJ->>B: projected sportsbook/market/BBO/source_health tables
+    B->>B: build-mappings -> build-fair-values -> build-opportunities
+    B->>RT: fair_value_manifest + optional projected authority
+    RT->>RT: list markets, rank, preview, size, policy gate, reconcile
+    RT->>OP: safety-state.json + events.jsonl + runtime metrics
+    OP->>RT: pause/unpause/hold/resume/cancel/advisory workflows
 ```
 
-This keeps live behavior aligned with the current verified repo flow: load truth, rank opportunities, look up fair value, generate intents, run deterministic checks, size, run risk, place or preview, reconcile, and persist safety state.
+That is the current sports + Polymarket operating shape in code.
 
-## Polymarket integration layers
+## Where offline research fits
 
-Treat Polymarket as several distinct integration layers, not one flat adapter:
+The repo also keeps an offline research lane beside the live/current-state architecture:
 
-- **Gamma** for public market discovery and metadata
-- **CLOB** for order book state and price-oriented trading access
-- **trade/data history endpoints** for historical trades and analysis inputs
-- **WebSockets** for higher-frequency market, sports, or user-state updates
+- `train-models` materializes lightweight model artifacts
+- `research/paper.py` and `research/replay.py` drive paper execution and replay
+- `run-sports-benchmark` and `run-sports-benchmark-suite` stay the reproducible offline evaluation path
+- `run-replay-attribution` materializes execution-label/attribution outputs from replay artifacts
 
-In practice, use them differently:
+This offline lane can improve or calibrate fair values, but the live runtime still consumes explicit artifacts and remains deterministic.
 
-- **Gamma** for event-first discovery, market metadata, and ID resolution such as `conditionId` and CLOB token identifiers
-- **CLOB** for tradable microstructure data such as books, prices, midpoints, and price history, plus authenticated trading operations when needed
-- **trade/data history** for historical fills, trade analysis, and user or market activity views
-- **WebSockets** for streaming public market updates and authenticated user-state updates where polling would be too expensive or stale
+## Current operational conclusions
 
-Capture jobs should batch where possible, back off independently per layer, and prefer WebSockets for high-frequency updates instead of polling everything at the same cadence. Design rate limiting as a per-layer concern rather than a single shared global assumption.
-
-Useful implementation notes:
-
-- prefer Gamma keyset pagination for broad market discovery
-- prefer CLOB batched market-data endpoints where available instead of one-market polling loops
-- treat Gamma, CLOB, and Data API limits as separate operational budgets
-- keep heartbeat handling explicit for websocket consumers and fail closed when streams go stale
-
-## Research split
-
-### `research/data/`
-
-Store normalized offline inputs for:
-
-- external sports inputs
-- Polymarket metadata from Gamma
-- CLOB price history
-- trade/data history
-- your own captured live book snapshots
-
-### `research/features/`
-
-Keep two feature families separate:
-
-- **sports features** such as Elo, team strength, rest days, injuries, opening odds, and line movement
-- **market microstructure features** such as spread, midpoint, imbalance, liquidity, trade velocity, and time-to-start
-
-### `research/models/`
-
-Start with:
-
-- odds-only baseline
-- Elo or Bradley–Terry
-- blended model
-- calibration layer
-
-### `research/eval/`
-
-Use **walk-forward only**. No random split. Primary metrics should be log loss, Brier, expected calibration error, and Diebold–Mariano-style comparisons on held-out future windows.
-
-### `research/fair_values.py`
-
-This should emit the runtime-ready manifest the repo already expects, including:
-
-- `fair_value`
-- optional `calibrated_fair_value`
-- `generated_at`
-- `condition_id`
-- `event_key`
-- `sport`
-- `series`
-- `game_id`
-
-That keeps the runtime contract stable while model and training logic evolve behind it.
-
-## Runtime rules
-
-The runtime remains supervised and fail-closed.
-
-- `engine.discovery` ranks and filters opportunities
-- `engine/runtime_policy.py` remains the schema-validated policy boundary
-- `engine/runner.py` remains the orchestration and reconciliation core
-- `risk/limits.py` remains the deterministic trading constraint layer
-- `runtime/` remains operational state, cache, journals, and fair-value artifacts
-
-Do not let an LLM bypass this path. The operator layer can assist with research, explanations, or manual workflows, but the execution decision path should remain explicit, deterministic, and testable.
-
-### Current runtime naming contract
-
-Use the repo’s current naming rather than inventing a parallel vocabulary:
-
-- modes: `preview`, `run`, `pair-preview`, `pair-run`
-- preview path: `preview_once` followed by a sized `preview_context`
-- placement path: `run_precomputed`
-- gate stages: `sizer`, `engine_review`, `policy_gate`, `placement`
-- reconciliation actions: `ok`, `resync`, `halt`
-- action policy outcomes: `allow`, `hold`, `recover-first`
-- Polymarket admission outcomes: `allow`, `refresh_then_retry`, `deny`, `shrink_to_size`
-
-That keeps this target architecture aligned with the existing runtime logs, policy traces, and supervised operator flow.
-
-## Practical minimal implementation plan
-
-### Week 1
-
-- add `adapters/polymarket/gamma_client.py`
-- add `adapters/polymarket/ws_market.py`
-- add `adapters/polymarket/ws_sports.py`
-- add `research/data/capture_polymarket.py`
-- write a normalized snapshot schema
-
-### Week 2
-
-- build `research/features/market_features.py`
-- add `research/models/elo.py`
-- add `research/models/blend.py`
-- make `research/fair_values.py` emit runtime-ready manifests
-
-### Week 3
-
-- add `scripts/ingest_live_data.py`
-- add `scripts/train_models.py`
-- add `scripts/build_fair_values.py`
-- run preview-only from `run-agent-loop`
-
-### Week 4
-
-- add walk-forward evaluation
-- add calibration and DM tests
-- add a single sports-league end-to-end benchmark
-
-## Git and storage policy
-
-Keep in git:
-
-- source code
-- configs
-- docs
-- tests
-- tiny fixtures
-- manifest schemas
-
-Keep out of git:
-
-- raw live captures
-- large historical datasets
-- model checkpoints
-- runtime state
-
-That is the cleanest way to keep research reproducible without mixing operational state, offline data warehousing, and supervised runtime recovery files.
+- The supported live capture path is `run-sportsbook-capture` plus `run-polymarket-capture`, not the retired `ingest-live-data polymarket-bbo` route.
+- The supported read boundary is the projected current-state adapter when a DSN marker exists.
+- `runtime/data/current/*.json` is still important for compatibility and debugging, but it is not the primary authority boundary when Postgres-backed projection is configured.
+- The runtime remains supervised and fail-closed. The architecture is stronger than the original monolithic runtime/research split, but it still does not claim unattended live trading.

@@ -4,16 +4,14 @@ This document describes the current verified shape of the repo, not an aspiratio
 
 ## System summary
 
-The repo now has first-class product-facing layers on top of the original runtime/research split:
+The current repository is best understood as four connected architecture lanes:
 
-1. `contracts/` for deterministic contract identity, mapping confidence, and resolution-rule parsing
-2. `forecasting/` for fair-value, calibration, consensus, dashboard, pipeline, and model-registry surfaces
-3. `opportunity/` for executable edge, fillability, and ranking
-4. `storage/` for raw capture envelopes, normalized row builders, parquet writers, and runtime journaling
-5. a supervised Polymarket runtime for discovery, preview, live order handling, reconciliation, and operator recovery
-6. an offline research and benchmark layer for replay, benchmarking, and dataset snapshots
+1. **Capture** — dedicated workers append raw ingress, checkpoints, and `source_health` into Postgres-backed capture storage.
+2. **Projection** — a dedicated projector replays raw capture lanes into projected current-state tables and compatibility JSON under `runtime/data/current/`.
+3. **Deterministic builders** — mapping, fair-value, opportunity, and dataset commands consume the current-state read boundary and materialize derived artifacts.
+4. **Supervised runtime and operator control** — `run-agent-loop` remains the venue-facing runtime shell, while `operator-cli` remains the pause/resume/status/advisory control plane.
 
-Polymarket is the main supported venue path. Kalshi remains present behind the same adapter interface, but the runtime, docs, and tests are much more complete on the Polymarket side.
+Polymarket is the main supported venue path. Kalshi remains present behind the same adapter interface, but the runtime, capture, docs, and tests are much more complete on the Polymarket side.
 
 ## Authority and ownership boundaries
 
@@ -21,41 +19,70 @@ This repo currently treats Postgres plus projected current-state tables as the a
 
 - capture workers own raw ingress, checkpoints, and source-health writes only
 - `services/projection/` plus `scripts/run_current_projection.py` own the compatibility `runtime/data/current/*.json` exports for capture-owned tables
-- deterministic builders in `scripts/ingest_live_data.py`, `storage/current_selection.py`, `execution/planner.py`, and `opportunity/` own mappings, fair values, opportunities, and other derived outputs
+- deterministic builders in `scripts/ingest_live_data.py`, `storage/current_projection.py`, `execution/planner.py`, and `opportunity/` own mappings, fair values, opportunities, and other derived outputs
+- `scripts/run_agent_loop.py` owns the supervised trading loop, reconciliation, safety state, and journaled execution behavior
 
 That means selector-facing current JSON is not capture-worker authority. When a DSN marker exists, runtime and ingest readers treat the projected Postgres-backed read boundary as authoritative and treat `runtime/data/current/*.json` as compatibility exports.
 
-The legacy live `polymarket-bbo` path is deprecated and should not be treated as the supported production capture path. The supported live capture path is the dedicated `run_polymarket_capture` worker.
+The legacy live `polymarket-bbo` path is deprecated and should not be treated as the supported production capture path. The supported live capture path is the dedicated `run-polymarket-capture` worker.
 
-## Current runtime flow
+## Primary system flows
 
-```text
-external sportsbook rows or model output
-                |
-                v
-   fair-value manifest with identity metadata
-                |
-                v
-   ManifestFairValueProvider or StaticFairValueProvider
-                |
-                v
-  market discovery orchestration in engine.discovery
-                |
-                v
- executable edge and ranking in opportunity/
-                |
-                v
- deterministic execution policy gate and sizing
-                |
-                v
-        TradingEngine in engine.runner
-                |
-                v
-        venue adapter in adapters/
-                |
-                v
- safety state, journal, operator controls
-```
+### 1. Capture -> projection -> current-state tables
+
+The data-plane substrate is explicit now.
+
+- `run-sportsbook-capture` appends sportsbook raw envelopes through `services/capture/sportsbook.py`
+- `run-polymarket-capture market` appends Polymarket market-channel envelopes through `services/capture/polymarket.py` and `services/capture/polymarket_worker.py`
+- `run-polymarket-capture user` appends Polymarket user-channel envelopes through the same capture substrate
+- `run-current-projection` replays raw rows from `raw_capture_events` and advances projection checkpoints in `capture_checkpoints`
+- `services/projection/current_state.py` projects capture-owned tables such as sportsbook events, sportsbook odds, Polymarket market catalog, Polymarket BBO rows, and `source_health`
+
+This lane is what keeps Postgres-backed reads and `runtime/data/current/*.json` compatibility exports aligned.
+
+### 2. Deterministic builder lane
+
+The deterministic builder path hangs off the projected current-state read boundary rather than the raw capture workers.
+
+- `python -m scripts.ingest_live_data build-mappings` builds deterministic contract mappings and writes `runtime/data/current/market_mapping_manifest.json`
+- `python -m scripts.ingest_live_data build-fair-values` builds live/current-state fair values and writes `runtime/data/current/fair_value_manifest.json`
+- `python -m scripts.ingest_live_data build-opportunities` materializes executable opportunities from mappings, fair values, and executable BBO state
+- `python -m scripts.ingest_live_data build-inference-dataset` and `build-training-dataset` materialize versioned datasets and keep `source_health` in sync
+
+This lane is deterministic by design: it uses explicit manifests, thresholds, and persisted rows rather than hidden runtime state.
+
+### 3. Supervised runtime lane
+
+`run-agent-loop` remains the supervised runtime entrypoint. It does **not** simply replay the projected opportunity table as its live trading loop.
+
+Instead it:
+
+1. loads config and runtime policy
+2. builds the venue adapter and fair-value provider
+3. optionally resolves projected current-state authority for kill-switch and preview context support
+4. lists live venue markets through the adapter
+5. ranks opportunities against the fair-value provider
+6. previews candidate execution in `TradingEngine`
+7. sizes, policy-gates, and risk-checks intents
+8. previews or places orders depending on mode
+9. reconciles against authoritative truth
+10. persists safety state, runtime metrics, and journal output
+
+That distinction matters: the projected current-state lane feeds deterministic builders and operator-side preview context, while the supervised runtime still operates as a live adapter-driven decision loop.
+
+### 4. Operator and advisory lane
+
+`scripts/operator_cli.py` is the operator entrypoint.
+
+It can:
+
+- inspect `runtime/safety-state.json`
+- inspect `runtime/events.jsonl`
+- compare persisted truth against venue truth
+- pause, unpause, hold new orders, clear hold, force refresh, resume, cancel all, cancel stale, and sync quotes
+- build and inspect the operator-side advisory artifact with `build-llm-advisory` and `show-llm-advisory`
+
+`runtime/data/current/llm_advisory.json` is operator-side and dashboard-facing only. It does not participate in order placement, sizing, risk limits, or execution-policy gating.
 
 ## Main modules and responsibilities
 
@@ -63,7 +90,7 @@ external sportsbook rows or model output
 
 This is the venue boundary.
 
-- `adapters/polymarket/` is the richest adapter today, with `__init__.py` as the stable facade and extracted modules such as `gamma_client.py`, `clob_client.py`, `ws_market.py`, `ws_user.py`, `ws_sports.py`, and `normalize.py`
+- `adapters/polymarket/` is the richest adapter today, with the package facade in `__init__.py` and extracted modules such as `gamma_client.py`, `clob_client.py`, `market_catalog.py`, websocket helpers, and normalization helpers
 - `adapters/kalshi.py` provides a thinner path with normalized types
 - `adapters/types.py` holds the shared domain model used across runtime and research code
 
@@ -73,36 +100,49 @@ Polymarket-specific runtime details that matter today:
 - open-order and fill normalization
 - account snapshot recovery
 - heartbeat management
-- phase-1 live-state overlays for user order and fill freshness
+- live user-state overlay support
 - market-state overlay support
 - depth-admission settings applied from runtime policy
 
-The dedicated Phase-1 worker path now surfaces through `scripts/run_polymarket_capture.py`, which uses the Polymarket websocket/catalog adapters plus the Postgres-backed capture stores to append raw/normalized market or user events without going through the monolithic ingest CLI.
+### `services/capture/`
 
-`adapters/polymarket/ws_sports.py` is currently a real websocket transport boundary helper, but not yet a full live ingestion orchestrator on its own.
+This layer owns dedicated ingestion workers.
 
-### `engine/`
+- `services/capture/sportsbook.py` handles sportsbook raw ingress, checkpoint writes, and `source_health`
+- `services/capture/worker.py` runs the continuous sportsbook worker loop
+- `services/capture/polymarket.py` owns Polymarket catalog, market-channel, and user-channel persistence helpers
+- `services/capture/polymarket_worker.py` runs dedicated Polymarket market/user capture workers
 
-This is the runtime orchestration layer.
+The dedicated worker path is the supported live capture boundary. It is intentionally separate from the monolithic legacy ingest shape.
 
-Important components:
+### `services/projection/`
 
-- `engine/runner.py` - trading engine, reconciliation flow, safety state updates, pending cancel and pending submission recovery
-- `engine/discovery.py` - polling loop orchestration, scan-cycle logging, pair-preview/live orchestration, and compatibility exports while ranking migrates into `opportunity/`
-- `engine/runtime_policy.py` - schema-validated runtime policy loader
-- `engine/order_state.py` and `engine/reconciliation.py` - order lifecycle and truth comparison helpers
-- `engine/safety_state.py` and `engine/safety_store.py` - persisted operator and recovery state
+This layer owns replaying raw capture events into current-state compatibility tables.
 
-The engine is designed to fail closed when truth is incomplete or recovery work is still open.
+- `services/projection/current_state.py` projects sportsbook, Polymarket market-catalog, Polymarket BBO, and `source_health` lanes
+- `services/projection/worker.py` runs the projection loop and advances projection checkpoints
+
+This is the layer that keeps `runtime/data/current/*.json` synchronized with authoritative projected reads.
+
+### `storage/`
+
+This layer makes runtime and capture storage explicit.
+
+- `storage/current_read_adapter.py` chooses between `ProjectedCurrentStateReadAdapter` and `FileCurrentStateReadAdapter`
+- `storage/current_projection.py` builds preview-order context from current-state tables
+- `storage/journal.py` holds runtime JSONL journaling and summaries
+- `storage/raw/`, `storage/parquet/`, and `storage/postgres/` define the explicit storage backends
+
+The important architectural point is that current-state reads are now a first-class adapter boundary rather than ad hoc JSON file access.
 
 ### `contracts/`
 
-This layer owns contract meaning.
+This layer owns contract meaning and mapping semantics.
 
 - `contracts/ontology.py` builds normalized contract identities and grouping keys
 - `contracts/confidence.py` scores deterministic contract-match confidence
 - `contracts/resolution_rules.py` parses resolution metadata and freeze conditions
-- `contracts/mapper.py` assembles normalized contract objects for downstream forecasting and risk work
+- `contracts/mapping*.py` and `contracts/models.py` drive structured mapping manifests and validation
 
 ### `forecasting/`
 
@@ -110,20 +150,10 @@ This layer owns fair value and forecast evaluation.
 
 - `forecasting/fair_value_engine.py` holds fair-value providers plus deterministic consensus fair-value combination
 - `forecasting/calibrator.py` and `forecasting/calibration.py` hold calibration loaders and adapters
-- `forecasting/model_registry.py` provides registry surfaces for reusable model loaders
+- `forecasting/model_registry.py`, `ml_train.py`, `ml_infer.py`, and `ml_features.py` expose reusable model-facing surfaces
 - `forecasting/dashboards.py`, `forecasting/contracts.py`, and `forecasting/pipeline.py` cover model-vs-market review, optional LLM evidence, and non-sports pipeline scaffolding
 
 `research/calibration.py` and forecast-scoring pieces of `research/scoring.py` remain compatibility facades for the older sports benchmark path.
-
-### `llm/`
-
-This layer owns operator-facing advisory helpers and sidecar artifacts.
-
-- `llm/advisory_artifact.py` validates and writes the structured advisory sidecar at `runtime/data/current/llm_advisory.json`
-- `llm/evidence_summarizer.py` and `llm/operator_memo.py` keep summary/memo rendering deterministic
-- `contracts/llm_parser.py` still owns the nested rule/ambiguity parser for contract-specific LLM outputs
-
-That `runtime/data/current/llm_advisory.json` artifact is for operator review and dashboards only. It does not participate in order placement, sizing, risk limits, or execution-policy gating.
 
 ### `opportunity/`
 
@@ -132,28 +162,29 @@ This layer sits between fair value and execution.
 - `opportunity/executable_edge.py` computes net edge from executable quotes, fees, and slippage assumptions
 - `opportunity/fillability.py` estimates visible fillability from market snapshots and books
 - `opportunity/ranker.py` owns single-market and paired ranking
+- `opportunity/models.py` defines the deterministic opportunity snapshot shape used by builder flows
 
-### `storage/`
+### `execution/`
 
-This layer makes runtime and capture storage explicit.
+This layer owns deterministic execution proposals and supervised quote-shell helpers.
 
-- `storage/raw/` writes immutable capture envelopes
-- `storage/postgres/` builds normalized market/order-book row payloads for relational persistence
-- `storage/parquet/` owns local parquet writers and partition helpers
-- `storage/journal.py` holds runtime JSONL journaling and operator summary helpers
+- `execution/planner.py` evaluates opportunity rows into `OrderProposal` payloads with freeze windows and source-health gating
+- `execution/quote_manager.py` drives the supervised `operator-cli sync-quote` shell
+- `execution/cancel_replace.py` and `execution/models.py` hold the quote-shell lifecycle model
 
-The current-state projection seam is now explicit: `services/projection/` and `scripts/run_current_projection.py` replay raw Postgres capture events into projected current-state tables and the compatibility snapshots under `runtime/data/current/` that older runtime/research selectors still read.
+### `engine/`
 
-The sportsbook capture split now has two explicit storage modes:
+This is the runtime orchestration layer.
 
-- the dedicated `run-sportsbook-capture` worker is Postgres-backed and expects the optional `postgres` dependency set plus a resolvable DSN / `postgres.dsn` marker
-- generic temp-root research and ingest helper commands can still fall back to local JSON persistence when no DSN is configured
-- dedicated `run-polymarket-capture` workers append authoritative raw market/user capture events plus checkpoints/source-health into Postgres-backed storage
-- the dedicated `run-current-projection` worker replays raw Postgres capture events into selector-facing current tables and compatibility snapshots under `runtime/data/current/`
+Important components:
 
-With a resolvable Postgres marker, JSON under `runtime/data/current/` is now treated as a compatibility export rather than the source of truth. Runtime and ingest read boundaries prefer the projected Postgres-backed current-state adapter when that marker exists.
+- `engine/discovery.py` - polling loop orchestration, scan-cycle logging, ranker/pair-ranker bridging, deterministic sizer, and policy gating
+- `engine/runner.py` - trading engine, reconciliation flow, safety state updates, pending cancel and pending submission recovery
+- `engine/runtime_policy.py` - schema-validated runtime policy loader
+- `engine/runtime_bootstrap.py` - adapter building plus projected-current-state authority selection
+- `engine/safety_state.py` and `engine/safety_store.py` - persisted operator and recovery state
 
-The checked-in Docker and CI surfaces now prove repo-level quality and security gates plus the benchmark and substrate smoke paths. The CI contract includes compile checks, `ruff` format/lint gates, `mypy`, coverage-backed unittest discovery, a deterministic service-stack smoke path, and a Compose substrate smoke path. It still does not claim unattended live deployment readiness.
+The engine is designed to fail closed when truth is incomplete or recovery work is still open.
 
 ### `risk/`
 
@@ -161,20 +192,39 @@ This layer owns deterministic trading constraints.
 
 - `risk/limits.py` enforces per-market, global, and optional per-event exposure caps
 - `risk/cleanup.py` supports stale-order cleanup and verification flows used by operator tooling
+- `risk/kill_switch.py` derives a supervised hard gate from projected `source_health` and other future kill-switch inputs
 
 Event-level exposure caps are real runtime behavior. `RiskEngine` tracks market-to-event mappings and rejects orders when `max_contracts_per_event` would be exceeded.
 
-In the default `run-agent-loop` path, event identity is seeded from fair-value manifest metadata such as `event_key`, `sport`, `series`, and `game_id`.
+### `llm/`
+
+This layer owns operator-facing advisory helpers and sidecar artifacts.
+
+- `llm/advisory_artifact.py` validates and writes the structured advisory sidecar at `runtime/data/current/llm_advisory.json`
+- `llm/evidence_summarizer.py` and `llm/operator_memo.py` keep summary/memo rendering deterministic
+- `llm/advisory_context.py` builds the same preview context shape used by operator advisory flows
 
 ### `research/`
 
 This layer supports offline work.
 
-- `research/fair_values.py` builds fair-value manifests from sportsbook-style rows
-- `research/calibration.py` is the sports-facing compatibility facade for histogram calibration artifacts that now live in `forecasting/calibration.py`
+- `research/fair_values.py` builds sportsbook-style fair-value manifests for the benchmark lane
 - `research/paper.py` and `research/replay.py` drive replay and paper execution
 - `research/benchmark_runner.py` and `research/benchmark_suite.py` run single-case and suite benchmarks
-- `research/datasets.py` stores local dataset snapshots and walk-forward splits
+- `research/data/` and `research/datasets.py` store local dataset snapshots, derived datasets, and walk-forward splits
+
+## Current-state artifacts and compatibility exports
+
+The current architecture makes these artifact families important:
+
+- raw capture events and checkpoints in Postgres-backed capture storage
+- projected current-state tables exposed through `ProjectedCurrentStateReadAdapter`
+- compatibility JSON under `runtime/data/current/`
+- runtime safety and journal artifacts (`runtime/safety-state.json`, `runtime/events.jsonl`)
+- operator-side artifacts such as `runtime/data/current/llm_advisory.json`, `runtime/data/current/preview_order_context.json`, and `runtime/data/current/runtime_metrics.json`
+- versioned dataset snapshots under `runtime/data/datasets`
+
+The compatibility files are still important for human inspection and backwards compatibility, but the repo now treats the projected current-state adapter as the primary read boundary when Postgres authority is configured.
 
 ## Runtime policy architecture
 
@@ -226,40 +276,11 @@ Why that matters:
 - identity mismatches can fail closed instead of silently matching the wrong contract
 - event metadata can seed event-level exposure tracking
 
-## Execution and safety flow
-
-For each candidate market, the runtime roughly does this:
-
-1. load account truth and market state
-2. rank or pair-rank opportunities
-3. look up fair value from the provider
-4. generate intents from the strategy
-5. run deterministic execution-policy checks
-6. size or shrink the order
-7. run shared risk checks
-8. place, preview, or reject
-9. reconcile against authoritative truth
-10. persist safety state and journal output
-
-The deterministic gate can reject trades for reasons such as:
-
-- stale books
-- thin liquidity
-- wide spreads
-- unhealthy reconciliation
-- duplicate same-side exposure
-- open-order pressure
-- capital-at-risk limits
-- unresolved partial fills
-- cooldown violations
-
-On Polymarket, the adapter also performs order-book depth admission based on policy-configured depth levels, visible-liquidity fraction, and optional expected-slippage caps.
-
 ## Operator control plane
 
 `scripts/operator_cli.py` is the operator entrypoint.
 
-Current commands:
+Current commands include:
 
 - `status`
 - `build-llm-advisory`
@@ -272,24 +293,9 @@ Current commands:
 - `resume`
 - `cancel-all`
 - `cancel-stale`
+- `sync-quote`
 
 The CLI reads persisted safety state, can compare it against venue truth, and can drive recovery actions without starting the polling loop.
-
-## Benchmark architecture
-
-The benchmark layer is intentionally offline.
-
-It supports:
-
-- case-driven fair-value builds from normalized sportsbook rows
-- best-line and independent bookmaker aggregation
-- multiplicative and power de-vig methods
-- optional calibration overlays from case-provided calibration samples
-- replay scoring and baseline comparisons
-- suite-level edge-ledger aggregation
-- dataset snapshots and walk-forward splits for research iteration
-
-The benchmark layer does not claim live execution realism. It is useful for relative comparison and regression tracking.
 
 ## CI architecture
 
@@ -315,6 +321,7 @@ The separate security workflow audits the locked dependency graph and scans chan
 ### Production-safer today
 
 - offline benchmark and fixture flows
+- dedicated capture-worker plus projector substrate
 - fair-value manifest generation
 - schema-validated runtime policy files
 - supervised Polymarket preview runs
