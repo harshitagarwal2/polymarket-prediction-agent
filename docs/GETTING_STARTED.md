@@ -9,6 +9,8 @@ This repo is not just a pile of upstream references anymore.
 It currently provides:
 
 - a supervised Polymarket runtime in `adapters/`, `engine/`, `risk/`, and `scripts/`
+- a dedicated capture and projection substrate in `services/` and `storage/`
+- deterministic contract, forecasting, opportunity, and execution layers in `contracts/`, `forecasting/`, `opportunity/`, and `execution/`
 - an offline sports fair-value and replay benchmark toolkit in `research/`
 - runtime state persistence, operator controls, and JSONL journaling
 - a schema-validated runtime policy file for repeatable runtime behavior
@@ -17,6 +19,26 @@ It currently provides:
 The main supported venue path is Polymarket. Kalshi support exists behind the same interface, but it is thinner and should be treated as scaffolding, not parity.
 
 There is also a reusable `forecasting/` package for domain-agnostic calibration, scoring, model-vs-market dashboard generation, and non-sports pipeline scaffolding. See `docs/FORECASTING_PLATFORM.md` for that surface.
+
+## Current architecture in one page
+
+The easiest way to reason about the repo today is to keep these lanes separate:
+
+1. **Capture workers** append raw ingress plus checkpoints and `source_health` into the Postgres-backed capture substrate.
+   - `run-sportsbook-capture`
+   - `run-polymarket-capture`
+2. **Projection** replays those raw lanes into projected current-state tables and compatibility JSON under `runtime/data/current/`.
+   - `run-current-projection`
+3. **Deterministic builders** consume the current-state read boundary to materialize mappings, fair values, opportunities, and datasets.
+   - `python -m scripts.ingest_live_data build-mappings`
+   - `python -m scripts.ingest_live_data build-fair-values`
+   - `python -m scripts.ingest_live_data build-opportunities`
+   - `python -m scripts.ingest_live_data build-inference-dataset`
+   - `python -m scripts.ingest_live_data build-training-dataset`
+4. **Supervised runtime** still runs through `run-agent-loop`, the venue adapters, runtime policy, reconciliation, and risk gates.
+5. **Operator control and review** happen through `operator-cli`, `runtime/safety-state.json`, `runtime/events.jsonl`, and optional sidecar artifacts such as `runtime/data/current/llm_advisory.json`.
+
+When a Postgres DSN marker exists, projected Postgres-backed reads are authoritative. `runtime/data/current/*.json` stays useful, but it is a compatibility export rather than the primary authority boundary.
 
 ## Install
 
@@ -58,6 +80,7 @@ Common entrypoints:
 - `run-agent-loop`
 - `operator-cli`
 - `ingest-live-data`
+- `run-sportsbook-capture`
 - `run-polymarket-capture`
 - `run-current-projection`
 - `run-replay-attribution`
@@ -194,6 +217,9 @@ python -m scripts.ingest_live_data build-fair-values \
   --root runtime/data \
   --consensus-artifact runtime/consensus_artifact.json
 
+python -m scripts.ingest_live_data build-opportunities \
+  --root runtime/data
+
 python -m scripts.ingest_live_data build-fair-values \
   --root runtime/data \
   --consensus-artifact runtime/consensus_artifact.json \
@@ -285,6 +311,8 @@ The ownership split for the live/current-state path is simple:
 - capture workers own raw ingress, checkpoints, and source-health
 - projector owns compatibility current-state exports for capture-owned tables
 - deterministic builders own mappings, fair values, opportunities, and dataset artifacts
+
+`run-agent-loop` then sits beside that substrate rather than inside it: it still lists live venue markets, applies the runtime policy gate stack, and journals supervised execution decisions, while the current-state pipeline powers deterministic builders, operator preview context, and advisory flows.
 
 ### 4. Run a preview cycle
 

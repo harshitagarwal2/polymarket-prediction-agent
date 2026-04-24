@@ -29,12 +29,47 @@ It is not an unattended live trading system. The live path is still supervised, 
 - snapshots local research datasets and generates chronological walk-forward splits
 - runs unit tests in CI and compiles the key runtime and research modules on every push and pull request
 
+## Architecture at a glance
+
+The current repo is organized around four connected lanes:
+
+1. **Capture workers** append authoritative raw envelopes, checkpoints, and `source_health` into the Postgres-backed capture substrate.
+   - `run-sportsbook-capture` owns sportsbook raw ingress.
+   - `run-polymarket-capture` owns Polymarket market-channel and user-channel raw ingress.
+2. **Projection** replays raw capture lanes into projected current-state tables and compatibility JSON under `runtime/data/current/`.
+   - `run-current-projection` is the explicit projector worker.
+3. **Deterministic builders** consume the current-state read boundary to build mappings, fair values, executable opportunities, and dataset artifacts.
+   - `python -m scripts.ingest_live_data build-mappings`
+   - `python -m scripts.ingest_live_data build-fair-values`
+   - `python -m scripts.ingest_live_data build-opportunities`
+   - `python -m scripts.ingest_live_data build-inference-dataset`
+   - `python -m scripts.ingest_live_data build-training-dataset`
+4. **Supervised runtime and operator control** run on top of the adapter, runtime policy, safety state, and journaling shell.
+   - `run-agent-loop` is the supervised preview/run loop.
+   - `operator-cli` is the pause/resume/status/advisory control plane.
+
+When a Postgres DSN marker is resolvable, projected Postgres-backed reads are authoritative. The JSON files under `runtime/data/current/` remain in sync as compatibility exports rather than the primary source of truth.
+
+## Community and contribution
+
+- Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening pull requests.
+- Follow [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) in issues, reviews, and discussions.
+- Use [`SECURITY.md`](SECURITY.md) for vulnerabilities or sensitive reports.
+- The project is released under the [`MIT License`](LICENSE).
+
 ## Repository map
 
 - `adapters/` - venue wrappers and normalized types
-- `engine/` - polling loop, orchestration, runtime policy, reconciliation, safety state
+- `contracts/` - contract identity, mapping confidence, and resolution-rule parsing
+- `forecasting/` - fair-value engines, calibration, consensus, scoring, dashboards, and ML-facing helpers
+- `opportunity/` - executable edge, fillability, and ranking
+- `execution/` - deterministic order proposals and quote-management helpers
+- `engine/` - polling loop, orchestration, runtime policy, reconciliation, safety state, and runtime bootstrap
 - `risk/` - exposure caps, cleanup helpers, deterministic risk checks
-- `research/` - fair-value builder, calibration, replay, benchmark runner, dataset registry
+- `services/` - dedicated capture workers and current-state projection workers
+- `storage/` - current-state adapters, journaling, raw/parquet stores, and Postgres-backed repositories
+- `research/` - replay, benchmarking, datasets, and offline model/training flows
+- `llm/` - operator-side advisory artifact generation and deterministic evidence rendering
 - `scripts/` - user-facing CLI entrypoints
 - `configs/` - sample league and runtime-policy configuration files
 - `docs/` - onboarding, architecture, runbook, and benchmark docs
@@ -183,6 +218,9 @@ python -m scripts.ingest_live_data build-fair-values \
   --root runtime/data \
   --consensus-artifact runtime/consensus_artifact.json
 
+python -m scripts.ingest_live_data build-opportunities \
+  --root runtime/data
+
 python -m scripts.ingest_live_data build-fair-values \
   --root runtime/data \
   --consensus-artifact runtime/consensus_artifact.json \
@@ -247,6 +285,8 @@ The current ownership split is:
 - capture workers own raw ingress, checkpoints, and source-health writes
 - `run-current-projection` owns compatibility exports under `runtime/data/current/` for capture-owned tables
 - deterministic builders such as `build-mappings`, `build-fair-values`, and opportunity builders own mappings, fair values, and other derived outputs
+
+That split is intentional: the capture/projector substrate materializes the read boundary for deterministic builders and operator-facing preview context, while `run-agent-loop` remains the supervised venue-facing runtime that lists live markets, applies runtime policy, and journals execution decisions.
 
 When a Postgres DSN marker is present, either through `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under `runtime/data/postgres`, projected reads are authoritative. The JSON files under `runtime/data/current/` stay as compatibility exports, not the source of truth. The dedicated workers use the Postgres repository layer directly, so they require the optional `postgres` extra and one of those DSN resolution paths.
 
@@ -447,6 +487,7 @@ The Postgres smoke job exercises the dedicated Postgres-backed worker tests, the
 - `docs/ARCHITECTURE.md` for the current system shape
 - `docs/architecture/sports_polymarket_architecture.md` for the target sports + Polymarket architecture
 - `docs/VERIFICATION_SPORTS_POLYMARKET.md` for the current verification record of the added sports + Polymarket paths
+- `docs/PRODUCTION_READINESS.md` for the supervised production-readiness checklist and rollout gate
 - `docs/OPERATOR_RUNBOOK.md` for supervised runtime operation
 - `docs/BENCHMARK_TOOLKIT.md` for the offline benchmark flow
 - `docs/BENCHMARK_PROTOCOL.md` for suite artifacts and evaluation rules
