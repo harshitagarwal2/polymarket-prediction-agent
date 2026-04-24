@@ -1,29 +1,32 @@
 # Architecture Diagrams
 
-This folder contains a **small, high-signal diagram set** for understanding the prediction-market agent without drowning in detail.
+This folder contains a **small, high-signal diagram set** for understanding the current prediction-market agent without drowning in detail.
 
 ## Recommended reading order
 
-1. `01-system-context.md` — what the bot talks to and what the major boundaries are
-2. `02-container-view.md` — what lives inside the workspace
-3. `03-live-runtime-sequence.md` — how one live decision runs
-4. `04-account-truth-and-safety.md` — how state truth, reconciliation, halt, and resume work
-5. `05-research-paper-replay-loop.md` — how strategy development and replay fit in
-6. `06-discovery-to-execution-decision-flow.md` — how the bot turns a market universe into a concrete trade decision
-7. `07-operator-control-plane.md` — how the operator, scripts, runtime state, and journal fit together
-8. `08-runtime-state-and-artifacts.md` — what persists across restart and why it matters
+1. `01-system-context.md` — the major external systems and repo-owned lanes
+2. `02-container-view.md` — the current package boundaries inside the workspace
+3. `03-live-runtime-sequence.md` — one supervised `run-agent-loop` cycle
+4. `04-account-truth-and-safety.md` — truth, recovery, kill-switch, and resume state
+5. `05-research-paper-replay-loop.md` — the offline benchmark and replay improvement loop
+6. `06-discovery-to-execution-decision-flow.md` — the projected current-state builder lane and deterministic proposal path
+7. `07-operator-control-plane.md` — how workers, runtime, artifacts, and operator commands fit together
+8. `08-runtime-state-and-artifacts.md` — what persists across restart and incident review
 
 ## Why this set exists
 
-Based on external architecture-diagram best practices, this set stays intentionally small:
+The repo has grown beyond a simple runtime/research split, but the right answer is still **a small diagram set that stays current**.
+
+This set focuses on:
 
 - **system context** for orientation
 - **container/component view** for ownership boundaries
-- **runtime sequence** for the critical live path
-- **state / safety view** for the most important failure contract
-- **research loop** for understanding how improvement happens
+- **supervised runtime sequence** for the live decision path
+- **state / safety view** for the main failure contract
+- **builder / projection flow** for the newer current-state architecture
+- **research loop** for improvement without live capital
 
-That is enough to understand the bot quickly without creating a giant stale diagram set.
+That is enough to understand the workspace quickly without creating a giant stale diagram set.
 
 ## Source-of-truth files
 
@@ -32,21 +35,27 @@ The diagrams are grounded in these implementation files:
 - `README.md`
 - `docs/ARCHITECTURE.md`
 - `docs/GETTING_STARTED.md`
-- `adapters/base.py`
-- `adapters/types.py`
-- `adapters/polymarket/__init__.py`
-- `adapters/polymarket/_legacy.py`
-- `adapters/polymarket/gamma_client.py`
-- `adapters/polymarket/clob_client.py`
-- `adapters/polymarket/ws_market.py`
-- `adapters/polymarket/ws_user.py`
-- `adapters/kalshi.py`
-- `engine/accounting.py`
-- `engine/order_state.py`
-- `engine/reconciliation.py`
+- `docs/architecture/sports_polymarket_architecture.md`
+- `scripts/run_agent_loop.py`
+- `scripts/operator_cli.py`
+- `scripts/ingest_live_data.py`
+- `scripts/run_sportsbook_capture.py`
+- `scripts/run_polymarket_capture.py`
+- `scripts/run_current_projection.py`
+- `services/capture/sportsbook.py`
+- `services/capture/polymarket.py`
+- `services/projection/current_state.py`
+- `engine/discovery.py`
 - `engine/runner.py`
-- `engine/strategies.py`
+- `engine/runtime_bootstrap.py`
+- `execution/planner.py`
+- `forecasting/fair_value_engine.py`
+- `opportunity/ranker.py`
+- `risk/kill_switch.py`
 - `risk/limits.py`
+- `storage/current_projection.py`
+- `storage/current_read_adapter.py`
+- `storage/journal.py`
 - `research/paper.py`
 - `research/replay.py`
 

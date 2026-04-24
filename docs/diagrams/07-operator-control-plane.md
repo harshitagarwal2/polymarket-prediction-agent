@@ -1,47 +1,56 @@
 # 07 — Operator Control Plane
 
-This diagram answers: **how does a human supervise the agent while it runs?**
+This diagram answers: **how does a human supervise the system while workers, builders, and runtime are active?**
 
 ```mermaid
 flowchart LR
     operator[Operator]
 
-    subgraph scripts[Scripts]
-        loop[run_agent_loop.py]
-        cli[operator_cli.py]
-        summary[summarize_events.py]
+    subgraph entrypoints[Entry points]
+        runtime[run-agent-loop]
+        cli[operator-cli]
+        capture[run-sportsbook-capture\nrun-polymarket-capture]
+        projector[run-current-projection]
     end
 
-    subgraph runtime[Runtime Artifacts]
+    subgraph artifacts[Persisted artifacts]
         safety[safety-state.json]
         journal[events.jsonl]
+        advisory[llm_advisory.json]
+        preview[preview_order_context.json]
+        metrics[runtime_metrics.json]
+        current[current/*.json compatibility exports]
     end
 
-    subgraph engine[Engine]
-        poll[PollingAgentLoop]
-        orch[AgentOrchestrator]
-        run[TradingEngine]
+    subgraph services[Underlying services]
+        captureSvc[Capture substrate]
+        projectionSvc[Projection lanes]
+        builderSvc[Deterministic builders]
+        runtimeSvc[TradingEngine + AgentOrchestrator]
     end
 
-    operator --> loop
     operator --> cli
-    operator --> summary
+    operator --> runtime
+    operator --> capture
+    operator --> projector
 
-    loop --> poll
-    poll --> orch
-    orch --> run
-
+    capture --> captureSvc
+    projector --> projectionSvc
+    projectionSvc --> current
+    builderSvc --> preview
+    cli --> advisory
+    runtime --> runtimeSvc
+    runtimeSvc --> safety
+    runtimeSvc --> journal
+    runtimeSvc --> metrics
     cli --> safety
-    run --> safety
-    orch --> journal
     cli --> journal
-    summary --> journal
-    cli --> run
+    current --> cli
+    current --> builderSvc
 ```
 
 ## Main idea
 
-- `run_agent_loop.py` drives repeated cycles
-- `operator_cli.py` changes state and inspects runtime
-- `safety-state.json` persists halt/pause/truth summary
-- `events.jsonl` persists cycle-level decisions and operator actions
+- the operator supervises **more than one process now**: workers, projector, runtime, and CLI tooling
+- the operator-facing control plane is built from persisted artifacts, not only from the live process memory
+- advisory and preview artifacts stay operator-side and deterministic

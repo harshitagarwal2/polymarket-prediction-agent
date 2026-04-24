@@ -4,55 +4,72 @@ This diagram answers: **what major modules exist inside the workspace, and what 
 
 ```mermaid
 flowchart TB
-    subgraph adapters[adapters/]
-        types[types.py\nContract • OrderBookSnapshot • AccountSnapshot • FillSnapshot]
-        base[base.py\nTradingAdapter protocol]
-        poly[polymarket.py\nCLOB + Data API wrapper]
-        kal[kalshi.py\nKalshi wrapper]
+    subgraph entrypoints[scripts/]
+        loop[run_agent_loop.py]
+        opcli[operator_cli.py]
+        ingest[ingest_live_data.py]
+        sbworker[run_sportsbook_capture.py]
+        pmworker[run_polymarket_capture.py]
+        projector[run_current_projection.py]
     end
 
-    subgraph engine[engine/]
-        runner[runner.py\nTradingEngine + EngineSafetyState]
-        acct[accounting.py\nAccountStateCache]
-        orders[order_state.py\nlocal projected orders]
-        recon[reconciliation.py\ndrift detection + policy]
-        strat[strategies.py\nFairValueBandStrategy]
-        iface[interfaces.py\nStrategyContext]
+    subgraph venue[adapters/]
+        poly[adapters/polymarket/]
+        kal[adapters/kalshi.py]
+        types[adapters/types.py]
     end
 
-    subgraph risk[risk/]
-        limits[limits.py\nRiskEngine + RiskLimits]
-        cleanup[cleanup.py\ncancel/verify helper]
+    subgraph capture[services/capture/]
+        sbsvc[sportsbook.py + worker.py]
+        pmsvc[polymarket.py + polymarket_worker.py]
     end
 
-    subgraph research[research/]
-        paper[paper.py\nPaperBroker + fill realism]
-        replay[replay.py\nReplayRunner]
-        storage[storage.py\nParquet persistence]
-        analysis[analysis.py / indexer.py\nresearch scaffolding]
+    subgraph projectionSvc[services/projection/]
+        proj[current_state.py + worker.py]
     end
 
-    base --> poly
-    base --> kal
-    types --> poly
-    types --> kal
-    types --> runner
-    runner --> acct
-    runner --> orders
-    runner --> recon
-    runner --> strat
-    runner --> limits
-    recon --> acct
-    recon --> orders
-    recon --> base
-    replay --> paper
-    replay --> strat
-    replay --> limits
+    subgraph storage[storage/]
+        read[current_read_adapter.py]
+        preview[current_projection.py]
+        journal[journal.py]
+        stores[raw/ • parquet/ • postgres/]
+    end
+
+    subgraph domain[Domain layers]
+        contracts[contracts/]
+        forecasting[forecasting/]
+        opportunity[opportunity/]
+        execution[execution/]
+        engine[engine/]
+        risk[risk/]
+        llm[llm/]
+        research[research/]
+    end
+
+    entrypoints --> capture
+    entrypoints --> projectionSvc
+    entrypoints --> engine
+    entrypoints --> llm
+    entrypoints --> research
+    venue --> engine
+    capture --> stores
+    projectionSvc --> stores
+    projectionSvc --> read
+    read --> execution
+    read --> llm
+    read --> ingest
+    contracts --> forecasting
+    forecasting --> opportunity
+    opportunity --> execution
+    execution --> llm
+    engine --> risk
+    engine --> journal
+    engine --> read
+    research --> forecasting
 ```
 
 ## Main idea
 
-- `adapters/` = venue-specific truth gathering and order transport
-- `engine/` = the live orchestrator and safety boundary
-- `risk/` = independent gatekeeper
-- `research/` = how you improve the bot without risking live capital
+- `services/` + `storage/` now make the capture/projection/current-state substrate explicit
+- `contracts/`, `forecasting/`, `opportunity/`, and `execution/` are first-class product layers, not just helpers under `research/`
+- `engine/` remains the supervised runtime shell around adapters, policy, reconciliation, and persisted safety state
