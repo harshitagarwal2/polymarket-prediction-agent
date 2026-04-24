@@ -4,14 +4,28 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
 build/
 dist/
 *.egg-info/
+*.log
+prediction-market-agent*.tar.gz
+
+# Local editor / helper state
+.editorconfig.local
+.sisyphus/
 
 # Local vendor/reference clones
 upstreams/
@@ -21,9 +35,16 @@ runtime/state/
 runtime/cache/
 runtime/journals/
 runtime/data/
+runtime/benchmark-suite/
 runtime/fair_values/*.json
 runtime/*.json
 runtime/*.jsonl
+runtime/track5_single_*.json
+
+# Local database markers
+**/postgres.dsn
+**/.postgres.dsn
+**/database_url.txt
 
 # Offline research captures and generated artifacts
 research/data/raw/

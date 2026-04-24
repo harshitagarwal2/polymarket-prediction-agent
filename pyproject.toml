@@ -19,6 +19,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "coverage[toml]>=7.6",
+  "mypy>=1.11",
+  "pip-audit>=2.7",
+  "pre-commit>=3.8",
+  "ruff>=0.6.9",
+  "setuptools>=68",
+  "wheel>=0.43",
+]
 research = [
   "duckdb>=0.10",
 ]
@@ -60,6 +70,50 @@ run-replay-attribution = "scripts.run_replay_attribution:main"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = [
+  "adapters",
+  "contracts",
+  "engine",
+  "execution",
+  "forecasting",
+  "llm",
+  "opportunity",
+  "research",
+  "risk",
+  "scripts",
+  "services",
+  "storage",
+]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = true
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+ignore_missing_imports = true
+follow_imports = "skip"
+files = [
+  "storage/postgres/bootstrap.py",
+  "scripts/ingest_live_data.py",
+  "tests/test_console_script_entrypoints.py",
+  "tests/test_docs_sync.py",
+  "tests/test_repository_hardening.py",
+]
+
+[tool.ruff]
+target-version = "py310"
+extend-exclude = ["runtime", "upstreams", "dist", "build"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
 
 [tool.setuptools.package-data]
 research = ["fixtures/*.json"]

@@ -144,6 +144,7 @@ class CurrentProjectionTests(unittest.TestCase):
                     "last_seen_at": "2024-01-01T00:00:00+00:00",
                     "last_success_at": "2024-01-01T00:00:00+00:00",
                     "stale_after_ms": 60000,
+                    "details": {},
                 },
                 "market_mappings": {
                     "source_name": "market_mappings",
@@ -151,6 +152,7 @@ class CurrentProjectionTests(unittest.TestCase):
                     "last_seen_at": "2024-01-01T00:00:00+00:00",
                     "last_success_at": "2024-01-01T00:00:00+00:00",
                     "stale_after_ms": 60000,
+                    "details": {},
                 },
             },
             "polymarket_markets": {

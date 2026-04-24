@@ -141,11 +141,12 @@ class ProjectedCurrentStateReadAdapter:
             if self.sportsbook_odds is None:
                 return {}
             current_rows = _read_current_if_available(self.sportsbook_odds)
-            if current_rows is not None:
-                return current_rows
-            return _coerce_table_payload(
-                project_sportsbook_quote_state(self.sportsbook_odds.read_all().values())
+            rows = (
+                current_rows
+                if current_rows is not None
+                else _coerce_table_payload(self.sportsbook_odds.read_all())
             )
+            return _coerce_table_payload(project_sportsbook_quote_state(rows.values()))
         if table == "polymarket_markets":
             return _coerce_table_payload(
                 project_polymarket_market_state(
@@ -164,9 +165,12 @@ class ProjectedCurrentStateReadAdapter:
             )
         if table == "source_health":
             current_rows = _read_current_if_available(self.source_health)
-            if current_rows is not None:
-                return current_rows
-            return _coerce_table_payload(self.source_health.read_all())
+            rows = (
+                current_rows
+                if current_rows is not None
+                else _coerce_table_payload(self.source_health.read_all())
+            )
+            return _coerce_table_payload(project_source_health_state((), existing=rows))
         if table == "market_mappings":
             current_rows = _read_current_if_available(self.mappings)
             if current_rows is not None:

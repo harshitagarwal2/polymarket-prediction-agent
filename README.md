@@ -56,6 +56,13 @@ For the reproducible offline benchmark path:
 uv sync --locked --extra research
 ```
 
+For repo maintenance and CI-equivalent local quality gates:
+
+```bash
+uv sync --locked --extra dev
+pre-commit install
+```
+
 For venue-specific runtime integrations:
 
 ```bash
@@ -116,6 +123,8 @@ docker build -t polymarket-prediction-agent:v0.1.0 .
 docker run --rm polymarket-prediction-agent:v0.1.0
 ```
 
+This Docker path proves the benchmark and reproducibility workflow only. It is not the worker, projector, and runtime service stack.
+
 Packaged fixtures live in `research/fixtures/`:
 
 - `sports_benchmark_tiny.json`
@@ -151,7 +160,7 @@ The emitted manifest can include:
 Additional architecture-aligned helper entrypoints now exist for the split research tree:
 
 - `ingest-live-data` - write normalized offline capture envelopes for Gamma, CLOB, Data API, or sports-input payloads
-- `run-sportsbook-capture` - continuously poll sportsbook odds into runtime/current and postgres-layer capture stores
+- `run-sportsbook-capture` - continuously append sportsbook raw ingress, checkpoints, and source-health rows into the Postgres capture substrate
 - `train-models` - write lightweight Elo, Bradley–Terry, or blend artifacts from benchmark cases
 - `build-fair-values` - thin wrapper around the existing sports fair-value manifest builder
 
@@ -205,9 +214,18 @@ export PREDICTION_MARKET_POSTGRES_DSN=postgresql://...
 # ...or write one to runtime/data/postgres/postgres.dsn
 
 python -m scripts.run_sportsbook_capture \
+  --provider theoddsapi \
   --sport basketball_nba \
   --market h2h \
   --event-map-file runtime/odds_event_map.json \
+  --root runtime/data \
+  --refresh-interval-seconds 60
+
+python -m scripts.run_sportsbook_capture \
+  --provider json_feed \
+  --provider-url https://example.com/sportsbook-feed.json \
+  --sport basketball_nba \
+  --market h2h \
   --root runtime/data \
   --refresh-interval-seconds 60
 
@@ -222,7 +240,35 @@ python -m scripts.run_current_projection \
   --max-cycles 1
 ```
 
-The dedicated capture workers now treat Postgres as the authoritative backend: sportsbook capture appends raw capture events plus checkpoints/source-health rows, Polymarket workers append raw market/BBO/user events plus checkpoints/source-health rows, and `run_current_projection` replays raw Postgres capture events into current-state tables and compatibility snapshots under `runtime/data/current/`. Runtime and ingest readers prefer the projected Postgres-backed view whenever a Postgres DSN marker is present, and the dedicated sportsbook worker no longer mutates selector-facing `runtime/data/current/*.json` directly. The dedicated workers use the Postgres repository layer directly, so they require the optional `postgres` extra and either `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under the configured `runtime/data/postgres` root.
+Use the dedicated workers for the live capture boundary. The legacy live `polymarket-bbo` path is deprecated and is not the supported production path.
+
+The current ownership split is:
+
+- capture workers own raw ingress, checkpoints, and source-health writes
+- `run-current-projection` owns compatibility exports under `runtime/data/current/` for capture-owned tables
+- deterministic builders such as `build-mappings`, `build-fair-values`, and opportunity builders own mappings, fair values, and other derived outputs
+
+When a Postgres DSN marker is present, either through `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under `runtime/data/postgres`, projected reads are authoritative. The JSON files under `runtime/data/current/` stay as compatibility exports, not the source of truth. The dedicated workers use the Postgres repository layer directly, so they require the optional `postgres` extra and one of those DSN resolution paths.
+
+For a local service-stack smoke path, copy `.env.example` to `.env`, then use the checked-in Compose stack:
+
+```bash
+docker compose up -d postgres
+docker compose run --rm bootstrap-postgres
+docker compose --profile projection run --rm run-current-projection
+docker compose down -v
+```
+
+That stack is intended to validate the Postgres/bootstrap/projector substrate. The bundled Postgres service is bound to `127.0.0.1` for local-only access, and the sample credentials are development defaults only. It does not by itself prove unattended live trading readiness.
+
+For non-preview runtime config surfaces, the repo now also ships:
+
+- `configs/runtime_policy.staging.json`
+- `configs/runtime_policy.production_supervised.json`
+- `configs/sports_nba.staging.yaml`
+- `configs/sports_nfl.staging.yaml`
+
+The preview configs remain useful for low-risk local preview cycles, but the staging/supervised files are the checked-in direction for production-readiness verification.
 
 That live path keeps sportsbook event identity (`event_key` / `game_id`) in the current-state mapping flow and lets the consensus artifact configure the deterministic fair-value snapshot builder. `build-mappings` still writes the flat selector-facing snapshot to `runtime/data/current/market_mappings.json`, and now also emits a structured sidecar schema at `runtime/data/current/market_mapping_manifest.json` with `mapping_status`, structured `mapping_confidence`, structured `blocked_reason`, identity metadata, and rule semantics for each mapped Polymarket market. If you also pass a calibration artifact, the live snapshot keeps raw `fair_yes_prob` in `runtime/data/current/fair_values.json`, adds sibling `calibrated_fair_yes_prob`, and projects `calibrated_fair_value` plus calibration metadata into `runtime/data/current/fair_value_manifest.json`. `build-inference-dataset` materializes the latest joined inference rows at `runtime/data/processed/inference/joined_inference_dataset.jsonl` and also registers a versioned `joined-inference-dataset` snapshot under `runtime/data/datasets`. `build-training-dataset` does the same for labeled training rows at `runtime/data/processed/training/historical_training_dataset.jsonl` and the `historical-training-dataset` snapshot that `train-models --training-dataset ...` can now consume directly.
 
@@ -372,15 +418,22 @@ The benchmark stack is useful when you want a reproducible offline slice of the 
 
 ## CI
 
-`.github/workflows/python-ci.yml` currently runs a unittest job plus a separate reproducibility job on pushes and pull requests. The unittest job does five things:
+`.github/workflows/python-ci.yml` currently runs a quality job, a Postgres smoke job, a deterministic service-stack smoke job, a Compose substrate smoke job, and a separate reproducibility job on pushes and pull requests. The quality job does eight things:
 
 - checks that `uv.lock` matches the dependency declarations
-- installs the package from the committed lockfile
+- installs the package plus dev tooling from the committed lockfile
 - compiles the key runtime and research modules with `python -m compileall -q`
+- checks formatting with a scoped `ruff format --check` contract for the maintained repo-policy files
+- runs the repo-wide serious `ruff check` lint gate
+- runs the configured `mypy` contract
 - runs the focused **Run advisory and docs contract regressions** unittest step
-- runs `python -m unittest discover -s tests -p "test_*.py"`
+- runs `python -m unittest discover -s tests -p "test_*.py"` under Coverage.py and uploads `coverage.xml`
 
-The reproducibility job separately exercises the benchmark and fixture workflows on Ubuntu.
+The Postgres smoke job exercises the dedicated Postgres-backed worker tests, the deterministic service-stack smoke path validates the scriptable substrate flow, the Compose smoke job validates the local Postgres/bootstrap/projector substrate, and the reproducibility job separately exercises the benchmark and fixture workflows on Ubuntu.
+
+`.github/workflows/security.yml` separately audits the locked dependency graph with `pip-audit` and scans pull-request or push ranges with checksum-verified `gitleaks`.
+
+`.github/workflows/release-artifacts.yml` is intentionally build-only: on version tags it builds Python distributions from the locked environment without isolated backend resolution, builds a Docker image archive, uploads both as GitHub artifacts, and stops short of publishing or deploying anywhere.
 
 ## Citation and release metadata
 

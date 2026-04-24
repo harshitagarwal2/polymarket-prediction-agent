@@ -8,6 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from scripts import ingest_live_data
 from services.capture import (
     PolymarketMarketSnapshotRequest,
     SportsbookCaptureRequest,
@@ -69,6 +70,39 @@ class PostgresBootstrapTests(unittest.TestCase):
                 resolve_postgres_dsn(marker_path),
                 "postgresql://file/test",
             )
+
+    def test_live_ingest_stores_fail_closed_when_postgres_is_required(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "ingest-live-data sportsbook-odds requires Postgres authority",
+            ):
+                ingest_live_data._stores(
+                    temp_dir,
+                    require_postgres=True,
+                    authority_context="ingest-live-data sportsbook-odds",
+                )
+
+    def test_non_live_ingest_stores_can_still_use_json_backed_fallback(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            stores = ingest_live_data._stores(temp_dir)
+            payload = {
+                "market_id": "pm-1",
+                "as_of": "2026-04-22T18:03:00+00:00",
+                "fair_yes_prob": 0.61,
+                "lower_prob": 0.58,
+                "upper_prob": 0.64,
+                "book_dispersion": 0.01,
+                "data_age_ms": 100,
+                "source_count": 2,
+                "model_name": "consensus",
+                "model_version": "v1",
+            }
+
+            stores["fair_values"].append(payload)
+
+            self.assertFalse(stores["projected_authoritative"])
+            self.assertEqual(len(stores["fair_values"].read_all()), 1)
 
 
 class PostgresStorageIntegrationTests(unittest.TestCase):

@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
-from research.data.schemas import InferenceDatasetRow, TrainingSetRow
+from research.attribution import TradeAttribution
+from research.data.schemas import (
+    InferenceDatasetRow,
+    ReplayExecutionLabelRow,
+    ResolutionTruthRow,
+    TrainingSetRow,
+)
+from research.replay import ReplayResult
 from research.data.storage_paths import build_research_storage_paths
 from research.datasets import DatasetRegistry, DatasetSnapshotManifest
 from research.features.quality_checks import evaluate_inference_quality
@@ -324,3 +331,111 @@ def materialize_training_dataset(
     latest_path = paths.processed_training_root / "historical_training_dataset.jsonl"
     write_jsonl_records(latest_path, payloads)
     return latest_path, manifest
+
+
+def materialize_resolution_truth_dataset(
+    *,
+    root: str | Path,
+    rows: Sequence[ResolutionTruthRow],
+    version: str | None = None,
+) -> tuple[Path, DatasetSnapshotManifest]:
+    paths = build_research_storage_paths(root)
+    paths.create_dirs()
+    payloads = [row.to_payload() for row in rows]
+    registry = DatasetRegistry(paths.root / "datasets")
+    manifest = registry.write_rows_snapshot(
+        "historical-resolution-truth-dataset",
+        payloads,
+        version=version,
+        timestamp_field="recorded_at",
+        record_id_field="record_id",
+        metadata={
+            "processed_path": "processed/training/historical_resolution_truth_dataset.jsonl"
+        },
+    )
+    latest_path = (
+        paths.processed_training_root / "historical_resolution_truth_dataset.jsonl"
+    )
+    write_jsonl_records(latest_path, payloads)
+    return latest_path, manifest
+
+
+def materialize_replay_execution_label_dataset(
+    *,
+    root: str | Path,
+    rows: Sequence[ReplayExecutionLabelRow],
+    version: str | None = None,
+) -> tuple[Path, DatasetSnapshotManifest]:
+    paths = build_research_storage_paths(root)
+    paths.create_dirs()
+    payloads = [row.to_payload() for row in rows]
+    registry = DatasetRegistry(paths.root / "datasets")
+    manifest = registry.write_rows_snapshot(
+        "replay-execution-label-dataset",
+        payloads,
+        version=version,
+        timestamp_field="recorded_at",
+        record_id_field="record_id",
+        metadata={
+            "processed_path": "processed/replay/replay_execution_label_dataset.jsonl"
+        },
+    )
+    latest_path = paths.processed_replay_root / "replay_execution_label_dataset.jsonl"
+    write_jsonl_records(latest_path, payloads)
+    return latest_path, manifest
+
+
+def build_replay_execution_label_rows(
+    case_name: str,
+    replay_result: ReplayResult,
+    trade_attributions: Sequence[TradeAttribution],
+) -> list[ReplayExecutionLabelRow]:
+    attribution_by_trade_id = {
+        attribution.trade_id: attribution for attribution in trade_attributions
+    }
+    rows: list[ReplayExecutionLabelRow] = []
+    for row_index, trade in enumerate(replay_result.execution_ledger):
+        trade_id = f"{trade.order_id}:fill-{trade.fill_step if trade.fill_step is not None else 'na'}:{row_index}"
+        attribution = attribution_by_trade_id.get(trade_id)
+        metadata = dict(trade.metadata)
+        trade_payload = trade.to_payload()
+        rows.append(
+            ReplayExecutionLabelRow(
+                record_id=trade_id,
+                recorded_at=None,
+                case_name=case_name,
+                market_id=trade.contract.market_key,
+                order_id=trade.order_id,
+                action=trade.action.value,
+                filled=trade.filled,
+                requested_quantity=trade.requested_quantity,
+                filled_quantity=trade.quantity,
+                fill_ratio=trade.fill_ratio,
+                partial_fill=trade.partial_fill,
+                wait_steps=trade.wait_steps,
+                resting=trade.resting,
+                stale_data_flag=trade.stale_data_flag,
+                expected_edge_bps=_float_or_none(
+                    trade_payload.get("expected_edge_bps")
+                ),
+                realized_edge_bps=_float_or_none(
+                    trade_payload.get("realized_edge_bps")
+                ),
+                slippage_bps=_float_or_none(trade_payload.get("slippage_bps")),
+                visible_quantity=trade.visible_quantity,
+                levels_consumed=trade.levels_consumed,
+                price_move_bps=trade.price_move_bps,
+                mapping_risk=attribution.mapping_risk
+                if attribution is not None
+                else _mapping_risk(metadata),
+                metadata=metadata,
+            )
+        )
+    return rows
+
+
+def _mapping_risk(metadata: Mapping[str, object]) -> float | None:
+    raw = metadata.get("mapping_risk")
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    return None

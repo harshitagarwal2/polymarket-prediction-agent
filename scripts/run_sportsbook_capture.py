@@ -10,6 +10,8 @@ from services.capture import (
     SportsbookCaptureStores,
     SportsbookCaptureWorker,
     SportsbookCaptureWorkerConfig,
+    SportsbookJsonFeedCaptureSource,
+    SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS,
     TheOddsApiCaptureSource,
     sanitize_capture_error,
 )
@@ -71,7 +73,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default="runtime/data")
     parser.add_argument("--config-file", default=None)
     parser.add_argument("--event-map-file", default=None)
+    parser.add_argument(
+        "--provider",
+        default="theoddsapi",
+        choices=SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS,
+    )
     parser.add_argument("--api-key-env", default="THE_ODDS_API_KEY")
+    parser.add_argument("--provider-url", default=None)
     parser.add_argument("--refresh-interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-cycles", type=int, default=None)
     parser.add_argument("--stale-after-ms", type=int, default=60_000)
@@ -79,12 +87,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_source(args) -> TheOddsApiCaptureSource | SportsbookJsonFeedCaptureSource:
+    if args.provider == "theoddsapi":
+        api_key = os.getenv(args.api_key_env)
+        if not api_key:
+            raise RuntimeError(
+                f"missing required environment variable: {args.api_key_env}"
+            )
+        return TheOddsApiCaptureSource(api_key=api_key)
+    if args.provider == "json_feed":
+        if args.provider_url in (None, ""):
+            raise RuntimeError(
+                "run-sportsbook-capture requires --provider-url for provider json_feed"
+            )
+        return SportsbookJsonFeedCaptureSource(feed_url=args.provider_url)
+    raise RuntimeError(f"unsupported sportsbook provider: {args.provider}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = _load_optional_config(args.config_file)
-    api_key = os.getenv(args.api_key_env)
-    if not api_key:
-        raise RuntimeError(f"missing required environment variable: {args.api_key_env}")
+    source = _build_source(args)
 
     try:
         stores = SportsbookCaptureStores.from_root(args.root, require_postgres=True)
@@ -104,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     worker = SportsbookCaptureWorker(
-        source=TheOddsApiCaptureSource(api_key=api_key),
+        source=source,
         stores=stores,
         config=SportsbookCaptureWorkerConfig(
             root=args.root,

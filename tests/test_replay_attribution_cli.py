@@ -97,6 +97,45 @@ class ReplayAttributionCliTests(unittest.TestCase):
                 ):
                     self._module().main()
 
+    def test_cli_can_materialize_replay_execution_label_dataset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = Path(temp_dir) / "runtime-data"
+            stdout = io.StringIO()
+
+            with (
+                patch(
+                    "sys.argv",
+                    [
+                        "run_replay_attribution.py",
+                        "--fixture",
+                        "sports_benchmark_tiny.json",
+                        "--dataset-root",
+                        str(runtime_root),
+                    ],
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                self._module().main()
+
+            payload = json.loads(stdout.getvalue())
+            label_output = (
+                runtime_root
+                / "processed"
+                / "replay"
+                / "replay_execution_label_dataset.jsonl"
+            )
+            rows = [
+                json.loads(line)
+                for line in label_output.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+
+            self.assertIn("replay_execution_label_dataset", payload)
+            self.assertEqual(payload["replay_execution_label_dataset"]["row_count"], 1)
+            self.assertTrue(label_output.exists())
+            self.assertEqual(rows[0]["market_id"], "token-home:yes")
+            self.assertIn("slippage_bps", rows[0])
+
 
 if __name__ == "__main__":
     unittest.main()

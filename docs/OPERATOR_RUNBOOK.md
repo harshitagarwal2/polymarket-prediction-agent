@@ -25,6 +25,18 @@ It should still be run with an operator watching it. The docs do not claim unatt
 
 If you want the lowest-risk way to use the repo, stay in Polymarket preview mode first and use the benchmark toolkit for offline work.
 
+## Data authority and live entrypoint boundary
+
+For the live data plane, Postgres plus projected current-state tables are authoritative when a Postgres DSN marker is resolvable.
+
+- capture workers own raw ingress, checkpoints, and source-health writes
+- `run-current-projection` owns compatibility `runtime/data/current/*.json` exports for capture-owned tables
+- deterministic builders own mappings, fair values, opportunities, and dataset artifacts
+
+Do not treat selector-facing current JSON as capture-worker authority. When a DSN marker exists, runtime and ingest readers use the projected Postgres-backed read boundary first.
+
+For Polymarket live capture, use `run-polymarket-capture`. The legacy live `polymarket-bbo` path is deprecated and is not the supported production path.
+
 ## Quick reference
 
 ### Continue supervising normally
@@ -185,6 +197,19 @@ If you are using `run-sportsbook-capture`, make sure Postgres is bootstrapped fi
 
 - export `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL`, or write a `postgres.dsn` marker under `runtime/data/postgres`
 - if needed, run `bootstrap-postgres --root runtime/data` once to apply the shipped storage migrations before the continuous worker starts
+- remember that `run-sportsbook-capture` owns raw ingress, checkpoints, and source-health only, while `run-current-projection` refreshes capture-owned compatibility exports under `runtime/data/current/`
+
+If you want to validate the Postgres/bootstrap/projector stack locally with Docker before running longer-lived workers, use:
+
+```bash
+cp .env.example .env
+docker compose up -d postgres
+docker compose run --rm bootstrap-postgres
+docker compose --profile projection run --rm run-current-projection
+docker compose down -v
+```
+
+That smoke path should end with a zero-exit bootstrap step and a zero-exit projector step that prints the lane summary JSON. It is a substrate validation path, not a substitute for supervised runtime verification.
 
 For Polymarket run mode:
 
@@ -195,6 +220,8 @@ For Polymarket run mode:
 - optional `POLYMARKET_USER_WS_HOST` can override the default user websocket endpoint
 
 `run-agent-loop` fails fast when the fair-values file, policy file, or required credentials are missing.
+
+If a DSN marker is present, treat the projected Postgres-backed read boundary as authoritative even if older compatibility files still exist under `runtime/data/current/`.
 
 ## Fair-value manifest guidance
 
@@ -244,6 +271,9 @@ Status can show:
 - latest runtime summary for the most recent cycle, skip, truth block, or lifecycle batch
 - venue snapshot and truth drift when `--venue` is supplied
 - Polymarket live-state and market-state overlay health
+- runtime kill-switch state when projected `source_health` has already forced a halt
+
+When the runtime is halted by the kill switch, `operator-cli status` now reports that through `runtime_health.kill_switch_active` and `runtime_health.kill_switch_reasons`. The current implementation derives that kill-switch from projected `source_health` red/error/unhealthy conditions and surfaces it as a supervised hard gate before the runtime loop places new actions.
 
 ### Advisory sidecar
 

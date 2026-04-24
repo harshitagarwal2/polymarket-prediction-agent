@@ -6,6 +6,7 @@ import unittest
 from adapters import MarketSummary
 from adapters.types import Contract, OutcomeSide, Venue
 from contracts import (
+    MappingManifestBuild,
     MappingStatus,
     compare_rule_semantics,
     contract_freeze_reasons,
@@ -18,6 +19,7 @@ from contracts import (
     mapping_blocked_reason,
     semantics_from_market_type,
     ResolutionRules,
+    validate_mapping_manifest_payload,
 )
 from contracts.resolution_rules import ContractRuleFreezePolicy
 from contracts.mapping_identity import (
@@ -352,6 +354,88 @@ class ContractsLayerTests(unittest.TestCase):
 
         self.assertGreater(match.match_confidence, 0.0)
         self.assertIsNone(match.mismatch_reason)
+
+    def test_mapping_manifest_build_includes_governance_and_provenance(self):
+        payload = MappingManifestBuild(
+            generated_at=datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc),
+            source="live-current-state",
+            values={
+                "pm-1": {
+                    "mapping_status": "exact_match",
+                    "target": {
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                    },
+                    "mapping_confidence": {
+                        "band": "high",
+                        "score": 0.95,
+                        "components": {},
+                        "reasons": [],
+                    },
+                    "blocked_reason": None,
+                }
+            },
+            reviewer="ops-reviewer",
+            review_status="approved",
+            override_reason="manual promotion",
+        ).to_payload()
+
+        validate_mapping_manifest_payload(payload)
+        metadata = payload["metadata"]
+        self.assertIsInstance(metadata, dict)
+        if not isinstance(metadata, dict):
+            self.fail("expected mapping manifest metadata dict")
+        governance = metadata["governance"]
+        provenance = metadata["provenance"]
+        self.assertIsInstance(governance, dict)
+        self.assertIsInstance(provenance, dict)
+        if not isinstance(governance, dict) or not isinstance(provenance, dict):
+            self.fail("expected structured governance/provenance metadata")
+        self.assertEqual(governance["review_status"], "approved")
+        self.assertEqual(governance["reviewer"], "ops-reviewer")
+        self.assertEqual(governance["override_reason"], "manual promotion")
+        self.assertEqual(len(provenance["hash"]), 64)
+
+    def test_mapping_manifest_validation_rejects_reviewed_manifest_without_reviewer(
+        self,
+    ):
+        payload = MappingManifestBuild(
+            generated_at=datetime(2026, 4, 21, 19, 0, tzinfo=timezone.utc),
+            source="live-current-state",
+            values={
+                "pm-1": {
+                    "mapping_status": "exact_match",
+                    "target": {
+                        "sportsbook_event_id": "sb-1",
+                        "sportsbook_market_type": "h2h",
+                        "normalized_market_type": "moneyline_full_game",
+                    },
+                    "mapping_confidence": {
+                        "band": "high",
+                        "score": 0.95,
+                        "components": {},
+                        "reasons": [],
+                    },
+                    "blocked_reason": None,
+                }
+            },
+            review_status="approved",
+        ).to_payload()
+
+        metadata = payload["metadata"]
+        if not isinstance(metadata, dict):
+            self.fail("expected mapping manifest metadata dict")
+        governance = metadata["governance"]
+        if not isinstance(governance, dict):
+            self.fail("expected governance dict")
+        governance.pop("reviewer", None)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "mapping manifest governance.reviewer is required",
+        ):
+            validate_mapping_manifest_payload(payload)
 
 
 if __name__ == "__main__":

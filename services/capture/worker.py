@@ -8,6 +8,7 @@ from services.capture.sportsbook import (
     SportsbookCaptureRequest,
     SportsbookCaptureSource,
     SportsbookCaptureStores,
+    SportsbookCaptureWritePlan,
     capture_sportsbook_odds_once,
     record_sportsbook_capture_failure,
     sanitize_capture_error,
@@ -68,7 +69,7 @@ class SportsbookCaptureWorker:
                     source=self.source,
                     stores=self.stores,
                     observed_at=observed_at,
-                    materialize_current=False,
+                    write_plan=SportsbookCaptureWritePlan.raw_ingress_only(),
                 )
             except Exception as exc:
                 try:
@@ -78,7 +79,7 @@ class SportsbookCaptureWorker:
                         self.source,
                         error=exc,
                         observed_at=observed_at,
-                        materialize_current=False,
+                        write_plan=SportsbookCaptureWritePlan.raw_ingress_only(),
                     )
                 except Exception as failure_exc:
                     primary_error = sanitize_capture_error(exc)

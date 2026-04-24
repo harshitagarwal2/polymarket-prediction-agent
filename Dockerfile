@@ -7,6 +7,6 @@ WORKDIR /app
 
 COPY . /app
 
-RUN uv sync --locked --extra research
+RUN uv sync --locked --extra research --extra postgres --extra polymarket
 
 CMD ["uv", "run", "--locked", "--extra", "research", "prediction-market-sports-benchmark-suite", "--output-dir", "runtime/benchmark-suite"]

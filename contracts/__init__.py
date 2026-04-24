@@ -14,7 +14,10 @@ from contracts.mapping_identity import (
     sportsbook_contract_identity,
 )
 from contracts.mapping_manifest import MappingManifestBuild
-from contracts.mapping_schema import MAPPING_MANIFEST_SCHEMA_VERSION
+from contracts.mapping_schema import (
+    MAPPING_MANIFEST_SCHEMA_VERSION,
+    allowed_mapping_manifest_review_statuses,
+)
 from contracts.mapping_semantics import (
     GradingScope,
     RuleSemantics,
@@ -83,6 +86,7 @@ __all__ = [
     "market_identity_from_market",
     "market_labels",
     "mapping_blocked_reason",
+    "allowed_mapping_manifest_review_statuses",
     "normalize_market_type",
     "parse_llm_contract_payload",
     "parse_contract_rules",

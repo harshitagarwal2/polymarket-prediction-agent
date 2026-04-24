@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 from adapters.base import AdapterHealth
@@ -198,8 +199,15 @@ class OperatorControlTests(unittest.TestCase):
             adapter = operator_cli._build_adapter("polymarket")
 
         self.assertIsInstance(adapter, PolymarketAdapter)
-        self.assertEqual(adapter.config.live_user_markets, ["cond-1", "cond-2"])
-        self.assertEqual(adapter.config.user_ws_host, "wss://example.invalid/ws/user")
+        polymarket_adapter = cast(PolymarketAdapter, adapter)
+        self.assertEqual(
+            polymarket_adapter.config.live_user_markets,
+            ["cond-1", "cond-2"],
+        )
+        self.assertEqual(
+            polymarket_adapter.config.user_ws_host,
+            "wss://example.invalid/ws/user",
+        )
 
     def test_pause_blocks_run_and_persists(self):
         adapter = PauseAdapter()
@@ -590,6 +598,94 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(payload["runtime_health"]["open_recovery_count"], 1)
             self.assertTrue(payload["recovery_items"])
 
+    def test_status_reports_kill_switch_runtime_health(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            store = operator_cli.SafetyStateStore(state_path)
+            state = store.load()
+            state.halted = True
+            state.reason = "kill switch: source health red; daily loss breach"
+            store.save(state)
+            args = argparse.Namespace(
+                state_file=str(state_path),
+                journal=None,
+                venue=None,
+                symbol=None,
+                outcome="unknown",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                result = operator_cli.cmd_status(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertTrue(payload["runtime_health"]["kill_switch_active"])
+            self.assertEqual(
+                payload["runtime_health"]["kill_switch_reasons"],
+                ["source health red", "daily loss breach"],
+            )
+
+    def test_sync_quote_places_via_execution_shell(self):
+        adapter = PlaceableAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            stdout = io.StringIO()
+            args = argparse.Namespace(
+                venue="polymarket",
+                symbol="token-1",
+                outcome="yes",
+                side="buy_yes",
+                action="place",
+                price=0.5,
+                quantity=1.0,
+                tif="GTC",
+                rationale="operator quote sync",
+                journal=None,
+                state_file=str(state_path),
+            )
+
+            with (
+                patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch("sys.stdout", stdout),
+            ):
+                result = operator_cli.cmd_sync_quote(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(payload["shell_action"], "place")
+            self.assertEqual(payload["submitted_order_ids"], ["placed-1"])
+
+    def test_sync_quote_can_cancel_existing_order(self):
+        adapter = CancelTrackingAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            stdout = io.StringIO()
+            args = argparse.Namespace(
+                venue="polymarket",
+                symbol="token-1",
+                outcome="yes",
+                side="buy_yes",
+                action="cancel",
+                price=0.0,
+                quantity=0.0,
+                tif="GTC",
+                rationale="cancel quote",
+                journal=None,
+                state_file=str(state_path),
+            )
+
+            with (
+                patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch("sys.stdout", stdout),
+            ):
+                result = operator_cli.cmd_sync_quote(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(payload["shell_action"], "cancel")
+            self.assertEqual(payload["cancelled_order_ids"], ["cancel-1"])
+
     def test_status_with_journal_surfaces_runtime_summary_and_cycle_metrics(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             state_path = Path(temp_dir) / "safety-state.json"
@@ -635,7 +731,9 @@ class OperatorControlTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(result, 0)
-            self.assertEqual(payload["journal_summary"]["runtime_state_counts"], {"recovering": 1})
+            self.assertEqual(
+                payload["journal_summary"]["runtime_state_counts"], {"recovering": 1}
+            )
             self.assertEqual(
                 payload["recent_runtime"]["last_runtime_summary"]["state"], "recovering"
             )

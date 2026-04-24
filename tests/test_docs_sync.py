@@ -91,15 +91,25 @@ class DocsSyncTests(unittest.TestCase):
 
     def test_readme_ci_section_matches_current_workflow(self):
         text = (REPO_ROOT / "README.md").read_text()
+        lowered = text.lower()
         self.assertIn("Run advisory and docs contract regressions", text)
         self.assertIn("compileall", text)
+        self.assertIn("ruff", lowered)
+        self.assertIn("mypy", lowered)
+        self.assertIn("coverage", lowered)
+        self.assertIn("pip-audit", lowered)
+        self.assertIn("gitleaks", lowered)
 
     def test_ci_docs_reference_current_workflow_shape(self):
         for path in DOCS_WITH_CURRENT_CI_SUMMARY:
             with self.subTest(path=path):
                 text = path.read_text()
+                lowered = text.lower()
                 self.assertIn("compileall", text)
                 self.assertIn("Run advisory and docs contract regressions", text)
+                self.assertIn("ruff", lowered)
+                self.assertIn("mypy", lowered)
+                self.assertIn("coverage", lowered)
 
     def test_dataset_materialization_commands_are_documented(self):
         for path in DOCS_WITH_DATASET_COMMANDS:

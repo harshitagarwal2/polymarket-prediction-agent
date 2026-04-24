@@ -15,6 +15,18 @@ The repo now has first-class product-facing layers on top of the original runtim
 
 Polymarket is the main supported venue path. Kalshi remains present behind the same adapter interface, but the runtime, docs, and tests are much more complete on the Polymarket side.
 
+## Authority and ownership boundaries
+
+This repo currently treats Postgres plus projected current-state tables as the authoritative live data plane when a Postgres DSN marker is resolvable.
+
+- capture workers own raw ingress, checkpoints, and source-health writes only
+- `services/projection/` plus `scripts/run_current_projection.py` own the compatibility `runtime/data/current/*.json` exports for capture-owned tables
+- deterministic builders in `scripts/ingest_live_data.py`, `storage/current_selection.py`, `execution/planner.py`, and `opportunity/` own mappings, fair values, opportunities, and other derived outputs
+
+That means selector-facing current JSON is not capture-worker authority. When a DSN marker exists, runtime and ingest readers treat the projected Postgres-backed read boundary as authoritative and treat `runtime/data/current/*.json` as compatibility exports.
+
+The legacy live `polymarket-bbo` path is deprecated and should not be treated as the supported production capture path. The supported live capture path is the dedicated `run_polymarket_capture` worker.
+
 ## Current runtime flow
 
 ```text
@@ -140,6 +152,8 @@ The sportsbook capture split now has two explicit storage modes:
 - the dedicated `run-current-projection` worker replays raw Postgres capture events into selector-facing current tables and compatibility snapshots under `runtime/data/current/`
 
 With a resolvable Postgres marker, JSON under `runtime/data/current/` is now treated as a compatibility export rather than the source of truth. Runtime and ingest read boundaries prefer the projected Postgres-backed current-state adapter when that marker exists.
+
+The checked-in Docker and CI surfaces now prove repo-level quality and security gates plus the benchmark and substrate smoke paths. The CI contract includes compile checks, `ruff` format/lint gates, `mypy`, coverage-backed unittest discovery, a deterministic service-stack smoke path, and a Compose substrate smoke path. It still does not claim unattended live deployment readiness.
 
 ### `risk/`
 
@@ -284,11 +298,17 @@ The benchmark layer does not claim live execution realism. It is useful for rela
 It:
 
 - checks that `uv.lock` matches the dependency declarations
-- installs the package on Python 3.10
+- installs the package plus locked dev tooling on Python 3.10
 - compiles key runtime and research modules with `python -m compileall -q`
+- runs a scoped `ruff format --check` contract for maintained repo-policy files
+- runs the repo-wide serious `ruff check` lint gate
+- runs the configured `mypy` contract
 - runs the focused **Run advisory and docs contract regressions** unittest step
-- runs the unittest suite under `tests/`
+- runs the unittest suite under `tests/` with Coverage.py reporting
+- runs the dedicated Postgres smoke, deterministic service-stack smoke, and Compose substrate smoke jobs
 - runs the separate reproducibility job
+
+The separate security workflow audits the locked dependency graph and scans changed commit ranges with checksum-verified `gitleaks`. The build-only release workflow produces Python distributions from the locked environment without isolated backend resolution and uploads them plus a Docker image archive as GitHub artifacts without publishing them to any registry or deployment target.
 
 ## Current maturity boundaries
 

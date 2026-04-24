@@ -11,6 +11,9 @@ from unittest.mock import patch
 from engine.config_loader import load_config_file, nested_config_value
 from engine.runtime_policy import load_runtime_policy
 from research.data.build_training_set import build_training_set_rows
+from research.data.build_training_set import (
+    build_resolution_truth_rows_from_sports_inputs,
+)
 from research.data.build_training_set import build_training_set_rows_from_sports_inputs
 from research.data.build_training_set import load_training_set_rows
 from research.data.capture_polymarket import (
@@ -23,6 +26,7 @@ from research.data.capture_sports_inputs import (
     load_sports_input_capture,
     write_sports_input_capture,
 )
+from research.data.schemas import ResolutionTruthRow
 from research.eval.dm_test import compare_loss_differentials
 from research.eval.metrics import score_forecasts
 from research.features.joiners import merge_feature_sets
@@ -258,6 +262,105 @@ class ResearchArchitectureScaffoldingTests(unittest.TestCase):
         self.assertIsNone(rows[0].market_key)
         self.assertIsNone(rows[0].condition_id)
         self.assertNotIn("market_market_count", rows[0].metadata)
+
+    def test_resolution_truth_rows_preserve_unresolved_inputs_explicitly(self):
+        captured_at = datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc)
+        start_time = datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc)
+        sports_capture = build_sports_input_capture(
+            [
+                {
+                    "event_key": "event-1",
+                    "sport": "nba",
+                    "sports_market_type": "moneyline",
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "selection_name": "Home Team",
+                    "bookmaker": "book-a",
+                    "decimal_odds": 1.80,
+                    "start_time": start_time.isoformat(),
+                    "label": 1,
+                },
+                {
+                    "event_key": "event-1",
+                    "sport": "nba",
+                    "sports_market_type": "moneyline",
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "selection_name": "Home Team",
+                    "bookmaker": "book-b",
+                    "decimal_odds": 1.90,
+                    "start_time": start_time.isoformat(),
+                },
+            ],
+            source="sports-inputs",
+            captured_at=captured_at,
+        )
+
+        truth_rows = build_resolution_truth_rows_from_sports_inputs(
+            sports_capture.rows,
+        )
+        training_rows = build_training_set_rows_from_sports_inputs(
+            sports_capture.rows,
+        )
+
+        self.assertEqual(len(truth_rows), 2)
+        self.assertEqual(
+            [row.resolution_status for row in truth_rows],
+            ["resolved", "unresolved"],
+        )
+        self.assertEqual(truth_rows[0].label, 1)
+        self.assertIsNone(truth_rows[1].label)
+        self.assertEqual(
+            truth_rows[1].recorded_at, captured_at.isoformat().replace("+00:00", "Z")
+        )
+        self.assertEqual(len(training_rows), 1)
+        self.assertEqual(training_rows[0].record_id, truth_rows[0].record_id)
+
+    def test_resolution_truth_rows_treat_non_binary_source_labels_as_unresolved(self):
+        captured_at = datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc)
+        start_time = datetime(2026, 4, 7, 15, 0, tzinfo=timezone.utc)
+        sports_capture = build_sports_input_capture(
+            [
+                {
+                    "event_key": "event-1",
+                    "sport": "nba",
+                    "sports_market_type": "moneyline",
+                    "home_team": "Home Team",
+                    "away_team": "Away Team",
+                    "selection_name": "Home Team",
+                    "bookmaker": "book-a",
+                    "decimal_odds": 1.80,
+                    "start_time": start_time.isoformat(),
+                    "label": 2,
+                }
+            ],
+            source="sports-inputs",
+            captured_at=captured_at,
+        )
+
+        truth_rows = build_resolution_truth_rows_from_sports_inputs(
+            sports_capture.rows,
+        )
+        training_rows = build_training_set_rows_from_sports_inputs(
+            sports_capture.rows,
+        )
+
+        self.assertEqual(len(truth_rows), 1)
+        self.assertEqual(truth_rows[0].resolution_status, "unresolved")
+        self.assertIsNone(truth_rows[0].label)
+        self.assertEqual(truth_rows[0].metadata["source_label"], 2)
+        self.assertEqual(training_rows, [])
+
+    def test_resolution_truth_row_rejects_unknown_status_values(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "resolution_status must be one of: resolved, unresolved",
+        ):
+            ResolutionTruthRow(
+                home_team="Home Team",
+                away_team="Away Team",
+                resolution_status="pending",
+            )
 
     def test_training_and_eval_scaffolding_works(self):
         case = SportsBenchmarkCase.from_payload(

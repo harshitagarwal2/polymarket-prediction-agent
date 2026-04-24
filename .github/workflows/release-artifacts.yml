@@ -1,0 +1,57 @@
+name: Release Artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-release-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.27"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked build tooling
+        run: uv sync --locked --extra dev
+
+      - name: Build Python distributions
+        run: uv run --no-sync python -m build --no-isolation
+
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+          retention-days: 14
+
+      - name: Build Docker image archive
+        run: |
+          IMAGE_NAME="prediction-market-agent:release-artifacts"
+          docker build -t "$IMAGE_NAME" .
+          docker save "$IMAGE_NAME" | gzip > prediction-market-agent-image.tar.gz
+
+      - name: Upload Docker image archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-archive
+          path: prediction-market-agent-image.tar.gz
+          retention-days: 14

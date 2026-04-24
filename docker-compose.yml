@@ -1,0 +1,169 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-prediction_market}
+      POSTGRES_USER: ${POSTGRES_USER:-prediction_market}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prediction_market}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  bootstrap-postgres:
+    build: .
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PREDICTION_MARKET_POSTGRES_DSN: ${PREDICTION_MARKET_POSTGRES_DSN:-postgresql://prediction_market:prediction_market@postgres:5432/prediction_market}
+    command:
+      [
+        "uv",
+        "run",
+        "--locked",
+        "--extra",
+        "postgres",
+        "bootstrap-postgres",
+        "--root",
+        "runtime/data",
+      ]
+    volumes:
+      - runtime-data:/app/runtime/data
+
+  run-sportsbook-capture:
+    build: .
+    profiles: ["capture"]
+    depends_on:
+      bootstrap-postgres:
+        condition: service_completed_successfully
+    environment:
+      PREDICTION_MARKET_POSTGRES_DSN: ${PREDICTION_MARKET_POSTGRES_DSN:-postgresql://prediction_market:prediction_market@postgres:5432/prediction_market}
+      THE_ODDS_API_KEY: ${THE_ODDS_API_KEY:-}
+    command:
+      [
+        "uv",
+        "run",
+        "--locked",
+        "--extra",
+        "postgres",
+        "run-sportsbook-capture",
+        "--root",
+        "runtime/data",
+        "--sport",
+        "${SPORT_KEY:-basketball_nba}",
+        "--market",
+        "${SPORTSBOOK_MARKET:-h2h}",
+        "--max-cycles",
+        "1",
+      ]
+    volumes:
+      - runtime-data:/app/runtime/data
+
+  run-polymarket-capture:
+    build: .
+    profiles: ["capture"]
+    depends_on:
+      bootstrap-postgres:
+        condition: service_completed_successfully
+    environment:
+      PREDICTION_MARKET_POSTGRES_DSN: ${PREDICTION_MARKET_POSTGRES_DSN:-postgresql://prediction_market:prediction_market@postgres:5432/prediction_market}
+      POLYMARKET_PRIVATE_KEY: ${POLYMARKET_PRIVATE_KEY:-}
+      POLYMARKET_FUNDER: ${POLYMARKET_FUNDER:-}
+      POLYMARKET_ACCOUNT_ADDRESS: ${POLYMARKET_ACCOUNT_ADDRESS:-}
+      POLYMARKET_USER_WS_HOST: ${POLYMARKET_USER_WS_HOST:-wss://ws-subscriptions-clob.polymarket.com/ws/user}
+    command:
+      [
+        "uv",
+        "run",
+        "--locked",
+        "--extra",
+        "postgres",
+        "--extra",
+        "polymarket",
+        "run-polymarket-capture",
+        "market",
+        "--root",
+        "runtime/data",
+        "--asset-id",
+        "${POLYMARKET_ASSET_ID:-replace-me}",
+        "--max-sessions",
+        "1",
+        "--max-messages-per-session",
+        "1",
+      ]
+    volumes:
+      - runtime-data:/app/runtime/data
+
+  run-current-projection:
+    build: .
+    profiles: ["projection"]
+    depends_on:
+      bootstrap-postgres:
+        condition: service_completed_successfully
+    environment:
+      PREDICTION_MARKET_POSTGRES_DSN: ${PREDICTION_MARKET_POSTGRES_DSN:-postgresql://prediction_market:prediction_market@postgres:5432/prediction_market}
+    command:
+      [
+        "uv",
+        "run",
+        "--locked",
+        "--extra",
+        "postgres",
+        "run-current-projection",
+        "--root",
+        "runtime/data",
+        "--max-cycles",
+        "1",
+      ]
+    volumes:
+      - runtime-data:/app/runtime/data
+
+  run-agent-loop:
+    build: .
+    profiles: ["runtime"]
+    depends_on:
+      bootstrap-postgres:
+        condition: service_completed_successfully
+    environment:
+      PREDICTION_MARKET_POSTGRES_DSN: ${PREDICTION_MARKET_POSTGRES_DSN:-postgresql://prediction_market:prediction_market@postgres:5432/prediction_market}
+      POLYMARKET_PRIVATE_KEY: ${POLYMARKET_PRIVATE_KEY:-}
+      POLYMARKET_FUNDER: ${POLYMARKET_FUNDER:-}
+      POLYMARKET_ACCOUNT_ADDRESS: ${POLYMARKET_ACCOUNT_ADDRESS:-}
+      POLYMARKET_USER_WS_HOST: ${POLYMARKET_USER_WS_HOST:-wss://ws-subscriptions-clob.polymarket.com/ws/user}
+    command:
+      [
+        "uv",
+        "run",
+        "--locked",
+        "--extra",
+        "postgres",
+        "--extra",
+        "polymarket",
+        "run-agent-loop",
+        "--venue",
+        "polymarket",
+        "--mode",
+        "preview",
+        "--fair-values-file",
+        "runtime/data/current/fair_value_manifest.json",
+        "--opportunity-root",
+        "runtime/data",
+        "--policy-file",
+        "${RUNTIME_POLICY_FILE:-configs/runtime_policy.staging.json}",
+        "--max-cycles",
+        "1",
+      ]
+    volumes:
+      - runtime-data:/app/runtime/data
+
+volumes:
+  postgres-data:
+  runtime-data:

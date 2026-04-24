@@ -13,6 +13,7 @@ class ResearchStoragePaths:
     processed_root: Path
     processed_training_root: Path
     processed_inference_root: Path
+    processed_replay_root: Path
     artifacts_root: Path
     model_artifacts_root: Path
     calibration_artifacts_root: Path
@@ -23,6 +24,7 @@ class ResearchStoragePaths:
             self.raw_sportsbook_root,
             self.processed_training_root,
             self.processed_inference_root,
+            self.processed_replay_root,
             self.model_artifacts_root,
             self.calibration_artifacts_root,
         ):
@@ -44,6 +46,7 @@ def build_research_storage_paths(
         processed_root=processed_root,
         processed_training_root=processed_root / "training",
         processed_inference_root=processed_root / "inference",
+        processed_replay_root=processed_root / "replay",
         artifacts_root=artifacts_root,
         model_artifacts_root=artifacts_root / "models",
         calibration_artifacts_root=artifacts_root / "calibration",
