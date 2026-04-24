@@ -492,6 +492,35 @@ class OperatorControlTests(unittest.TestCase):
             self.assertTrue(payload["live_state"]["fills_initialized"])
             self.assertEqual(payload["live_state"]["last_fills_source"], "live_cache")
 
+    def test_status_can_write_machine_readable_output_file(self):
+        adapter = StatusDriftAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            output_path = Path(temp_dir) / "runtime_status.json"
+            stdout = io.StringIO()
+            args = argparse.Namespace(
+                state_file=str(state_path),
+                journal=None,
+                llm_advisory_file=None,
+                venue="polymarket",
+                symbol=adapter.contract.symbol,
+                outcome="yes",
+                output=str(output_path),
+            )
+
+            with (
+                patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch("sys.stdout", stdout),
+            ):
+                result = operator_cli.cmd_status(args)
+
+            stdout_payload = json.loads(stdout.getvalue())
+            file_payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(file_payload, stdout_payload)
+        self.assertIn("runtime_health", file_payload)
+
     def test_status_includes_last_depth_assessment(self):
         adapter = StatusDriftAdapter()
         with tempfile.TemporaryDirectory() as temp_dir:

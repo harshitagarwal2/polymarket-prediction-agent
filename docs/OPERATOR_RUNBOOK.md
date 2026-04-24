@@ -263,6 +263,7 @@ If another supervised process is refreshing the manifest, `run-agent-loop` can r
 operator-cli status --state-file runtime/safety-state.json
 operator-cli status --state-file runtime/safety-state.json --journal runtime/events.jsonl
 operator-cli status --state-file runtime/safety-state.json --venue polymarket --symbol <token-id> --outcome yes
+operator-cli status --state-file runtime/safety-state.json --output runtime/data/current/runtime_status.json
 ```
 
 Status can show:
@@ -277,6 +278,8 @@ Status can show:
 - runtime kill-switch state when projected `source_health` has already forced a halt
 
 When the runtime is halted by the kill switch, `operator-cli status` now reports that through `runtime_health.kill_switch_active` and `runtime_health.kill_switch_reasons`. The current implementation derives that kill-switch from projected `source_health` red/error/unhealthy conditions and surfaces it as a supervised hard gate before the runtime loop places new actions.
+
+If you need a local watchdog input without scraping stdout, use `operator-cli status --output runtime/data/current/runtime_status.json`. The output is the same machine-readable JSON payload that `status` prints, written atomically so a local watcher can read it safely.
 
 ### Advisory sidecar
 

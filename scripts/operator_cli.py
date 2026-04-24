@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -102,6 +103,22 @@ def _normalize_payload(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
     return value
+
+
+def _write_json_output(path: str | Path, payload: dict[str, Any]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        dir=output_path.parent,
+        prefix=f"{output_path.name}.",
+        suffix=".tmp",
+        delete=False,
+        encoding="utf-8",
+    ) as handle:
+        handle.write(json.dumps(payload, indent=2, sort_keys=True))
+        temp_path = Path(handle.name)
+    temp_path.replace(output_path)
 
 
 def _state_payload(state: EngineSafetyState) -> dict[str, Any]:
@@ -611,6 +628,8 @@ def cmd_status(args) -> int:
         payload["recent_execution_status"] = _recent_execution_status(
             recent_runtime, snapshot
         )
+    if getattr(args, "output", None):
+        _write_json_output(args.output, payload)
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -863,6 +882,7 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--state-file", default="runtime/safety-state.json")
     status.add_argument("--journal", default=None)
     status.add_argument("--llm-advisory-file", default=None)
+    status.add_argument("--output", default=None)
     status.add_argument("--venue", choices=["polymarket", "kalshi"], default=None)
     status.add_argument("--symbol", default=None)
     status.add_argument(

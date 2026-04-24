@@ -478,14 +478,17 @@ def _project_lane(
             raise RuntimeError(
                 f"projection lane {checkpoint_name} received source events without a matching entity"
             )
-        if (
-            require_matching_event
-            and projected_events
-            and int(projected_events[-1]["capture_id"]) != int(events[-1]["capture_id"])
-        ):
-            raise RuntimeError(
-                f"projection lane {checkpoint_name} received newer non-matching events after the latest snapshot"
+        trailing_unmatched = False
+        if require_matching_event and projected_events:
+            last_matching_capture_id = int(projected_events[-1]["capture_id"])
+            trailing_unmatched = any(
+                int(event["capture_id"]) > last_matching_capture_id for event in events
             )
+            projected_events = [
+                event
+                for event in projected_events
+                if int(event["capture_id"]) <= last_matching_capture_id
+            ]
         event_count, row_count = processor(projected_events, stores)
         checkpoint_capture_id: int | None = None
         checkpoint_ts: str | None = None
@@ -523,10 +526,11 @@ def _project_lane(
                 "last_seen_at": datetime.now(timezone.utc).isoformat(),
                 "last_success_at": datetime.now(timezone.utc).isoformat(),
                 "stale_after_ms": 60_000,
-                "status": "ok",
+                "status": "red" if trailing_unmatched else "ok",
                 "details": {
                     **checkpoint_metadata,
                     "checkpoint": checkpoint,
+                    "trailing_unmatched_events": trailing_unmatched,
                 },
             },
         )

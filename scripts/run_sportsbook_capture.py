@@ -10,6 +10,7 @@ from services.capture import (
     SportsbookCaptureStores,
     SportsbookCaptureWorker,
     SportsbookCaptureWorkerConfig,
+    SportsGameOddsCaptureSource,
     SportsbookJsonFeedCaptureSource,
     SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS,
     TheOddsApiCaptureSource,
@@ -64,6 +65,35 @@ def _resolve_event_map_file(value: str | None, config: dict[str, object]) -> str
     return configured if isinstance(configured, str) and configured else None
 
 
+def _resolve_provider(value: str | None, config: dict[str, object]) -> str:
+    if isinstance(value, str) and value:
+        return value
+    configured = nested_config_value(config, "capture", "provider")
+    if isinstance(configured, str) and configured:
+        return configured
+    return "theoddsapi"
+
+
+def _resolve_provider_url(value: str | None, config: dict[str, object]) -> str | None:
+    if value not in (None, ""):
+        return value
+    configured = nested_config_value(config, "capture", "provider_url")
+    return configured if isinstance(configured, str) and configured else None
+
+
+def _resolve_api_key_env(args, provider: str, config: dict[str, object]) -> str | None:
+    if args.api_key_env not in (None, ""):
+        return args.api_key_env
+    configured = nested_config_value(config, "capture", "api_key_env")
+    if isinstance(configured, str) and configured:
+        return configured
+    if provider == "sportsgameodds":
+        return "SPORTSGAMEODDS_API_KEY"
+    if provider == "theoddsapi":
+        return "THE_ODDS_API_KEY"
+    return None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Continuously capture sportsbook odds into runtime and postgres-backed stores."
@@ -75,10 +105,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--event-map-file", default=None)
     parser.add_argument(
         "--provider",
-        default="theoddsapi",
+        default=None,
         choices=SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS,
     )
-    parser.add_argument("--api-key-env", default="THE_ODDS_API_KEY")
+    parser.add_argument("--api-key-env", default=None)
     parser.add_argument("--provider-url", default=None)
     parser.add_argument("--refresh-interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-cycles", type=int, default=None)
@@ -87,27 +117,49 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _build_source(args) -> TheOddsApiCaptureSource | SportsbookJsonFeedCaptureSource:
-    if args.provider == "theoddsapi":
-        api_key = os.getenv(args.api_key_env)
-        if not api_key:
+def _build_source(
+    args,
+    config: dict[str, object],
+) -> (
+    TheOddsApiCaptureSource
+    | SportsbookJsonFeedCaptureSource
+    | SportsGameOddsCaptureSource
+):
+    provider = _resolve_provider(args.provider, config)
+    provider_url = _resolve_provider_url(args.provider_url, config)
+    api_key_env = _resolve_api_key_env(args, provider, config)
+
+    if provider == "theoddsapi":
+        if api_key_env in (None, ""):
             raise RuntimeError(
-                f"missing required environment variable: {args.api_key_env}"
+                "run-sportsbook-capture requires an API key env for theoddsapi"
             )
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            raise RuntimeError(f"missing required environment variable: {api_key_env}")
         return TheOddsApiCaptureSource(api_key=api_key)
-    if args.provider == "json_feed":
-        if args.provider_url in (None, ""):
+    if provider == "json_feed":
+        if provider_url in (None, ""):
             raise RuntimeError(
                 "run-sportsbook-capture requires --provider-url for provider json_feed"
             )
-        return SportsbookJsonFeedCaptureSource(feed_url=args.provider_url)
-    raise RuntimeError(f"unsupported sportsbook provider: {args.provider}")
+        return SportsbookJsonFeedCaptureSource(feed_url=provider_url)
+    if provider == "sportsgameodds":
+        if api_key_env in (None, ""):
+            raise RuntimeError(
+                "run-sportsbook-capture requires an API key env for provider sportsgameodds"
+            )
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            raise RuntimeError(f"missing required environment variable: {api_key_env}")
+        return SportsGameOddsCaptureSource(api_key=api_key, feed_url=provider_url)
+    raise RuntimeError(f"unsupported sportsbook provider: {provider}")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = _load_optional_config(args.config_file)
-    source = _build_source(args)
+    source = _build_source(args, config)
 
     try:
         stores = SportsbookCaptureStores.from_root(args.root, require_postgres=True)

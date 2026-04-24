@@ -278,9 +278,43 @@ python -m scripts.run_sportsbook_capture \
   --market h2h \
   --root runtime/data \
   --refresh-interval-seconds 60
+
+python -m scripts.run_sportsbook_capture \
+  --provider sportsgameodds \
+  --event-map-file runtime/odds_event_map.json \
+  --sport basketball_nba \
+  --market h2h \
+  --root runtime/data \
+  --refresh-interval-seconds 60
 ```
 
 That command owns raw sportsbook ingress only. It appends sportsbook quote events, checkpoints, and `source_health` rows through the Postgres capture store, and it does not own selector-facing `runtime/data/current/*.json`. `run_current_projection` owns the compatibility exports for capture-owned tables, and when a Postgres DSN marker is present the projected Postgres-backed reads are authoritative. Because the worker uses the Postgres repository layer directly, it needs the optional `postgres` dependency set plus a resolvable DSN from `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under the configured runtime root.
+
+If you want to stop maintaining `runtime/odds_event_map.json` by hand, use the new schedule-feed helper:
+
+```bash
+export SPORTSGAMEODDS_API_KEY=...
+```
+
+The `sportsgameodds` source still depends on `event_key` / `game_id` enrichment for downstream mapping and fair-value builders, so use the helper (or another trusted identity feed) to keep `runtime/odds_event_map.json` current.
+
+```bash
+python -m scripts.build_event_map_from_schedule_feed \
+  --provider file \
+  --schedule-file runtime/schedule_feed.json \
+  --sport nba \
+  --series playoffs \
+  --output runtime/odds_event_map.json
+```
+
+For MLB, the same helper can call the public StatsAPI directly:
+
+```bash
+python -m scripts.build_event_map_from_schedule_feed \
+  --provider mlb-statsapi \
+  --date 2026-04-24 \
+  --output runtime/odds_event_map.json
+```
 
 For dedicated Polymarket capture and projection, the equivalent script entrypoints are:
 

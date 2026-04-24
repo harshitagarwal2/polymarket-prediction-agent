@@ -280,6 +280,14 @@ python -m scripts.run_sportsbook_capture \
   --root runtime/data \
   --refresh-interval-seconds 60
 
+python -m scripts.run_sportsbook_capture \
+  --provider sportsgameodds \
+  --event-map-file runtime/odds_event_map.json \
+  --sport basketball_nba \
+  --market h2h \
+  --root runtime/data \
+  --refresh-interval-seconds 60
+
 python -m scripts.run_polymarket_capture market \
   --asset-id pm-1 \
   --root runtime/data \
@@ -300,6 +308,14 @@ The current ownership split is:
 - deterministic builders such as `build-mappings`, `build-fair-values`, and opportunity builders own mappings, fair values, and other derived outputs
 
 That split is intentional: the capture/projector substrate materializes the read boundary for deterministic builders and operator-facing preview context, while `run-agent-loop` remains the supervised venue-facing runtime that lists live markets, applies runtime policy, and journals execution decisions.
+
+To replace the manual `runtime/odds_event_map.json` step, the repo now ships `build_event_map_from_schedule_feed.py`, which can build an event map from a schedule/status feed or directly from the public MLB StatsAPI schedule endpoint.
+
+```bash
+export SPORTSGAMEODDS_API_KEY=...
+```
+
+The `sportsgameodds` provider still needs the same `event_key` / `game_id` enrichment path as other sportsbook sources, so pair it with a generated or maintained `runtime/odds_event_map.json`.
 
 When a Postgres DSN marker is present, either through `PREDICTION_MARKET_POSTGRES_DSN` / `POSTGRES_DSN` / `DATABASE_URL` or a `postgres.dsn` marker file under `runtime/data/postgres`, projected reads are authoritative. The JSON files under `runtime/data/current/` stay as compatibility exports, not the source of truth. The dedicated workers use the Postgres repository layer directly, so they require the optional `postgres` extra and one of those DSN resolution paths.
 

@@ -17,6 +17,7 @@ from services.capture.polymarket_worker import (
 from services.capture.sportsbook import (
     SportsbookCaptureRequest,
     SportsbookCaptureStores,
+    SportsGameOddsCaptureSource,
     SportsbookJsonFeedCaptureSource,
     SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS,
     TheOddsApiCaptureSource,
@@ -34,6 +35,7 @@ __all__ = [
     "SportsbookCaptureStores",
     "SportsbookCaptureWorker",
     "SportsbookCaptureWorkerConfig",
+    "SportsGameOddsCaptureSource",
     "SportsbookJsonFeedCaptureSource",
     "SUPPORTED_SPORTSBOOK_CAPTURE_PROVIDERS",
     "PolymarketCaptureStores",
