@@ -1,11 +1,17 @@
 {
   "focused_tests": {
-    "command": "python -m unittest tests.test_polymarket_capture_worker tests.test_current_projection_worker tests.test_ingest_live_data tests.test_postgres_storage tests.test_sportsbook_capture_worker tests.test_sportsbook_json_feed_provider tests.test_docs_sync tests.test_console_script_entrypoints",
-    "result": "Ran 95 tests in 2.225s\n\nOK (skipped=1)"
+    "command": "set -euo pipefail; for pattern in test_polymarket_capture_worker.py test_current_projection_worker.py test_ingest_live_data.py test_postgres_storage.py test_sportsbook_capture_worker.py test_sportsbook_json_feed_provider.py test_docs_sync.py test_console_script_entrypoints.py; do uv run --locked --extra research --extra postgres --extra polymarket python -m unittest discover -s tests -p \"$pattern\"; done",
+    "result": "Aggregate across the discovery sequence:\n\nRan 97 tests in 2.032s\n\nOK (skipped=1)"
   },
   "full_suite": {
     "command": "uv run --locked --extra research --extra postgres --extra polymarket python -m unittest discover -s tests -p \"test_*.py\"",
-    "result": "Ran 624 tests in 4.897s\n\nOK (skipped=1)"
+    "result": "Ran 633 tests in 4.751s\n\nOK (skipped=1)"
+  },
+  "docker_build": {
+    "command": "docker build -t prediction-market-agent .",
+    "observed": {
+      "image_build_succeeded": true
+    }
   },
   "service_stack_smoke": {
     "command": "make smoke-service-stack",
@@ -21,6 +27,9 @@
     "command": "docker compose config && docker compose up -d postgres && docker compose run --rm bootstrap-postgres && docker compose --profile projection run --rm run-current-projection && docker compose down -v",
     "observed": {
       "compose_config_valid": true,
+      "bootstrap_applies_migrations": true,
+      "dsn_marker_written": true,
+      "lane_summary_emitted": true,
       "postgres_bootstrap_ordering_valid": true,
       "projector_exits_zero": true
     }
@@ -34,12 +43,13 @@
       }
     },
     "live_current_state_build_fair_values": {
-      "command": "python -m scripts.train_models --model consensus --output <consensus_artifact.json> && python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> && python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root> && python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json> && python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>",
+      "command": "python -m scripts.train_models --model consensus --output <consensus_artifact.json> && python -m scripts.ingest_live_data sportsbook-odds --sport basketball_nba --market h2h --event-map-file <odds_event_map.json> --root <runtime_root> && python -m scripts.ingest_live_data build-mappings --market h2h --root <runtime_root> && python -m scripts.ingest_live_data build-fair-values --root <runtime_root> --consensus-artifact <consensus_artifact.json> && python -m scripts.ingest_live_data build-opportunities --root <runtime_root> && python -m scripts.ingest_live_data build-inference-dataset --root <runtime_root>",
       "observed": {
         "event_map_file_supported": true,
         "consensus_artifact_supported": true,
         "fair_values_source_health_status": "ok",
         "missing_identity_blocked": true,
+        "build_opportunities_materialized": true,
         "joined_inference_dataset_written": true,
         "joined_inference_dataset_registered": true
       }
@@ -107,6 +117,7 @@
       "observed": {
         "historical_training_dataset_written": true,
         "historical_training_dataset_registered": true,
+        "historical_resolution_truth_dataset_registered": true,
         "dataset_backed_training_supported": true
       }
     },
