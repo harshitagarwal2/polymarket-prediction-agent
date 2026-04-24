@@ -284,6 +284,11 @@ class ReplayExecutionLabelRow:
     wait_steps: int | None = None
     resting: bool = False
     stale_data_flag: bool = False
+    decision_fair_value: float | None = None
+    decision_reference_price: float | None = None
+    decision_best_bid: float | None = None
+    decision_best_ask: float | None = None
+    decision_midpoint: float | None = None
     expected_edge_bps: float | None = None
     realized_edge_bps: float | None = None
     slippage_bps: float | None = None
@@ -291,6 +296,7 @@ class ReplayExecutionLabelRow:
     levels_consumed: int | None = None
     price_move_bps: float | None = None
     mapping_risk: float | None = None
+    replay_step_index: int | None = None
     metadata: dict[str, object] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, object]:
@@ -309,6 +315,11 @@ class ReplayExecutionLabelRow:
             "wait_steps": self.wait_steps,
             "resting": self.resting,
             "stale_data_flag": self.stale_data_flag,
+            "decision_fair_value": self.decision_fair_value,
+            "decision_reference_price": self.decision_reference_price,
+            "decision_best_bid": self.decision_best_bid,
+            "decision_best_ask": self.decision_best_ask,
+            "decision_midpoint": self.decision_midpoint,
             "expected_edge_bps": self.expected_edge_bps,
             "realized_edge_bps": self.realized_edge_bps,
             "slippage_bps": self.slippage_bps,
@@ -316,5 +327,6 @@ class ReplayExecutionLabelRow:
             "levels_consumed": self.levels_consumed,
             "price_move_bps": self.price_move_bps,
             "mapping_risk": self.mapping_risk,
+            "replay_step_index": self.replay_step_index,
             "metadata": self.metadata,
         }

@@ -323,40 +323,72 @@ def _project_lane(
         event for event in events if str(event.get("entity_type") or "") in entity_types
     ]
     event_count, row_count = processor(projected_events, stores)
+    checkpoint_capture_id: int | None = None
+    checkpoint_ts: str | None = None
+    checkpoint_metadata = {
+        "source": source,
+        "layer": layer,
+        "event_count": event_count,
+        "row_count": row_count,
+    }
     if events:
         last_event = events[-1]
-        checkpoint = _write_projection_checkpoint(
-            stores.root,
+        checkpoint_capture_id = int(last_event["capture_id"])
+        checkpoint_ts = str(last_event.get("captured_at") or "")
+    try:
+        materialized = materialize_current_compatibility_tables(
+            stores, materialize_tables
+        )
+        if checkpoint_capture_id is not None:
+            checkpoint = _write_projection_checkpoint(
+                stores.root,
+                checkpoint_name,
+                capture_id=checkpoint_capture_id,
+                checkpoint_ts=checkpoint_ts,
+                metadata=checkpoint_metadata,
+            )
+        else:
+            checkpoint = None
+        stores.source_health.upsert(
             checkpoint_name,
-            capture_id=int(last_event["capture_id"]),
-            checkpoint_ts=str(last_event.get("captured_at") or ""),
-            metadata={
-                "source": source,
-                "layer": layer,
-                "event_count": event_count,
-                "row_count": row_count,
+            {
+                "source_name": checkpoint_name,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+                "last_success_at": datetime.now(timezone.utc).isoformat(),
+                "stale_after_ms": 60_000,
+                "status": "ok",
+                "details": {
+                    **checkpoint_metadata,
+                    "checkpoint": checkpoint,
+                },
             },
         )
-    else:
-        checkpoint = None
-    stores.source_health.upsert(
-        checkpoint_name,
-        {
-            "source_name": checkpoint_name,
-            "last_seen_at": datetime.now(timezone.utc).isoformat(),
-            "last_success_at": datetime.now(timezone.utc).isoformat(),
-            "stale_after_ms": 60_000,
-            "status": "ok",
-            "details": {
-                "source": source,
-                "layer": layer,
-                "event_count": event_count,
-                "row_count": row_count,
-                "checkpoint": checkpoint,
+    except Exception as exc:
+        stores.source_health.upsert(
+            checkpoint_name,
+            {
+                "source_name": checkpoint_name,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+                "last_success_at": None,
+                "stale_after_ms": 60_000,
+                "status": "red",
+                "details": {
+                    **checkpoint_metadata,
+                    "checkpoint": None,
+                    "error_kind": exc.__class__.__name__,
+                },
             },
-        },
-    )
-    materialized = materialize_current_compatibility_tables(stores, materialize_tables)
+        )
+        materialize_capture_owned_source_health_state(
+            stores.current_health,
+            stores.source_health.read_current().values(),
+        )
+        raise
+    if "source_health" in materialized:
+        materialized["source_health"] = materialize_capture_owned_source_health_state(
+            stores.current_health,
+            stores.source_health.read_current().values(),
+        )
     return {
         "checkpoint_name": checkpoint_name,
         "source": source,

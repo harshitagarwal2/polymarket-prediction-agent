@@ -55,6 +55,33 @@ def _load_manifest_condition_ids(path: str | None) -> list[str] | None:
     return condition_ids or None
 
 
+def _load_projected_condition_ids(root: str | Path | None) -> list[str] | None:
+    if root in (None, ""):
+        return None
+    adapter = build_current_state_read_adapter(root, require_postgres=True)
+    if adapter is None:
+        return None
+    fair_values = adapter.read_table("fair_values")
+    markets = adapter.read_table("polymarket_markets")
+    condition_ids: list[str] = []
+    for market_id in fair_values.keys():
+        market_row = markets.get(str(market_id))
+        if not isinstance(market_row, dict):
+            continue
+        raw_market = market_row.get("raw_json")
+        condition_id = market_row.get("condition_id")
+        if condition_id in (None, "") and isinstance(raw_market, dict):
+            condition_id = raw_market.get("conditionId") or raw_market.get(
+                "condition_id"
+            )
+        if condition_id in (None, ""):
+            continue
+        normalized = str(condition_id)
+        if normalized not in condition_ids:
+            condition_ids.append(normalized)
+    return condition_ids or None
+
+
 def _postgres_root(root: str | Path) -> Path:
     root_path = Path(root)
     return root_path if root_path.name == "postgres" else root_path / "postgres"
@@ -100,9 +127,17 @@ def build_adapter(
             or os.getenv("POLYMARKET_LIVE_USER_MARKETS")
         )
         if markets is None:
-            markets = _load_manifest_condition_ids(
-                getattr(args, "fair_values_file", None)
-            )
+            runtime_mode = getattr(args, "mode", None)
+            opportunity_root = getattr(args, "opportunity_root", None)
+            if runtime_mode in {"run", "pair-run"} and opportunity_root not in (
+                None,
+                "",
+            ):
+                markets = _load_projected_condition_ids(opportunity_root)
+            else:
+                markets = _load_manifest_condition_ids(
+                    getattr(args, "fair_values_file", None)
+                )
         config = PolymarketConfig(
             private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
             funder=os.getenv("POLYMARKET_FUNDER"),

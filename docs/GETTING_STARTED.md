@@ -40,6 +40,8 @@ The easiest way to reason about the repo today is to keep these lanes separate:
 
 When a Postgres DSN marker exists, projected Postgres-backed reads are authoritative. `runtime/data/current/*.json` stays useful, but it is a compatibility export rather than the primary authority boundary.
 
+See [`docs/adr/authority-and-reconciliation.md`](adr/authority-and-reconciliation.md) for the authority and sanctioned-entrypoint contract.
+
 ## Install
 
 The canonical local setup is a locked `uv` environment, verified on Python 3.10.
@@ -198,16 +200,25 @@ build-fair-values \
 
 With the checked-in sample config, that currently resolves to `best-line` aggregation and `multiplicative` devigging.
 
-For the live/current-state path, the fair-value builder is a different command surface. The intended sequence is:
+For the sanctioned live/current-state path, use the dedicated capture workers first, then projection, then the sanctioned builder commands. The intended sequence is:
 
 ```bash
 python -m scripts.train_models --model consensus --output runtime/consensus_artifact.json
 
-python -m scripts.ingest_live_data sportsbook-odds \
+python -m scripts.run_sportsbook_capture \
   --sport basketball_nba \
   --market h2h \
   --event-map-file runtime/odds_event_map.json \
   --root runtime/data
+
+python -m scripts.run_polymarket_capture market \
+  --asset-id <asset-id> \
+  --root runtime/data \
+  --max-sessions 1
+
+python -m scripts.run_current_projection \
+  --root runtime/data \
+  --max-cycles 1
 
 python -m scripts.ingest_live_data build-mappings \
   --market h2h \
@@ -225,20 +236,22 @@ python -m scripts.ingest_live_data build-fair-values \
   --consensus-artifact runtime/consensus_artifact.json \
   --calibration-artifact runtime/calibration_artifact.json
 
-python -m scripts.ingest_live_data build-inference-dataset \
+python -m scripts.ingest_live_data build-opportunities \
   --root runtime/data
+```
+
+The following `ingest-live-data` commands remain available as manual/offline compatibility utilities, but they are not the sanctioned continuous production entrypoints for this wave:
+
+```bash
+python -m scripts.ingest_live_data build-inference-dataset --root runtime/data
 
 python -m scripts.ingest_live_data build-training-dataset \
   --input runtime/sports_inputs_labeled.json \
   --polymarket-input runtime/polymarket_markets.json \
   --root runtime/data
-
-python -m scripts.train_models \
-  --model elo \
-  --training-dataset historical-training-dataset \
-  --dataset-root runtime/data/datasets \
-  --output runtime/elo_artifact.json
 ```
+
+The retired `ingest-live-data polymarket-markets`, `ingest-live-data sportsbook-odds`, and `ingest-live-data polymarket-bbo` paths are deprecated and should stay retired.
 
 If you want continuous sportsbook polling without keeping the whole end-to-end ingest script in the loop, run the dedicated capture worker instead:
 
@@ -282,7 +295,7 @@ python -m scripts.run_current_projection \
   --max-cycles 1
 ```
 
-`run_polymarket_capture` appends Polymarket market/user channel events into the Postgres-backed capture substrate and keeps `source_health` current for the dedicated capture lanes. `run_current_projection` then projects those raw capture rows back into `runtime/data/current/*.json` compatibility snapshots plus the projected current-state tables used by runtime readers.
+`run_polymarket_capture` appends Polymarket market/user channel events into the Postgres-backed capture substrate and keeps `source_health` current for the dedicated capture lanes. In this wave, `run_current_projection` only projects the capture-owned market catalog and market-channel lanes back into `runtime/data/current/*.json` compatibility snapshots plus the projected current-state tables used by runtime readers; the user channel remains raw ingress only.
 
 For live Polymarket capture, use `run_polymarket_capture`. The legacy live `polymarket-bbo` path is deprecated and is not the supported production path.
 
@@ -291,9 +304,14 @@ The `--event-map-file` input enriches live sportsbook events with stable identit
 The checked-in sample configs now include `capture.sport_key`, `runtime.sportsbook_market`, `runtime.event_map_file`, `runtime.consensus_artifact`, and an optional `runtime.calibration_artifact` key, so the live/current-state flow can also be driven from config defaults:
 
 ```bash
-python -m scripts.ingest_live_data sportsbook-odds \
+python -m scripts.run_sportsbook_capture \
   --config-file configs/sports_nba.yaml \
-  --root runtime/data
+  --root runtime/data \
+  --max-cycles 1
+
+python -m scripts.run_current_projection \
+  --root runtime/data \
+  --max-cycles 1
 
 python -m scripts.ingest_live_data build-mappings \
   --config-file configs/sports_nba.yaml \

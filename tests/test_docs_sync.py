@@ -54,6 +54,13 @@ DOCS_WITH_CURRENT_CI_SUMMARY = (
     REPO_ROOT / "docs" / "GETTING_STARTED.md",
     REPO_ROOT / "docs" / "ARCHITECTURE.md",
 )
+DOCS_WITH_AUTHORITY_ADR = (
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "docs" / "GETTING_STARTED.md",
+    REPO_ROOT / "docs" / "ARCHITECTURE.md",
+    REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+    REPO_ROOT / "docs" / "PRODUCTION_READINESS.md",
+)
 DOCS_WITH_PHASE1_ENTRYPOINTS = (
     REPO_ROOT / "README.md",
     REPO_ROOT / "docs" / "GETTING_STARTED.md",
@@ -148,6 +155,50 @@ class DocsSyncTests(unittest.TestCase):
         self.assertIn("dedicated_sportsbook_capture_worker", text)
         self.assertIn("run_sportsbook_capture", text.replace("-", "_"))
 
+    def test_verification_artifacts_use_sanctioned_live_builder_chain(self):
+        verification_markdown = (
+            REPO_ROOT / "docs" / "VERIFICATION_SPORTS_POLYMARKET.md"
+        ).read_text()
+        verification_json = VERIFICATION_JSON_PATH.read_text().replace("-", "_")
+
+        self.assertIn("run-sportsbook-capture", verification_markdown)
+        self.assertIn("run-current-projection", verification_markdown)
+        self.assertNotIn(
+            "python -m scripts.ingest_live_data sportsbook-odds", verification_markdown
+        )
+
+        self.assertIn("run_sportsbook_capture", verification_json)
+        self.assertIn("run_current_projection", verification_json)
+
+    def test_readme_and_getting_started_no_longer_publish_retired_sportsbook_ingest(
+        self,
+    ):
+        for path in (
+            REPO_ROOT / "README.md",
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertNotIn(
+                    "python -m scripts.ingest_live_data sportsbook-odds",
+                    text,
+                )
+                self.assertIn("python -m scripts.run_sportsbook_capture", text)
+
+    def test_getting_started_preserves_user_channel_raw_ingress_boundary(self):
+        text = (REPO_ROOT / "docs" / "GETTING_STARTED.md").read_text()
+        self.assertIn("user channel remains raw ingress only", text)
+
+    def test_production_readiness_links_replay_freeze_lift_contract(self):
+        text = (REPO_ROOT / "docs" / "PRODUCTION_READINESS.md").read_text()
+        self.assertIn("docs/REPLAY_FREEZE_LIFT.md", text)
+
+    def test_replay_freeze_lift_doc_lists_verification_commands(self):
+        text = (REPO_ROOT / "docs" / "REPLAY_FREEZE_LIFT.md").read_text()
+        self.assertIn("test_strategy_and_replay.py", text)
+        self.assertIn("test_replay_attribution_cli.py", text)
+        self.assertIn("test_llm_advisory.py", text)
+
     def test_verification_json_mentions_projection_polymarket_and_attribution_surfaces(
         self,
     ):
@@ -178,6 +229,14 @@ class DocsSyncTests(unittest.TestCase):
                 text = path.read_text()
                 self.assertIn("run-current-projection", text)
                 self.assertIn("run-replay-attribution", text)
+
+    def test_docs_link_the_authority_adr(self):
+        for path in DOCS_WITH_AUTHORITY_ADR:
+            with self.subTest(path=path):
+                self.assertIn(
+                    "authority-and-reconciliation.md",
+                    path.read_text(),
+                )
 
 
 if __name__ == "__main__":

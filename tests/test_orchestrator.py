@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from typing import Any, cast
 
 from adapters.base import AdapterHealth
 from adapters.types import (
@@ -41,6 +42,7 @@ class OrchestratorAdapter:
             venue=self.venue, symbol="token-1", outcome=OutcomeSide.YES
         )
         self.placed = 0
+        self.last_intent = None
 
     def health(self):
         return AdapterHealth(self.venue, True)
@@ -91,6 +93,7 @@ class OrchestratorAdapter:
 
     def place_limit_order(self, intent):
         self.placed += 1
+        self.last_intent = intent
         return PlacementResult(
             True, order_id=f"placed-{self.placed}", status=OrderStatus.RESTING
         )
@@ -117,6 +120,26 @@ class ExistingPositionAdapter(OrchestratorAdapter):
             positions=[PositionSnapshot(contract=contract, quantity=1.0)],
             open_orders=[],
             fills=[],
+        )
+
+
+class ExistingSellPositionAdapter(ExistingPositionAdapter):
+    def list_markets(self, limit: int = 100):
+        return [
+            MarketSummary(
+                contract=self.contract,
+                title="Demo market",
+                best_bid=0.55,
+                best_ask=0.60,
+                active=True,
+            )
+        ]
+
+    def get_order_book(self, contract: Contract):
+        return OrderBookSnapshot(
+            contract=contract,
+            bids=[PriceLevel(price=0.55, quantity=10)],
+            asks=[PriceLevel(price=0.60, quantity=10)],
         )
 
 
@@ -318,6 +341,10 @@ class OrchestratorTests(unittest.TestCase):
             self.fail("expected selected candidate and execution preview")
         self.assertEqual(selected.contract.market_key, adapter.contract.market_key)
         self.assertTrue(execution.risk.approved)
+        self.assertIsNotNone(result.shadow_quote_plan)
+        if result.shadow_quote_plan is None:
+            self.fail("expected shadow quote plan")
+        self.assertEqual(result.shadow_quote_plan["action"], "place")
 
     def test_preview_top_applies_deterministic_sizing(self):
         adapter = OrchestratorAdapter()
@@ -450,6 +477,10 @@ class OrchestratorTests(unittest.TestCase):
         if execution is None:
             self.fail("expected execution result")
         self.assertTrue(execution.placements)
+        self.assertIsNotNone(result.shadow_quote_plan)
+        if result.shadow_quote_plan is None:
+            self.fail("expected shadow quote plan")
+        self.assertEqual(result.shadow_quote_plan["action"], "place")
 
     def test_run_top_logs_structured_runtime_summary_and_cycle_metrics(self):
         adapter = OrchestratorAdapter()
@@ -485,6 +516,8 @@ class OrchestratorTests(unittest.TestCase):
             payload["cycle_metrics"]["selected_market_key"],
             adapter.contract.market_key,
         )
+        self.assertIsNotNone(payload["shadow_quote_plan"])
+        self.assertEqual(payload["shadow_quote_plan"]["action"], "place")
 
     def test_run_top_reuses_precomputed_engine_preview(self):
         adapter = CountingOrchestratorAdapter()
@@ -508,9 +541,9 @@ class OrchestratorTests(unittest.TestCase):
 
         self.assertEqual(adapter.placed, 1)
         self.assertIsNotNone(result.execution)
-        self.assertEqual(adapter.global_snapshot_calls, 1)
-        self.assertEqual(adapter.order_book_calls, 1)
-        self.assertEqual(adapter.contract_snapshot_calls, 2)
+        self.assertEqual(adapter.global_snapshot_calls, 2)
+        self.assertEqual(adapter.order_book_calls, 2)
+        self.assertEqual(adapter.contract_snapshot_calls, 3)
 
     def test_policy_gate_blocks_duplicate_position_entry(self):
         adapter = ExistingPositionAdapter()
@@ -537,6 +570,42 @@ class OrchestratorTests(unittest.TestCase):
         self.assertTrue(result.policy_reasons)
         self.assertIn("existing position already open", result.policy_reasons[0])
         self.assertEqual(adapter.placed, 0)
+
+    def test_run_top_preserves_reduce_only_sell_through_execution_shell(self):
+        adapter = ExistingSellPositionAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=1, max_global_contracts=1)
+            ),
+        )
+        orchestrator = AgentOrchestrator(
+            adapter=adapter,
+            engine=engine,
+            fair_value_provider=StaticFairValueProvider(
+                {adapter.contract.market_key: 0.45}
+            ),
+            ranker=OpportunityRanker(edge_threshold=0.03),
+            sizer=DeterministicSizer(base_quantity=1, max_quantity=1),
+        )
+
+        result = orchestrator.run_top()
+
+        self.assertTrue(result.policy_allowed)
+        self.assertEqual(adapter.placed, 1)
+        self.assertIsNotNone(adapter.last_intent)
+        placed_intent = cast(Any, adapter.last_intent)
+        self.assertTrue(placed_intent.reduce_only)
+        self.assertFalse(placed_intent.post_only)
+        if result.shadow_quote_plan is None:
+            self.fail("expected shadow quote plan")
+        submit_intent = cast(
+            dict[str, Any] | None, result.shadow_quote_plan.get("submit_intent")
+        )
+        proposal = cast(dict[str, Any], result.shadow_quote_plan["proposal"])
+        self.assertIsNotNone(submit_intent)
+        self.assertEqual(proposal["side"], "sell_yes")
 
     def test_run_top_falls_back_to_next_candidate_when_top_candidate_blocked(self):
         adapter = FallbackCandidateAdapter()
@@ -576,7 +645,7 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(result.skipped_candidates[0]["stage"], "policy_gate")
         self.assertTrue(result.skipped_candidates[0]["reasons"])
         self.assertTrue(
-            any(entry["stage"] == "placement" for entry in result.gate_trace)
+            any(entry["stage"] == "execution_shell" for entry in result.gate_trace)
         )
 
     def test_policy_gate_blocks_thin_liquidity(self):

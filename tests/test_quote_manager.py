@@ -286,6 +286,27 @@ class QuoteManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "size must be finite"):
             self.manager.proposal_to_intent(self.contract, proposal)
 
+    def test_proposal_to_intent_preserves_reduce_only_and_post_only(self):
+        proposal = OrderProposal(
+            market_id=self.contract.symbol,
+            side="sell_yes",
+            action="place",
+            price=0.55,
+            size=1.0,
+            tif="GTC",
+            rationale="reduce risk",
+            post_only=True,
+            reduce_only=True,
+            expiration_ts=1_700_000_000,
+        )
+
+        intent = self.manager.proposal_to_intent(self.contract, proposal)
+
+        self.assertEqual(intent.action, OrderAction.SELL)
+        self.assertTrue(intent.post_only)
+        self.assertTrue(intent.reduce_only)
+        self.assertEqual(intent.expiration_ts, 1_700_000_000)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -29,6 +30,7 @@ from engine.runtime_policy import load_runtime_policy
 from engine.runner import TradingEngine
 from engine.strategies import FairValueBandStrategy
 from forecasting.fair_value_engine import ManifestFairValueProvider
+from forecasting.fair_value_engine import FairValueManifestEntry
 from risk.kill_switch import (
     KillSwitchState,
     build_kill_switch_state,
@@ -36,6 +38,7 @@ from risk.kill_switch import (
 )
 from risk.limits import RiskEngine, RiskLimits
 from storage.current_projection import build_preview_runtime_context
+from storage.current_selection import best_mapping_by_market
 from storage.journal import EventJournal
 
 
@@ -48,19 +51,23 @@ def _required_env_vars(venue_name: str) -> list[str]:
 
 
 def _runtime_requires_postgres_authority(args) -> bool:
-    return getattr(args, "mode", None) in {"run", "pair-run"} and getattr(
-        args, "opportunity_root", None
-    ) not in (None, "")
+    return getattr(args, "mode", None) in {"run", "pair-run"}
 
 
 def validate_runtime(args) -> None:
     if args.venue in (None, ""):
         raise RuntimeError("venue must be provided")
-    if args.fair_values_file in (None, ""):
-        raise RuntimeError("fair values file must be provided")
-    fair_values_path = Path(args.fair_values_file)
-    if not fair_values_path.exists():
-        raise RuntimeError(f"fair values file not found: {fair_values_path}")
+    if _runtime_requires_postgres_authority(args):
+        if getattr(args, "opportunity_root", None) in (None, ""):
+            raise RuntimeError(
+                "opportunity root must be provided for run and pair-run modes"
+            )
+    else:
+        if args.fair_values_file in (None, ""):
+            raise RuntimeError("fair values file must be provided")
+        fair_values_path = Path(args.fair_values_file)
+        if not fair_values_path.exists():
+            raise RuntimeError(f"fair values file not found: {fair_values_path}")
 
     policy_file = getattr(args, "policy_file", None)
     if policy_file:
@@ -156,6 +163,198 @@ def _proposal_journal(args) -> RuntimeProposalJournal | None:
     return RuntimeProposalJournal(root / "preview_order_context.json")
 
 
+def _parse_runtime_timestamp(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _required_probability(
+    value: object,
+    *,
+    market_id: str,
+    field_name: str,
+) -> float:
+    if value in (None, ""):
+        raise RuntimeError(
+            f"projected fair value row for {market_id} is missing {field_name}"
+        )
+    if not isinstance(value, (int, float, str)) or isinstance(value, bool):
+        raise RuntimeError(
+            f"projected fair value row for {market_id} has invalid {field_name}"
+        )
+    try:
+        probability = float(value)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"projected fair value row for {market_id} has invalid {field_name}"
+        ) from exc
+    if probability < 0.0 or probability > 1.0:
+        raise RuntimeError(
+            f"projected fair value row for {market_id} has out-of-range {field_name}"
+        )
+    return probability
+
+
+def _optional_probability(
+    value: object,
+    *,
+    market_id: str,
+    field_name: str,
+) -> float | None:
+    if value in (None, ""):
+        return None
+    return _required_probability(value, market_id=market_id, field_name=field_name)
+
+
+def _projected_condition_id(row: dict[str, object]) -> str | None:
+    raw_market = row.get("raw_json")
+    condition_id = row.get("condition_id")
+    if condition_id in (None, "") and isinstance(raw_market, dict):
+        condition_id = raw_market.get("conditionId") or raw_market.get("condition_id")
+    if condition_id in (None, ""):
+        return None
+    return str(condition_id)
+
+
+def _projected_token_ids(row: dict[str, object]) -> tuple[str | None, str | None]:
+    raw_market = row.get("raw_json")
+    token_id_yes = row.get("token_id_yes")
+    token_id_no = row.get("token_id_no")
+    if isinstance(raw_market, dict):
+        token_ids = raw_market.get("tokenIds")
+        if isinstance(token_ids, list):
+            if token_id_yes in (None, "") and len(token_ids) >= 1:
+                token_id_yes = token_ids[0]
+            if token_id_no in (None, "") and len(token_ids) >= 2:
+                token_id_no = token_ids[1]
+    return (
+        None if token_id_yes in (None, "") else str(token_id_yes),
+        None if token_id_no in (None, "") else str(token_id_no),
+    )
+
+
+def _build_projected_fair_value_provider(
+    args,
+    *,
+    fair_value_field,
+) -> ManifestFairValueProvider:
+    read_adapter = build_current_state_read_adapter(
+        args.opportunity_root,
+        require_postgres=True,
+    )
+    if read_adapter is None:
+        raise RuntimeError(
+            "runtime projected current-state reads require opportunity root"
+        )
+    fair_values = read_adapter.read_table("fair_values")
+    mappings = best_mapping_by_market(read_adapter.read_table("market_mappings"))
+    markets = read_adapter.read_table("polymarket_markets")
+    records: dict[str, FairValueManifestEntry] = {}
+    generated_at: datetime | None = None
+
+    for market_id, payload in fair_values.items():
+        if not isinstance(payload, dict):
+            continue
+        market_key = str(market_id)
+        market_row = markets.get(market_key)
+        if not isinstance(market_row, dict):
+            continue
+        mapping = mappings.get(market_key, {})
+        condition_id = _projected_condition_id(market_row)
+        token_id_yes, token_id_no = _projected_token_ids(market_row)
+        record_generated_at = _parse_runtime_timestamp(payload.get("as_of"))
+        if record_generated_at is not None and (
+            generated_at is None or record_generated_at > generated_at
+        ):
+            generated_at = record_generated_at
+        fair_yes_prob = _required_probability(
+            payload.get("fair_yes_prob"),
+            market_id=market_key,
+            field_name="fair_yes_prob",
+        )
+        calibrated_yes_prob = payload.get("calibrated_fair_yes_prob")
+        calibrated_yes_value = (
+            _required_probability(
+                calibrated_yes_prob,
+                market_id=market_key,
+                field_name="calibrated_fair_yes_prob",
+            )
+            if fair_value_field == "calibrated"
+            else _optional_probability(
+                calibrated_yes_prob,
+                market_id=market_key,
+                field_name="calibrated_fair_yes_prob",
+            )
+        )
+
+        def _record_for_probability(
+            probability: float, calibrated_probability: float | None
+        ):
+            return FairValueManifestEntry(
+                fair_value=probability,
+                calibrated_fair_value=calibrated_probability,
+                generated_at=record_generated_at,
+                source="projected-current-state",
+                condition_id=condition_id,
+                event_key=(
+                    str(mapping.get("event_key"))
+                    if mapping.get("event_key") not in (None, "")
+                    else None
+                ),
+                sport=(
+                    str(mapping.get("sport"))
+                    if mapping.get("sport") not in (None, "")
+                    else None
+                ),
+                series=(
+                    str(mapping.get("series"))
+                    if mapping.get("series") not in (None, "")
+                    else None
+                ),
+                game_id=(
+                    str(mapping.get("game_id"))
+                    if mapping.get("game_id") not in (None, "")
+                    else None
+                ),
+                sports_market_type=(
+                    str(mapping.get("normalized_market_type"))
+                    if mapping.get("normalized_market_type") not in (None, "")
+                    else None
+                ),
+            )
+
+        yes_entry = _record_for_probability(fair_yes_prob, calibrated_yes_value)
+        no_entry = _record_for_probability(
+            max(0.0, min(1.0, 1.0 - fair_yes_prob)),
+            None
+            if calibrated_yes_value is None
+            else max(0.0, min(1.0, 1.0 - calibrated_yes_value)),
+        )
+
+        if market_key:
+            records[f"{market_key}:yes"] = yes_entry
+            records[f"{market_key}:no"] = no_entry
+        if condition_id is not None:
+            records[f"{condition_id}:yes"] = yes_entry
+            records[f"{condition_id}:no"] = no_entry
+        if token_id_yes is not None:
+            records[f"{token_id_yes}:yes"] = yes_entry
+        if token_id_no is not None:
+            records[f"{token_id_no}:no"] = no_entry
+
+    return ManifestFairValueProvider(
+        records=records,
+        generated_at=generated_at,
+        source="projected-current-state",
+        max_age_seconds=args.max_fair_value_age_seconds,
+        fair_value_field=fair_value_field,
+    )
+
+
 def _build_preview_order_proposals(
     args,
     policy,
@@ -249,6 +448,14 @@ def main() -> int:
         fair_value_field = policy.fair_value.field if policy is not None else "raw"
 
         def loader() -> FairValueLookup:
+            if _runtime_requires_postgres_authority(args):
+                return cast(
+                    FairValueLookup,
+                    _build_projected_fair_value_provider(
+                        args,
+                        fair_value_field=fair_value_field,
+                    ),
+                )
             return cast(
                 FairValueLookup,
                 build_fair_value_provider(
@@ -640,6 +847,9 @@ def main() -> int:
                 "preview_order_proposals": preview_order_proposals,
                 "preview_order_blocked_count": len(blocked_preview_orders),
                 "preview_order_blocked": blocked_preview_orders,
+                "shadow_quote_plan": (
+                    getattr(results[-1], "shadow_quote_plan", None) if results else None
+                ),
             },
             quiet=args.quiet,
         )

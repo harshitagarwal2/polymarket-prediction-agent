@@ -2,6 +2,10 @@
 
 This repository is designed for **supervised**, fail-closed operation. Completion of the production-readiness wave means the substrate, truth path, execution shell, and operator verification surfaces are in place and reproducibly testable. It does **not** mean unattended live trading.
 
+The authority and sanctioned-entrypoint contract for this wave is defined in [`docs/adr/authority-and-reconciliation.md`](adr/authority-and-reconciliation.md).
+
+Replay, attribution, and advisory freeze-lift criteria are defined in [`docs/REPLAY_FREEZE_LIFT.md`](REPLAY_FREEZE_LIFT.md).
+
 ## Minimum release gate
 
 Before calling a branch production-ready, all of the following must be true:

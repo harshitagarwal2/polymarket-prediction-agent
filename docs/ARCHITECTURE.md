@@ -24,6 +24,8 @@ This repo currently treats Postgres plus projected current-state tables as the a
 
 That means selector-facing current JSON is not capture-worker authority. When a DSN marker exists, runtime and ingest readers treat the projected Postgres-backed read boundary as authoritative and treat `runtime/data/current/*.json` as compatibility exports.
 
+See [`docs/adr/authority-and-reconciliation.md`](adr/authority-and-reconciliation.md) for the sanctioned-entrypoint and reconciliation contract used by the current productionization wave.
+
 The legacy live `polymarket-bbo` path is deprecated and should not be treated as the supported production capture path. The supported live capture path is the dedicated `run-polymarket-capture` worker.
 
 ## Primary system flows

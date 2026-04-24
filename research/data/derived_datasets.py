@@ -415,6 +415,21 @@ def build_replay_execution_label_rows(
                 wait_steps=trade.wait_steps,
                 resting=trade.resting,
                 stale_data_flag=trade.stale_data_flag,
+                decision_fair_value=_float_or_none(
+                    trade_payload.get("decision_fair_value")
+                ),
+                decision_reference_price=_float_or_none(
+                    trade_payload.get("decision_reference_price")
+                ),
+                decision_best_bid=_float_or_none(
+                    trade_payload.get("decision_best_bid")
+                ),
+                decision_best_ask=_float_or_none(
+                    trade_payload.get("decision_best_ask")
+                ),
+                decision_midpoint=_float_or_none(
+                    trade_payload.get("decision_midpoint")
+                ),
                 expected_edge_bps=_float_or_none(
                     trade_payload.get("expected_edge_bps")
                 ),
@@ -428,6 +443,7 @@ def build_replay_execution_label_rows(
                 mapping_risk=attribution.mapping_risk
                 if attribution is not None
                 else _mapping_risk(metadata),
+                replay_step_index=_int_or_none(metadata.get("replay_step_index")),
                 metadata=metadata,
             )
         )

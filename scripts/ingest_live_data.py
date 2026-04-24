@@ -122,6 +122,18 @@ _RETIRED_LIVE_POLYMARKET_BBO_MESSAGE = (
     "run-polymarket-capture market for live Polymarket capture"
 )
 
+_RETIRED_LIVE_POLYMARKET_MARKETS_MESSAGE = (
+    "ingest-live-data polymarket-markets is retired; use "
+    "run-polymarket-capture market and run-current-projection "
+    "for the capture-owned market catalog path"
+)
+
+_RETIRED_LIVE_SPORTSBOOK_ODDS_MESSAGE = (
+    "ingest-live-data sportsbook-odds is retired; use "
+    "run-sportsbook-capture and run-current-projection "
+    "for the sanctioned sportsbook capture path"
+)
+
 
 def _command_requires_postgres_authority(command: object) -> bool:
     return str(command) in _POSTGRES_AUTHORITY_REQUIRED_COMMANDS
@@ -144,9 +156,33 @@ def _retired_polymarket_bbo_exit(args_list: list[str]) -> int:
     return 1
 
 
+def _retired_live_capture_exit(args_list: list[str], *, message: str) -> int:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--root", default="runtime/data")
+    parser.add_argument("--quiet", action="store_true")
+    parsed, _ = parser.parse_known_args(args_list[1:])
+    emit_json(
+        {
+            "ok": False,
+            "error_kind": "RuntimeError",
+            "error_message": message,
+            "root": parsed.root,
+        },
+        quiet=parsed.quiet,
+    )
+    return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Capture normalized offline research inputs."
+        description="Capture normalized offline research inputs.",
+        epilog=(
+            "Sanctioned current-state/substrate commands live under the subcommand surface, "
+            "for example: build-mappings, build-fair-values, build-opportunities, "
+            "build-inference-dataset, and build-training-dataset. "
+            "Legacy live capture subcommands such as polymarket-markets, sportsbook-odds, "
+            "and polymarket-bbo are retired in favor of the dedicated worker -> projector path."
+        ),
     )
     parser.add_argument(
         "--layer",
@@ -173,25 +209,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def build_new_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Ingest live data into raw/current/parquet stores."
+        description="Run current-state builder flows for the Postgres-backed substrate and related compatibility utilities."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    pm_markets = subparsers.add_parser("polymarket-markets")
-    pm_markets.add_argument("--sport", default=None)
-    pm_markets.add_argument("--market-type", default=None)
-    pm_markets.add_argument("--limit", type=int, default=100)
-    pm_markets.add_argument("--root", default="runtime/data")
-    add_quiet_flag(pm_markets)
-
-    sb_odds = subparsers.add_parser("sportsbook-odds")
-    sb_odds.add_argument("--sport", default=None)
-    sb_odds.add_argument("--market", default=None)
-    sb_odds.add_argument("--root", default="runtime/data")
-    sb_odds.add_argument("--config-file", default=None)
-    sb_odds.add_argument("--event-map-file", default=None)
-    sb_odds.add_argument("--api-key-env", default="THE_ODDS_API_KEY")
-    add_quiet_flag(sb_odds)
 
     mappings = subparsers.add_parser("build-mappings")
     mappings.add_argument("--market", default=None)
@@ -414,6 +434,15 @@ def _read_current_table(stores, table: str) -> dict[str, object]:
     return _current_read_adapter(stores).read_table(table)
 
 
+def _read_builder_input_table(stores, table: str) -> dict[str, object]:
+    if bool(stores.get("projected_authoritative")):
+        return _current_read_adapter(stores).read_table(table)
+    current_path = stores["current"].root / f"{table}.json"
+    if current_path.exists():
+        return stores["current"].read_table(table)
+    return {}
+
+
 def _materialize_current_compatibility_table(stores, table: str) -> dict[str, object]:
     projected_rows = _current_read_adapter(stores).read_table(table)
     stores["current"].write_table(table, projected_rows)
@@ -514,6 +543,8 @@ def _mapping_event_payload(event: dict[str, object]) -> dict[str, object]:
     return _merged_mapping_payload(
         event,
         sportsbook_event_id=event.get("sportsbook_event_id"),
+        event_key=event.get("event_key"),
+        game_id=event.get("game_id"),
         sport=event.get("sport"),
         league=event.get("league"),
         series=event.get("league"),
@@ -953,12 +984,8 @@ def _run_build_mappings(args) -> int:
     stores = _stores_for_command(args)
     config = _load_optional_config(args.config_file)
     sportsbook_market = _resolve_sportsbook_market(args.market, config)
-    if bool(stores.get("projected_authoritative")):
-        markets = _sorted_rows(_read_current_table(stores, "polymarket_markets"))
-        events = _read_current_table(stores, "sportsbook_events")
-    else:
-        markets = _sorted_rows(stores["markets"].read_all())
-        events = stores["sb_events"].read_all()
+    markets = _sorted_rows(_read_builder_input_table(stores, "polymarket_markets"))
+    events = _read_builder_input_table(stores, "sportsbook_events")
     mappings: list[dict] = []
     mapping_manifest_values: dict[str, dict[str, object]] = {}
     for market in markets:
@@ -1091,14 +1118,7 @@ def _run_build_fair_values(args) -> int:
         engine = _build_fair_value_engine(args)
         calibrator = _build_fair_value_calibrator(args)
         persisted_history = stores["fair_values"].read_all()
-        current_odds_rows = _read_current_table(stores, "sportsbook_odds")
-        odds_rows = (
-            _sorted_rows(current_odds_rows)
-            if bool(stores.get("projected_authoritative"))
-            else _sorted_rows(current_odds_rows)
-            if current_odds_rows
-            else _sorted_rows(stores["sb_odds"].read_all())
-        )
+        odds_rows = _sorted_rows(_read_builder_input_table(stores, "sportsbook_odds"))
         odds_by_event_market: dict[tuple[str, str], list[dict]] = {}
         for row in odds_rows:
             event_id = str(row.get("sportsbook_event_id") or "")
@@ -1108,7 +1128,7 @@ def _run_build_fair_values(args) -> int:
         snapshots: list[dict] = []
         pending_history_updates: dict[str, dict] = {}
         active_mapping_count = 0
-        current_mappings = _read_current_table(stores, "market_mappings")
+        current_mappings = _read_builder_input_table(stores, "market_mappings")
         for row in best_mapping_rows(current_mappings):
             if not bool(row.get("is_active", True)):
                 continue
@@ -1291,22 +1311,15 @@ def _run_build_inference_dataset(args) -> int:
     metrics = _metrics_collector(args.root)
     stores = _stores_for_command(args)
     try:
-        current_odds = _read_current_table(stores, "sportsbook_odds")
-        odds_table = (
-            current_odds
-            if bool(stores.get("projected_authoritative"))
-            else current_odds
-            if current_odds
-            else stores["sb_odds"].read_all()
-        )
+        odds_table = _read_builder_input_table(stores, "sportsbook_odds")
         rows = build_joined_inference_rows(
-            mappings=_read_current_table(stores, "market_mappings"),
-            sportsbook_events=_read_current_table(stores, "sportsbook_events"),
+            mappings=_read_builder_input_table(stores, "market_mappings"),
+            sportsbook_events=_read_builder_input_table(stores, "sportsbook_events"),
             sportsbook_odds=odds_table,
-            fair_values=_read_current_table(stores, "fair_values"),
-            bbo_rows=_read_current_table(stores, "polymarket_bbo"),
-            polymarket_markets=_read_current_table(stores, "polymarket_markets"),
-            source_health=_read_current_table(stores, "source_health"),
+            fair_values=_read_builder_input_table(stores, "fair_values"),
+            bbo_rows=_read_builder_input_table(stores, "polymarket_bbo"),
+            polymarket_markets=_read_builder_input_table(stores, "polymarket_markets"),
+            source_health=_read_builder_input_table(stores, "source_health"),
             generated_at=_utc_now(),
             max_source_age_ms=args.max_source_age_ms,
             min_bookmaker_count=args.min_bookmaker_count,
@@ -1478,14 +1491,16 @@ def _run_build_opportunities(args) -> int:
     stores = _stores_for_command(args)
     fair_values = {
         str(market_id): row
-        for market_id, row in _read_current_table(stores, "fair_values").items()
+        for market_id, row in _read_builder_input_table(stores, "fair_values").items()
         if isinstance(row, dict)
     }
-    bbo_rows = _read_current_table(stores, "polymarket_bbo")
-    mapping_rows = best_mapping_rows(_read_current_table(stores, "market_mappings"))
-    source_health = _read_current_table(stores, "source_health")
-    sportsbook_events = _read_current_table(stores, "sportsbook_events")
-    polymarket_markets = _read_current_table(stores, "polymarket_markets")
+    bbo_rows = _read_builder_input_table(stores, "polymarket_bbo")
+    mapping_rows = best_mapping_rows(
+        _read_builder_input_table(stores, "market_mappings")
+    )
+    source_health = _read_builder_input_table(stores, "source_health")
+    sportsbook_events = _read_builder_input_table(stores, "sportsbook_events")
+    polymarket_markets = _read_builder_input_table(stores, "polymarket_markets")
     required_sources = _required_sources(source_health)
     freeze_policy = _build_opportunity_freeze_policy(args.policy_file)
     opportunities: list[OpportunityRecord] = []
@@ -1708,9 +1723,17 @@ def main(argv: list[str] | None = None) -> int:
     args_list = list(sys.argv[1:] if argv is None else argv)
     if args_list and args_list[0] == "polymarket-bbo":
         return _retired_polymarket_bbo_exit(args_list)
+    if args_list and args_list[0] == "polymarket-markets":
+        return _retired_live_capture_exit(
+            args_list,
+            message=_RETIRED_LIVE_POLYMARKET_MARKETS_MESSAGE,
+        )
+    if args_list and args_list[0] == "sportsbook-odds":
+        return _retired_live_capture_exit(
+            args_list,
+            message=_RETIRED_LIVE_SPORTSBOOK_ODDS_MESSAGE,
+        )
     commands = {
-        "polymarket-markets",
-        "sportsbook-odds",
         "build-mappings",
         "build-fair-values",
         "build-inference-dataset",

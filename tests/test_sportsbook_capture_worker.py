@@ -668,39 +668,11 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
         self.assertNotIn("apiKey=secret", json.dumps(results[0], sort_keys=True))
         self.assertNotIn("apiKey=secret", json.dumps(health, sort_keys=True))
 
-    def test_ingest_sportsbook_odds_uses_capture_service_contract(self):
-        source_time = "2026-04-21T18:04:30+00:00"
-
+    def test_ingest_sportsbook_odds_command_is_retired(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
-            stores = SportsbookCaptureStores.from_root(root)
-            event_map = Path(temp_dir) / "event_map.json"
-            self._write_json(
-                event_map,
-                {
-                    "sb-1": {
-                        "event_key": "event-1",
-                        "game_id": "game-1",
-                        "sport": "nba",
-                        "series": "playoffs",
-                    }
-                },
-            )
-            with (
-                patch.object(
-                    ingest_live_data.TheOddsApiClient,
-                    "fetch_upcoming",
-                    return_value=[self._sample_event(last_update=source_time)],
-                ),
-                patch.object(
-                    ingest_live_data, "require_postgres_dsn", return_value=None
-                ),
-                patch(
-                    "scripts.ingest_live_data.SportsbookCaptureStores.from_root",
-                    return_value=stores,
-                ),
-                patch.dict("os.environ", {"THE_ODDS_API_KEY": "test-key"}, clear=False),
-            ):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
                 result = ingest_live_data.main(
                     [
                         "sportsbook-odds",
@@ -710,25 +682,17 @@ class SportsbookCaptureWorkerTests(unittest.TestCase):
                         "h2h",
                         "--root",
                         str(root),
-                        "--event-map-file",
-                        str(event_map),
-                        "--quiet",
                     ]
                 )
+            payload = json.loads(stdout.getvalue())
 
-            current_odds = json.loads(
-                (root / "current" / "sportsbook_odds.json").read_text(encoding="utf-8")
-            )
-            postgres_health = json.loads(
-                (root / "postgres" / "source_health.json").read_text(encoding="utf-8")
-            )
-
-        self.assertEqual(result, 0)
-        record = current_odds["sb-1|book-a|h2h|Home Team"]
-        self.assertEqual(record["provider"], "theoddsapi")
-        self.assertEqual(record["source_ts"], source_time)
-        self.assertIn("capture_ts", record)
-        self.assertEqual(postgres_health["sportsbook_odds"]["status"], "ok")
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["error_kind"], "RuntimeError")
+        self.assertEqual(
+            payload["error_message"],
+            "ingest-live-data sportsbook-odds is retired; use run-sportsbook-capture and run-current-projection for the sanctioned sportsbook capture path",
+        )
+        self.assertEqual(payload["root"], str(root))
 
     def test_run_sportsbook_capture_main_executes_worker_cycle(self):
         with tempfile.TemporaryDirectory() as temp_dir:
