@@ -15,6 +15,14 @@ class RuntimeBootstrapTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
             with (
+                patch.dict(
+                    "os.environ",
+                    {
+                        "PREDICTION_MARKET_POSTGRES_DSN": "",
+                        "POSTGRES_DSN": "",
+                        "DATABASE_URL": "",
+                    },
+                ),
                 patch.object(
                     runtime_bootstrap.FileCurrentStateReadAdapter,
                     "from_opportunity_root",

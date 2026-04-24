@@ -217,6 +217,18 @@ class _HookedProviderSource:
 
 
 class SportsbookCaptureWorkerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._postgres_env_patch = patch.dict(
+            "os.environ",
+            {
+                "PREDICTION_MARKET_POSTGRES_DSN": "",
+                "POSTGRES_DSN": "",
+                "DATABASE_URL": "",
+            },
+        )
+        self._postgres_env_patch.start()
+        self.addCleanup(self._postgres_env_patch.stop)
+
     def _write_json(self, path: Path, payload: object) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
