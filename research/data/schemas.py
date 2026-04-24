@@ -295,6 +295,9 @@ class ReplayExecutionLabelRow:
     visible_quantity: float | None = None
     levels_consumed: int | None = None
     price_move_bps: float | None = None
+    cancel_requested_step: int | None = None
+    cancel_effective_step: int | None = None
+    cancel_race_fill: bool = False
     mapping_risk: float | None = None
     replay_step_index: int | None = None
     metadata: dict[str, object] = field(default_factory=dict)
@@ -326,6 +329,9 @@ class ReplayExecutionLabelRow:
             "visible_quantity": self.visible_quantity,
             "levels_consumed": self.levels_consumed,
             "price_move_bps": self.price_move_bps,
+            "cancel_requested_step": self.cancel_requested_step,
+            "cancel_effective_step": self.cancel_effective_step,
+            "cancel_race_fill": self.cancel_race_fill,
             "mapping_risk": self.mapping_risk,
             "replay_step_index": self.replay_step_index,
             "metadata": self.metadata,

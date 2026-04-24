@@ -440,6 +440,13 @@ def build_replay_execution_label_rows(
                 visible_quantity=trade.visible_quantity,
                 levels_consumed=trade.levels_consumed,
                 price_move_bps=trade.price_move_bps,
+                cancel_requested_step=_int_or_none(
+                    trade_payload.get("cancel_requested_step")
+                ),
+                cancel_effective_step=_int_or_none(
+                    trade_payload.get("cancel_effective_step")
+                ),
+                cancel_race_fill=bool(trade_payload.get("cancel_race_fill", False)),
                 mapping_risk=attribution.mapping_risk
                 if attribution is not None
                 else _mapping_risk(metadata),

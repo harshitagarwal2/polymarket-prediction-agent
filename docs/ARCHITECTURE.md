@@ -121,7 +121,7 @@ The dedicated worker path is the supported live capture boundary. It is intentio
 
 This layer owns replaying raw capture events into current-state compatibility tables.
 
-- `services/projection/current_state.py` projects sportsbook, Polymarket market-catalog, Polymarket BBO, and `source_health` lanes
+- `services/projection/current_state.py` projects sportsbook, Polymarket market-catalog, Polymarket BBO, projected account truth (orders/fills/positions/balance), and `source_health` lanes
 - `services/projection/worker.py` runs the projection loop and advances projection checkpoints
 
 This is the layer that keeps `runtime/data/current/*.json` synchronized with authoritative projected reads.

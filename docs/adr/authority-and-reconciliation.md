@@ -26,11 +26,11 @@ For supervised, staging, and live operation, this repository treats **Postgres-b
 
 ## Polymarket user-channel decision
 
-For this productionization wave, the Polymarket user channel is owned by the dedicated `run-polymarket-capture user` worker as raw/user-truth ingress only.
+For this productionization wave, the Polymarket user channel is owned by the dedicated `run-polymarket-capture user` worker as the authoritative account-truth ingress.
 
 - It remains part of the authoritative capture substrate.
-- It is **not** elevated to a selector-facing projected compatibility export in this wave.
-- Runtime and operator reconciliation may consume its downstream effects through authoritative truth and persisted safety state, but the user-channel itself does not become a new compatibility-current table during PR-00/01.
+- It is projected into current orders, fills, positions, and balance tables for serious-mode runtime truth.
+- Runtime and operator reconciliation may consume that projected account truth, but the raw user channel itself remains the sole authoritative ingress.
 
 ## Sanctioned production entrypoints
 

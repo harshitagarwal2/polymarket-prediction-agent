@@ -7,8 +7,12 @@ from .current_state import FileBackedCurrentStateStore
 from .current_state_projectors import (  # pyright: ignore[reportMissingImports]
     CAPTURE_OWNED_SOURCE_HEALTH_NAMES,
     merge_source_health_state,
+    project_polymarket_balance_state,
     project_polymarket_bbo_state,
+    project_polymarket_fill_state,
     project_polymarket_market_state,
+    project_polymarket_order_state,
+    project_polymarket_position_state,
     project_source_health_state,
     project_sportsbook_event_state,
     project_sportsbook_quote_state,
@@ -79,6 +83,50 @@ def materialize_polymarket_bbo_state(
     )
 
 
+def materialize_polymarket_order_state(
+    store: FileBackedCurrentStateStore,
+    rows: Iterable[Any],
+) -> dict[str, dict[str, Any]]:
+    return _materialize_table(
+        store,
+        table="polymarket_orders",
+        projected=project_polymarket_order_state(rows),
+    )
+
+
+def materialize_polymarket_fill_state(
+    store: FileBackedCurrentStateStore,
+    rows: Iterable[Any],
+) -> dict[str, dict[str, Any]]:
+    return _materialize_table(
+        store,
+        table="polymarket_fills",
+        projected=project_polymarket_fill_state(rows),
+    )
+
+
+def materialize_polymarket_position_state(
+    store: FileBackedCurrentStateStore,
+    rows: Iterable[Any],
+) -> dict[str, dict[str, Any]]:
+    return _materialize_table(
+        store,
+        table="polymarket_positions",
+        projected=project_polymarket_position_state(rows),
+    )
+
+
+def materialize_polymarket_balance_state(
+    store: FileBackedCurrentStateStore,
+    rows: Iterable[Any],
+) -> dict[str, dict[str, Any]]:
+    return _materialize_table(
+        store,
+        table="polymarket_balance",
+        projected=project_polymarket_balance_state(rows),
+    )
+
+
 def materialize_sportsbook_event_state(
     store: FileBackedCurrentStateStore,
     rows: Iterable[Any],
@@ -139,8 +187,12 @@ def materialize_capture_owned_source_health_state(
 
 __all__ = [
     "materialize_capture_owned_source_health_state",
+    "materialize_polymarket_balance_state",
     "materialize_polymarket_bbo_state",
+    "materialize_polymarket_fill_state",
     "materialize_polymarket_market_state",
+    "materialize_polymarket_order_state",
+    "materialize_polymarket_position_state",
     "materialize_source_health_state",
     "materialize_sportsbook_event_state",
     "materialize_sportsbook_quote_state",

@@ -18,6 +18,15 @@ from adapters.types import (
 _PUBLIC_TRADE_METADATA_KEYS = frozenset({"mapping_risk", "replay_step_index"})
 
 
+def _cancel_effective_after_steps(
+    current_step: int,
+    *,
+    cancel_requested_step: int,
+    cancel_latency_steps: int,
+) -> bool:
+    return current_step >= cancel_requested_step + max(0, cancel_latency_steps)
+
+
 @dataclass
 class PaperTrade:
     order_id: str
@@ -43,6 +52,9 @@ class PaperTrade:
     levels_consumed: int = 0
     stale_data_flag: bool = False
     price_move_bps: float = 0.0
+    cancel_requested_step: int | None = None
+    cancel_effective_step: int | None = None
+    cancel_race_fill: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -91,6 +103,8 @@ class PaperTrade:
             "decision_reference_price": self.decision_reference_price,
             "decision_fair_value": self.decision_fair_value,
             "visible_quantity": self.visible_quantity,
+            "cancel_requested_step": self.cancel_requested_step,
+            "cancel_effective_step": self.cancel_effective_step,
         }
         for key, value in optional_fields.items():
             if value is not None:
@@ -108,6 +122,8 @@ class PaperTrade:
                 )
         if self.metadata:
             payload["metadata"] = dict(self.metadata)
+        if self.cancel_race_fill:
+            payload["cancel_race_fill"] = True
         return payload
 
 
@@ -117,6 +133,7 @@ class PaperExecutionConfig:
     slippage_bps: float = 0.0
     resting_max_fill_ratio_per_step: float | None = None
     resting_fill_delay_steps: int = 0
+    cancel_latency_steps: int = 0
     stale_after_steps: int = 0
     price_move_bps_per_step: float = 0.0
 
@@ -127,6 +144,7 @@ class PaperBroker:
     positions: dict[str, float] = field(default_factory=dict)
     trades: list[PaperTrade] = field(default_factory=list)
     open_orders: dict[str, NormalizedOrder] = field(default_factory=dict)
+    pending_cancels: dict[str, int] = field(default_factory=dict)
     config: PaperExecutionConfig = field(default_factory=PaperExecutionConfig)
     contracts: dict[str, Contract] = field(default_factory=dict)
     current_step: int = 0
@@ -221,6 +239,16 @@ class PaperBroker:
         self._remember_contract(contract)
         raw = order.raw if isinstance(order.raw, dict) else {}
         submitted_step = raw.get("_submitted_step")
+        cancel_requested_step = (
+            raw.get("_cancel_requested_step")
+            if isinstance(raw.get("_cancel_requested_step"), int)
+            else None
+        )
+        cancel_effective_step = (
+            raw.get("_cancel_effective_step")
+            if isinstance(raw.get("_cancel_effective_step"), int)
+            else None
+        )
         wait_steps = 0
         if isinstance(submitted_step, int):
             wait_steps = max(0, self.current_step - submitted_step)
@@ -256,6 +284,16 @@ class PaperBroker:
             if isinstance(submitted_step, int)
             else False,
             price_move_bps=price_move_bps,
+            cancel_requested_step=cancel_requested_step,
+            cancel_effective_step=cancel_effective_step,
+            cancel_race_fill=(
+                quantity > 0
+                and cancel_requested_step is not None
+                and (
+                    cancel_effective_step is None
+                    or self.current_step < cancel_effective_step
+                )
+            ),
             metadata={
                 key: value
                 for key, value in raw.items()
@@ -320,6 +358,16 @@ class PaperBroker:
     def _resting_order_ready(self, order: NormalizedOrder) -> bool:
         raw = order.raw if isinstance(order.raw, dict) else {}
         submitted_step = raw.get("_submitted_step")
+        cancel_requested_step = (
+            raw.get("_cancel_requested_step")
+            if isinstance(raw.get("_cancel_requested_step"), int)
+            else None
+        )
+        cancel_effective_step = (
+            raw.get("_cancel_effective_step")
+            if isinstance(raw.get("_cancel_effective_step"), int)
+            else None
+        )
         if not isinstance(submitted_step, int):
             return True
         return (
@@ -441,6 +489,7 @@ class PaperBroker:
         if order.remaining_quantity <= 0:
             order.status = OrderStatus.FILLED
             self.open_orders.pop(order.order_id, None)
+            self.pending_cancels.pop(order.order_id, None)
         elif spent > 0:
             order.status = OrderStatus.PARTIALLY_FILLED
             self.open_orders[order.order_id] = order
@@ -462,6 +511,33 @@ class PaperBroker:
                 )
             )
         return results
+
+    def request_cancel(self, order_id: str) -> bool:
+        order = self.open_orders.get(order_id)
+        if order is None:
+            return False
+        self.pending_cancels[order_id] = self.current_step
+        raw = order.raw if isinstance(order.raw, dict) else {}
+        raw["_cancel_requested_step"] = self.current_step
+        raw["_cancel_effective_step"] = self.current_step + max(
+            0, self.config.cancel_latency_steps
+        )
+        order.raw = raw
+        self.open_orders[order_id] = order
+        return True
+
+    def _apply_effective_cancels(self) -> None:
+        to_remove: list[str] = []
+        for order_id, requested_step in self.pending_cancels.items():
+            if _cancel_effective_after_steps(
+                self.current_step,
+                cancel_requested_step=requested_step,
+                cancel_latency_steps=self.config.cancel_latency_steps,
+            ):
+                to_remove.append(order_id)
+        for order_id in to_remove:
+            self.open_orders.pop(order_id, None)
+            self.pending_cancels.pop(order_id, None)
 
     def submit_intents(
         self, book: OrderBookSnapshot, intents: list[OrderIntent]
@@ -496,6 +572,7 @@ class PaperBroker:
 
     def advance(self, book: OrderBookSnapshot) -> list[PaperTrade]:
         self.current_step += 1
+        self._apply_effective_cancels()
         results: list[PaperTrade] = []
         current_orders = list(self.open_orders.values())
         for order in current_orders:

@@ -27,6 +27,13 @@ class _MemoryKeyedRepo:
     def read_current(self) -> dict[str, object]:
         return self.read_all()
 
+    def replace_all(self, rows: dict[str, object]) -> None:
+        replaced: dict[str, dict[str, object]] = {}
+        for key, value in rows.items():
+            if isinstance(value, dict):
+                replaced[str(key)] = dict(value)
+        self.rows = replaced
+
 
 class _MemoryAppendRepo:
     def __init__(self) -> None:
@@ -401,6 +408,321 @@ class CurrentProjectionWorkerTests(unittest.TestCase):
         self.assertEqual(source_health["fair_values"]["details"]["row_count"], 1)
         self.assertIn("sportsbook_odds", source_health)
         self.assertIn("projection_sportsbook_odds", source_health)
+
+    def test_project_current_state_once_projects_user_account_snapshot_lane(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stores = CurrentProjectionStores(
+                root=root,
+                current=FileBackedCurrentStateStore(root / "current"),
+                current_health=SourceHealthStore(
+                    root / "current" / "source_health.json"
+                ),
+                markets=_MemoryKeyedRepo(),
+                bbo=_MemoryKeyedRepo(),
+                sportsbook_events=_MemoryKeyedRepo(),
+                sportsbook_odds=_MemoryAppendRepo(),
+                source_health=_MemoryKeyedRepo(),
+                polymarket_orders=_MemoryKeyedRepo(),
+                polymarket_fills=_MemoryKeyedRepo(),
+                polymarket_positions=_MemoryKeyedRepo(),
+                polymarket_balance=_MemoryKeyedRepo(),
+            )
+
+            with (
+                patch(
+                    "services.projection.current_state.CurrentProjectionStores.from_root",
+                    return_value=stores,
+                ),
+                patch(
+                    "services.projection.current_state.list_raw_capture_events",
+                    return_value=[
+                        {
+                            "capture_id": 1,
+                            "source": "polymarket",
+                            "layer": "user_channel",
+                            "entity_type": "user_account_snapshot",
+                            "entity_key": "account",
+                            "operation": "snapshot",
+                            "captured_at": "2026-04-21T18:00:02+00:00",
+                            "payload": {
+                                "venue": "polymarket",
+                                "balance": {
+                                    "venue": "polymarket",
+                                    "available": 100.0,
+                                    "total": 100.0,
+                                    "currency": "USDC",
+                                },
+                                "positions": [
+                                    {
+                                        "contract": {
+                                            "venue": "polymarket",
+                                            "symbol": "asset-1",
+                                            "outcome": "yes",
+                                            "title": None,
+                                        },
+                                        "quantity": 1.0,
+                                        "average_price": 0.44,
+                                        "mark_price": 0.46,
+                                    }
+                                ],
+                                "open_orders": [
+                                    {
+                                        "order_id": "order-1",
+                                        "contract": {
+                                            "venue": "polymarket",
+                                            "symbol": "asset-1",
+                                            "outcome": "yes",
+                                            "title": None,
+                                        },
+                                        "action": "buy",
+                                        "price": 0.45,
+                                        "quantity": 2.0,
+                                        "remaining_quantity": 2.0,
+                                        "status": "resting",
+                                        "created_at": "2026-04-21T18:00:01+00:00",
+                                        "updated_at": "2026-04-21T18:00:02+00:00",
+                                        "post_only": False,
+                                        "reduce_only": False,
+                                        "expiration_ts": None,
+                                        "client_order_id": None,
+                                    }
+                                ],
+                                "fills": [
+                                    {
+                                        "order_id": "order-1",
+                                        "contract": {
+                                            "venue": "polymarket",
+                                            "symbol": "asset-1",
+                                            "outcome": "yes",
+                                            "title": None,
+                                        },
+                                        "action": "buy",
+                                        "price": 0.45,
+                                        "quantity": 0.5,
+                                        "fee": 0.0,
+                                        "fill_id": "fill-1",
+                                    }
+                                ],
+                                "complete": True,
+                                "issues": [],
+                                "observed_at": "2026-04-21T18:00:02+00:00",
+                            },
+                            "metadata": {},
+                        }
+                    ],
+                ),
+                patch(
+                    "services.projection.current_state.read_capture_checkpoint",
+                    return_value=None,
+                ),
+                patch(
+                    "services.projection.current_state.upsert_capture_checkpoint",
+                    side_effect=lambda *args, **kwargs: {
+                        "checkpoint_name": args[0],
+                        "source_name": args[1],
+                        "checkpoint_value": args[2],
+                    },
+                ),
+            ):
+                result = project_current_state_once(root)
+
+            current_orders = json.loads(
+                (root / "current" / "polymarket_orders.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            current_fills = json.loads(
+                (root / "current" / "polymarket_fills.json").read_text(encoding="utf-8")
+            )
+            current_positions = json.loads(
+                (root / "current" / "polymarket_positions.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            current_balance = json.loads(
+                (root / "current" / "polymarket_balance.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            source_health = json.loads(
+                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["lanes"]["polymarket_account"]["row_count"], 4)
+        self.assertIn("order-1", current_orders)
+        self.assertIn("fill-1", current_fills)
+        self.assertIn("asset-1:yes", current_positions)
+        self.assertIn("polymarket:USDC", current_balance)
+        self.assertEqual(
+            source_health["projection_polymarket_user_channel"]["status"], "ok"
+        )
+
+    def test_project_current_state_once_rejects_user_channel_batch_without_snapshot(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stores = CurrentProjectionStores(
+                root=root,
+                current=FileBackedCurrentStateStore(root / "current"),
+                current_health=SourceHealthStore(
+                    root / "current" / "source_health.json"
+                ),
+                markets=_MemoryKeyedRepo(),
+                bbo=_MemoryKeyedRepo(),
+                sportsbook_events=_MemoryKeyedRepo(),
+                sportsbook_odds=_MemoryAppendRepo(),
+                source_health=_MemoryKeyedRepo(),
+                polymarket_orders=_MemoryKeyedRepo(),
+                polymarket_fills=_MemoryKeyedRepo(),
+                polymarket_positions=_MemoryKeyedRepo(),
+                polymarket_balance=_MemoryKeyedRepo(),
+            )
+
+            with (
+                patch(
+                    "services.projection.current_state.CurrentProjectionStores.from_root",
+                    return_value=stores,
+                ),
+                patch(
+                    "services.projection.current_state.list_raw_capture_events",
+                    return_value=[
+                        {
+                            "capture_id": 2,
+                            "source": "polymarket",
+                            "layer": "user_channel",
+                            "entity_type": "user_order",
+                            "entity_key": "order-1",
+                            "operation": "append",
+                            "captured_at": "2026-04-21T18:00:03+00:00",
+                            "payload": {"id": "order-1"},
+                            "metadata": {},
+                        }
+                    ],
+                ),
+                patch(
+                    "services.projection.current_state.read_capture_checkpoint",
+                    return_value=None,
+                ),
+                patch(
+                    "services.projection.current_state.upsert_capture_checkpoint",
+                    side_effect=lambda *args, **kwargs: {
+                        "checkpoint_name": args[0],
+                        "source_name": args[1],
+                        "checkpoint_value": args[2],
+                    },
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "received source events without a matching entity",
+                ):
+                    project_current_state_once(root)
+
+            source_health = json.loads(
+                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(
+            source_health["projection_polymarket_user_channel"]["status"], "red"
+        )
+
+    def test_project_current_state_once_rejects_newer_non_snapshot_after_account_snapshot(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            stores = CurrentProjectionStores(
+                root=root,
+                current=FileBackedCurrentStateStore(root / "current"),
+                current_health=SourceHealthStore(
+                    root / "current" / "source_health.json"
+                ),
+                markets=_MemoryKeyedRepo(),
+                bbo=_MemoryKeyedRepo(),
+                sportsbook_events=_MemoryKeyedRepo(),
+                sportsbook_odds=_MemoryAppendRepo(),
+                source_health=_MemoryKeyedRepo(),
+                polymarket_orders=_MemoryKeyedRepo(),
+                polymarket_fills=_MemoryKeyedRepo(),
+                polymarket_positions=_MemoryKeyedRepo(),
+                polymarket_balance=_MemoryKeyedRepo(),
+            )
+
+            snapshot_event = {
+                "capture_id": 8,
+                "source": "polymarket",
+                "layer": "user_channel",
+                "entity_type": "user_account_snapshot",
+                "entity_key": "account",
+                "operation": "snapshot",
+                "captured_at": "2026-04-21T18:00:02+00:00",
+                "payload": {
+                    "venue": "polymarket",
+                    "balance": {
+                        "venue": "polymarket",
+                        "available": 100.0,
+                        "total": 100.0,
+                        "currency": "USDC",
+                    },
+                    "positions": [],
+                    "open_orders": [],
+                    "fills": [],
+                    "complete": True,
+                    "issues": [],
+                    "observed_at": "2026-04-21T18:00:02+00:00",
+                },
+                "metadata": {},
+            }
+            trailing_event = {
+                "capture_id": 9,
+                "source": "polymarket",
+                "layer": "user_channel",
+                "entity_type": "user_fill",
+                "entity_key": "fill-1",
+                "operation": "append",
+                "captured_at": "2026-04-21T18:00:03+00:00",
+                "payload": {"fill_id": "fill-1"},
+                "metadata": {},
+            }
+
+            with (
+                patch(
+                    "services.projection.current_state.CurrentProjectionStores.from_root",
+                    return_value=stores,
+                ),
+                patch(
+                    "services.projection.current_state.list_raw_capture_events",
+                    return_value=[snapshot_event, trailing_event],
+                ),
+                patch(
+                    "services.projection.current_state.read_capture_checkpoint",
+                    return_value=None,
+                ),
+                patch(
+                    "services.projection.current_state.upsert_capture_checkpoint",
+                    side_effect=lambda *args, **kwargs: {
+                        "checkpoint_name": args[0],
+                        "source_name": args[1],
+                        "checkpoint_value": args[2],
+                    },
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "received newer non-matching events after the latest snapshot",
+                ):
+                    project_current_state_once(root)
+
+            source_health = json.loads(
+                (root / "current" / "source_health.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(
+            source_health["projection_polymarket_user_channel"]["status"], "red"
+        )
 
     def test_project_current_state_ignores_repository_audit_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:

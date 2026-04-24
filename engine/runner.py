@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from adapters.base import TradingAdapter
 from adapters.types import (
@@ -85,6 +85,8 @@ class TradingEngine:
         forced_refresh_debounce_seconds: float = 0.0,
         pending_submission_recovery_seconds: float = 5.0,
         pending_submission_expiry_seconds: float = 30.0,
+        account_snapshot_provider: Callable[[Contract | None], AccountSnapshot]
+        | None = None,
     ):
         self.adapter = adapter
         self.strategy = strategy
@@ -119,6 +121,7 @@ class TradingEngine:
             self.pending_submission_recovery_seconds,
             pending_submission_expiry_seconds,
         )
+        self.account_snapshot_provider = account_snapshot_provider
         self.order_state.restore_pending_cancels(
             self.pending_cancel_order_ids(unresolved_only=True)
         )
@@ -1521,7 +1524,11 @@ class TradingEngine:
         )
 
     def restore_from_venue(self, contract: Contract) -> None:
-        snapshot = self.adapter.get_account_snapshot(contract)
+        snapshot = (
+            self.account_snapshot_provider(contract)
+            if self.account_snapshot_provider is not None
+            else self.adapter.get_account_snapshot(contract)
+        )
         self.observe_polled_snapshot(snapshot, contract=contract, allow_retry=True)
 
     def build_context(
@@ -1532,7 +1539,11 @@ class TradingEngine:
     ) -> StrategyContext:
         self._sync_operator_control_state()
         self.sync_heartbeat_state()
-        snapshot = self.adapter.get_account_snapshot(None)
+        snapshot = (
+            self.account_snapshot_provider(None)
+            if self.account_snapshot_provider is not None
+            else self.adapter.get_account_snapshot(None)
+        )
         self.observe_polled_snapshot(snapshot, allow_retry=True, apply_live_delta=True)
         book = self.adapter.get_order_book(contract)
         pending_submission_orders = self.pending_submission_reservations(contract)

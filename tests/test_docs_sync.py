@@ -185,9 +185,14 @@ class DocsSyncTests(unittest.TestCase):
                 )
                 self.assertIn("python -m scripts.run_sportsbook_capture", text)
 
-    def test_getting_started_preserves_user_channel_raw_ingress_boundary(self):
+    def test_getting_started_projects_user_channel_account_truth(self):
         text = (REPO_ROOT / "docs" / "GETTING_STARTED.md").read_text()
-        self.assertIn("user channel remains raw ingress only", text)
+        self.assertIn("account-truth lanes", text)
+
+    def test_production_readiness_mentions_projected_account_truth(self):
+        text = (REPO_ROOT / "docs" / "PRODUCTION_READINESS.md").read_text()
+        self.assertIn("projection_polymarket_user_channel", text)
+        self.assertIn("polymarket_orders.json", text)
 
     def test_production_readiness_links_replay_freeze_lift_contract(self):
         text = (REPO_ROOT / "docs" / "PRODUCTION_READINESS.md").read_text()

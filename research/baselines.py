@@ -329,6 +329,7 @@ def evaluate_replay_baselines(
                     case.broker.resting_max_fill_ratio_per_step
                 ),
                 resting_fill_delay_steps=case.broker.resting_fill_delay_steps,
+                cancel_latency_steps=case.broker.cancel_latency_steps,
             ),
         ),
     )

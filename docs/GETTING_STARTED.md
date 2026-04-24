@@ -295,7 +295,7 @@ python -m scripts.run_current_projection \
   --max-cycles 1
 ```
 
-`run_polymarket_capture` appends Polymarket market/user channel events into the Postgres-backed capture substrate and keeps `source_health` current for the dedicated capture lanes. In this wave, `run_current_projection` only projects the capture-owned market catalog and market-channel lanes back into `runtime/data/current/*.json` compatibility snapshots plus the projected current-state tables used by runtime readers; the user channel remains raw ingress only.
+`run_polymarket_capture` appends Polymarket market/user channel events into the Postgres-backed capture substrate and keeps `source_health` current for the dedicated capture lanes. In this wave, `run_current_projection` now projects the capture-owned market catalog, market-channel, and account-truth lanes back into `runtime/data/current/*.json` compatibility snapshots plus the projected current-state tables used by runtime readers.
 
 For live Polymarket capture, use `run_polymarket_capture`. The legacy live `polymarket-bbo` path is deprecated and is not the supported production path.
 

@@ -81,6 +81,25 @@ def _captured_at(value: object) -> datetime:
     return _parse_timestamp(value) or datetime.now(timezone.utc)
 
 
+def _payload_contract_key(payload: dict[str, Any]) -> str:
+    contract = payload.get("contract")
+    if isinstance(contract, dict):
+        symbol = str(contract.get("symbol") or "")
+        outcome = str(contract.get("outcome") or "")
+        if symbol and outcome and outcome != "unknown":
+            return f"{symbol}:{outcome}"
+        if symbol:
+            return symbol
+    value = payload.get("contract_key")
+    return str(value or "")
+
+
+def _balance_key(payload: dict[str, Any]) -> str:
+    venue = str(payload.get("venue") or "")
+    currency = str(payload.get("currency") or "USD")
+    return f"{venue}:{currency}"
+
+
 class _PostgresRepository(ABC):
     table_name = "table"
     source_name = "storage"
@@ -1120,6 +1139,243 @@ class ModelRegistryRepository(_PostgresRepository):
             FROM model_registry
             ORDER BY model_name, model_version
             """
+        )
+
+
+class PolymarketOrderRepository(_PostgresRepository):
+    table_name = "polymarket_orders_current"
+    source_name = "polymarket"
+    layer_name = "projected_account_truth"
+
+    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+        payload = _row_payload(row)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO polymarket_orders_current (
+                      order_id,
+                      contract_key,
+                      payload,
+                      updated_at
+                    )
+                    VALUES (%s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (order_id) DO UPDATE SET
+                      contract_key = EXCLUDED.contract_key,
+                      payload = EXCLUDED.payload,
+                      updated_at = NOW()
+                    """,
+                    (
+                        str(key),
+                        _payload_contract_key(payload),
+                        _payload_json(payload),
+                    ),
+                )
+            connection.commit()
+        return payload
+
+    def replace_all(self, rows: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM polymarket_orders_current")
+                for key, row in rows.items():
+                    payload = _row_payload(row)
+                    cursor.execute(
+                        """
+                        INSERT INTO polymarket_orders_current (
+                          order_id,
+                          contract_key,
+                          payload,
+                          updated_at
+                        )
+                        VALUES (%s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            str(key),
+                            _payload_contract_key(payload),
+                            _payload_json(payload),
+                        ),
+                    )
+            connection.commit()
+
+    def read_all(self) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT order_id, payload FROM polymarket_orders_current ORDER BY order_id"
+        )
+
+
+class PolymarketFillRepository(_PostgresRepository):
+    table_name = "polymarket_fills_current"
+    source_name = "polymarket"
+    layer_name = "projected_account_truth"
+
+    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+        payload = _row_payload(row)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO polymarket_fills_current (
+                      fill_key,
+                      order_id,
+                      contract_key,
+                      payload,
+                      updated_at
+                    )
+                    VALUES (%s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (fill_key) DO UPDATE SET
+                      order_id = EXCLUDED.order_id,
+                      contract_key = EXCLUDED.contract_key,
+                      payload = EXCLUDED.payload,
+                      updated_at = NOW()
+                    """,
+                    (
+                        str(key),
+                        str(payload.get("order_id") or ""),
+                        _payload_contract_key(payload),
+                        _payload_json(payload),
+                    ),
+                )
+            connection.commit()
+        return payload
+
+    def replace_all(self, rows: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM polymarket_fills_current")
+                for key, row in rows.items():
+                    payload = _row_payload(row)
+                    cursor.execute(
+                        """
+                        INSERT INTO polymarket_fills_current (
+                          fill_key,
+                          order_id,
+                          contract_key,
+                          payload,
+                          updated_at
+                        )
+                        VALUES (%s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            str(key),
+                            str(payload.get("order_id") or ""),
+                            _payload_contract_key(payload),
+                            _payload_json(payload),
+                        ),
+                    )
+            connection.commit()
+
+    def read_all(self) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT fill_key, payload FROM polymarket_fills_current ORDER BY fill_key"
+        )
+
+
+class PolymarketPositionRepository(_PostgresRepository):
+    table_name = "polymarket_positions_current"
+    source_name = "polymarket"
+    layer_name = "projected_account_truth"
+
+    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+        payload = _row_payload(row)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO polymarket_positions_current (
+                      contract_key,
+                      payload,
+                      updated_at
+                    )
+                    VALUES (%s, %s::jsonb, NOW())
+                    ON CONFLICT (contract_key) DO UPDATE SET
+                      payload = EXCLUDED.payload,
+                      updated_at = NOW()
+                    """,
+                    (
+                        str(key),
+                        _payload_json(payload),
+                    ),
+                )
+            connection.commit()
+        return payload
+
+    def replace_all(self, rows: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM polymarket_positions_current")
+                for key, row in rows.items():
+                    payload = _row_payload(row)
+                    cursor.execute(
+                        """
+                        INSERT INTO polymarket_positions_current (
+                          contract_key,
+                          payload,
+                          updated_at
+                        )
+                        VALUES (%s, %s::jsonb, NOW())
+                        """,
+                        (str(key), _payload_json(payload)),
+                    )
+            connection.commit()
+
+    def read_all(self) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT contract_key, payload FROM polymarket_positions_current ORDER BY contract_key"
+        )
+
+
+class PolymarketBalanceRepository(_PostgresRepository):
+    table_name = "polymarket_balance_current"
+    source_name = "polymarket"
+    layer_name = "projected_account_truth"
+
+    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+        payload = _row_payload(row)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO polymarket_balance_current (
+                      balance_key,
+                      payload,
+                      updated_at
+                    )
+                    VALUES (%s, %s::jsonb, NOW())
+                    ON CONFLICT (balance_key) DO UPDATE SET
+                      payload = EXCLUDED.payload,
+                      updated_at = NOW()
+                    """,
+                    (
+                        str(key),
+                        _payload_json(payload),
+                    ),
+                )
+            connection.commit()
+        return payload
+
+    def replace_all(self, rows: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM polymarket_balance_current")
+                for key, row in rows.items():
+                    payload = _row_payload(row)
+                    cursor.execute(
+                        """
+                        INSERT INTO polymarket_balance_current (
+                          balance_key,
+                          payload,
+                          updated_at
+                        )
+                        VALUES (%s, %s::jsonb, NOW())
+                        """,
+                        (str(key), _payload_json(payload)),
+                    )
+            connection.commit()
+
+    def read_all(self) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT balance_key, payload FROM polymarket_balance_current ORDER BY balance_key"
         )
 
 

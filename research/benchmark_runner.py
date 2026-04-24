@@ -763,6 +763,7 @@ def run_replay_benchmark(
                     case.broker.resting_max_fill_ratio_per_step
                 ),
                 resting_fill_delay_steps=case.broker.resting_fill_delay_steps,
+                cancel_latency_steps=case.broker.cancel_latency_steps,
                 stale_after_steps=case.broker.stale_after_steps,
                 price_move_bps_per_step=case.broker.price_move_bps_per_step,
             ),
