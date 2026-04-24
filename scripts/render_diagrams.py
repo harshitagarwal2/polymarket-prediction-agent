@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DIAGRAMS_DIR = ROOT / "docs" / "diagrams"
 RENDERED_DIR = DIAGRAMS_DIR / "rendered"
+MERMAID_CLI_VERSION = "11.10.1"
 
 
 def extract_mermaid(markdown: str) -> str:
@@ -21,7 +22,9 @@ def extract_mermaid(markdown: str) -> str:
 
 def source_files() -> list[Path]:
     return sorted(
-        path for path in DIAGRAMS_DIR.glob("*.md") if path.name != "README.md"
+        path
+        for path in DIAGRAMS_DIR.glob("*.md")
+        if path.name not in {"README.md", "RENDERED.md"}
     )
 
 
@@ -36,7 +39,9 @@ def render_file(source: Path) -> Path:
             [
                 "npx",
                 "-y",
-                "@mermaid-js/mermaid-cli",
+                "-p",
+                f"@mermaid-js/mermaid-cli@{MERMAID_CLI_VERSION}",
+                "mmdc",
                 "-i",
                 str(temp_input),
                 "-o",
