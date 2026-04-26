@@ -47,6 +47,7 @@ services:
     environment:
       PREDICTION_MARKET_POSTGRES_DSN: ${PREDICTION_MARKET_POSTGRES_DSN:-postgresql://prediction_market:prediction_market@postgres:5432/prediction_market}
       THE_ODDS_API_KEY: ${THE_ODDS_API_KEY:-}
+      SPORTSGAMEODDS_API_KEY: ${SPORTSGAMEODDS_API_KEY:-}
     command:
       [
         "uv",
@@ -57,10 +58,14 @@ services:
         "run-sportsbook-capture",
         "--root",
         "runtime/data",
+        "--provider",
+        "${SPORTSBOOK_CAPTURE_PROVIDER:-theoddsapi}",
         "--sport",
         "${SPORT_KEY:-basketball_nba}",
         "--market",
         "${SPORTSBOOK_MARKET:-h2h}",
+        "--provider-url",
+        "${SPORTSBOOK_PROVIDER_URL:-}",
         "--max-cycles",
         "1",
       ]
@@ -94,6 +99,40 @@ services:
         "runtime/data",
         "--asset-id",
         "${POLYMARKET_ASSET_ID:-replace-me}",
+        "--max-sessions",
+        "1",
+        "--max-messages-per-session",
+        "1",
+      ]
+    volumes:
+      - runtime-data:/app/runtime/data
+
+  run-polymarket-capture-user:
+    build: .
+    profiles: ["capture"]
+    depends_on:
+      bootstrap-postgres:
+        condition: service_completed_successfully
+    environment:
+      PREDICTION_MARKET_POSTGRES_DSN: ${PREDICTION_MARKET_POSTGRES_DSN:-postgresql://prediction_market:prediction_market@postgres:5432/prediction_market}
+      POLYMARKET_PRIVATE_KEY: ${POLYMARKET_PRIVATE_KEY:-}
+      POLYMARKET_FUNDER: ${POLYMARKET_FUNDER:-}
+      POLYMARKET_ACCOUNT_ADDRESS: ${POLYMARKET_ACCOUNT_ADDRESS:-}
+      POLYMARKET_USER_WS_HOST: ${POLYMARKET_USER_WS_HOST:-wss://ws-subscriptions-clob.polymarket.com/ws/user}
+      POLYMARKET_LIVE_USER_MARKETS: ${POLYMARKET_LIVE_USER_MARKETS:-}
+    command:
+      [
+        "uv",
+        "run",
+        "--locked",
+        "--extra",
+        "postgres",
+        "--extra",
+        "polymarket",
+        "run-polymarket-capture",
+        "user",
+        "--root",
+        "runtime/data",
         "--max-sessions",
         "1",
         "--max-messages-per-session",

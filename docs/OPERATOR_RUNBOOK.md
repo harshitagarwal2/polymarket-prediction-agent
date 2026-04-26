@@ -216,13 +216,26 @@ That smoke path should end with a zero-exit bootstrap step and a zero-exit proje
 
 For Polymarket run mode:
 
-- `POLYMARKET_PRIVATE_KEY` must be present
+- one of `POLYMARKET_PRIVATE_KEY`, `POLYMARKET_PRIVATE_KEY_FILE`, or `POLYMARKET_PRIVATE_KEY_COMMAND` must be present
 - optional `POLYMARKET_FUNDER` and `POLYMARKET_ACCOUNT_ADDRESS` can be set when needed
+- optional `POLYMARKET_CLOB_HOST` and `POLYMARKET_DATA_API_HOST` can route the live surface through a dedicated proxy/private endpoint
+- `POLYMARKET_ROUTE_LABEL` and `POLYMARKET_GEO_COMPLIANCE_ACK=true` are required for sanctioned Polymarket live-mode execution/capture paths so the route/compliance posture is explicit and fail-closed
+- optional `POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true` turns on an extra fail-closed guard for serious live modes: if private order flow is required, `POLYMARKET_CLOB_HOST` must point away from the public default host
+- optional `PREDICTION_MARKET_HTTP_MIN_INTERVAL_SECONDS` applies a simple per-host compliance throttle to shared live HTTP calls
 - live user-stream condition IDs are derived from projected fair-value coverage plus current market metadata when `run`/`pair-run` uses `--opportunity-root`, or from the configured fair-value manifest in preview-only flows
 - optional `POLYMARKET_LIVE_USER_MARKETS` can override those derived condition IDs when you need to pin the user stream manually
 - optional `POLYMARKET_USER_WS_HOST` can override the default user websocket endpoint
+- optional `--execution-lock-name` (or `runtime.execution_lock_name` in config) turns on a Postgres advisory lock for the active trading loop; if the lock is already held, the process downgrades to watcher mode instead of placing new orders
+
+For the dedicated user-channel worker, `run-polymarket-capture user` now follows the same market-set contract: it uses explicit `--market-id` values first, then `POLYMARKET_LIVE_USER_MARKETS`, and otherwise derives the condition IDs from authoritative projected fair-value coverage/current market metadata at the chosen `--root`.
+
+`POLYMARKET_PRIVATE_KEY_COMMAND` is a bootstrap-only secret path for supervised injection. It is executed once at process start and must print the private key on stdout; empty output fails closed.
+
+Use `make smoke-supervised-live-account-truth` when you want the focused local proof gate for that user-channel -> projection -> runtime contract.
 
 `run-agent-loop` fails fast when the policy file or required credentials are missing, and preview modes still fail fast when the fair-values file is missing.
+
+When the execution lock is enabled and already held by another process, `operator-cli status` reports `runtime_health.state = "watcher"` and the process keeps `hold_new_orders` active with a watcher-mode reason until it becomes the active lock holder.
 
 If a DSN marker is present, treat the projected Postgres-backed read boundary as authoritative even if older compatibility files still exist under `runtime/data/current/`.
 
@@ -280,6 +293,113 @@ Status can show:
 When the runtime is halted by the kill switch, `operator-cli status` now reports that through `runtime_health.kill_switch_active` and `runtime_health.kill_switch_reasons`. The current implementation derives that kill-switch from projected `source_health` red/error/unhealthy conditions and surfaces it as a supervised hard gate before the runtime loop places new actions.
 
 If you need a local watchdog input without scraping stdout, use `operator-cli status --output runtime/data/current/runtime_status.json`. The output is the same machine-readable JSON payload that `status` prints, written atomically so a local watcher can read it safely.
+
+### Alerting baseline
+
+The webhook baseline consumes the same machine-readable runtime status payload used by local watchdogs.
+
+```bash
+operator-cli build-alerts \
+  --runtime-status-file runtime/data/current/runtime_status.json \
+  --output runtime/data/current/runtime_alerts.json
+
+operator-cli send-alerts \
+  --alerts-file runtime/data/current/runtime_alerts.json \
+  --webhook-url https://example.invalid/hooks/runtime \
+  --dry-run
+```
+
+Current baseline behavior:
+
+- severity-typed runtime/account-truth/execution alerts
+- deduped webhook emission through `--dedupe-state-file`
+- safe dry-run mode for operator validation
+
+Use `make smoke-alerting` to exercise the deterministic alerting baseline end to end.
+
+### Heartbeat baseline
+
+The reverse-alerting heartbeat baseline turns `runtime_status.json` into a machine-usable heartbeat payload for an external watchdog service.
+
+```bash
+operator-cli build-heartbeat \
+  --runtime-status-file runtime/data/current/runtime_status.json \
+  --output runtime/data/current/runtime_heartbeat.json
+
+operator-cli send-heartbeat \
+  --heartbeat-file runtime/data/current/runtime_heartbeat.json \
+  --webhook-url https://example.invalid/heartbeat \
+  --dry-run
+```
+
+Use `make smoke-heartbeat` to exercise that deterministic heartbeat baseline end to end.
+
+### Tax / audit export baseline
+
+The current baseline export is a CSV derived from the execution-fill ledger. The command first syncs authoritative projected Polymarket fills onto accepted execution-order rows, then exports the ledger-backed fill view.
+
+```bash
+operator-cli export-tax-audit \
+  --opportunity-root runtime/data \
+  --output runtime/data/current/tax_audit.csv
+```
+
+Use `make smoke-tax-audit` to exercise the deterministic export baseline end to end.
+
+### Model-drift baseline
+
+The current baseline builds a drift report from a benchmark JSON and lets supervised live mode hold when the latest report is unhealthy.
+
+```bash
+operator-cli build-model-drift \
+  --benchmark-report-file runtime/benchmark_report.json \
+  --output runtime/data/current/model_drift.json \
+  --max-brier-score 0.20 \
+  --max-expected-calibration-error 0.10
+```
+
+Pair that report with `run-agent-loop --drift-report-file runtime/data/current/model_drift.json` in serious modes when you want benchmark-driven model-drift gating.
+
+The same serious live modes can also require private order flow explicitly:
+
+```bash
+export POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true
+export POLYMARKET_CLOB_HOST=https://private-clob.example.invalid
+```
+
+If `POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true` is set while `POLYMARKET_CLOB_HOST` still points at the public default, `run-agent-loop` fails closed before the live loop starts.
+
+Use `make smoke-model-drift` to exercise the deterministic baseline end to end.
+
+If you want the current repo-backed unattended guardrail baselines in one operator-facing check, run:
+
+```bash
+make smoke-unattended-guardrails
+```
+
+### Drawdown and wallet-cap guards
+
+The runtime policy can now carry:
+
+- `risk_limits.max_daily_loss`
+- `risk_limits.max_weekly_loss`
+- `risk_limits.max_cumulative_loss`
+- `trading_engine.max_active_wallet_balance`
+
+The first three are balance-delta fail-closed guards derived from authoritative account truth, and the wallet cap prevents the active trading wallet from silently operating with more capital than intended. `operator-cli status` now surfaces the longer-window PnL figures and whether a loss-hold or wallet-cap hold is currently active.
+
+### Autonomous-mode contract
+
+`run-agent-loop --autonomous-mode` is now an explicit top-level contract, not just an operator convention. It fails closed unless all of the following are configured for serious Polymarket live modes:
+
+- `--execution-lock-name`
+- `--drift-report-file`
+- `risk_limits.max_weekly_loss`
+- `risk_limits.max_cumulative_loss`
+- `trading_engine.max_active_wallet_balance`
+- `POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true`
+
+This keeps the unattended path separate from ordinary supervised live mode. The same posture can be requested through the runtime policy key `trading_engine.autonomous_mode`.
 
 ### Advisory sidecar
 

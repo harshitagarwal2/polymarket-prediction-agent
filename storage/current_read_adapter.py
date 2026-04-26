@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from .current_state_projectors import (  # pyright: ignore[reportMissingImports]
     project_polymarket_balance_state,
@@ -62,11 +62,34 @@ def _payload_dict(row: object) -> dict[str, object]:
 
 def _read_current_if_available(
     repository: CurrentStateTableRepository,
+    *,
+    connection: Any | None = None,
 ) -> dict[str, object] | None:
     read_current = getattr(repository, "read_current", None)
     if not callable(read_current):
         return None
+    if connection is not None:
+        try:
+            return _coerce_table_payload(read_current(connection=connection))
+        except TypeError as exc:
+            if "connection" not in str(exc):
+                raise
     return _coerce_table_payload(read_current())
+
+
+def _read_all_with_optional_connection(
+    repository: CurrentStateTableRepository,
+    *,
+    connection: Any | None = None,
+) -> dict[str, object]:
+    read_all = getattr(repository, "read_all")
+    if connection is not None:
+        try:
+            return _coerce_table_payload(read_all(connection=connection))
+        except TypeError as exc:
+            if "connection" not in str(exc):
+                raise
+    return _coerce_table_payload(read_all())
 
 
 def _project_latest_rows(
@@ -96,7 +119,9 @@ def _project_latest_rows(
 
 
 class CurrentStateReadAdapter(Protocol):
-    def read_table(self, table: str) -> dict[str, object]: ...
+    def read_table(
+        self, table: str, *, connection: Any | None = None
+    ) -> dict[str, object]: ...
 
 
 class CurrentStateTableRepository(Protocol):
@@ -111,7 +136,10 @@ class FileCurrentStateReadAdapter:
     def from_opportunity_root(cls, root: str | Path) -> "FileCurrentStateReadAdapter":
         return cls(Path(root) / "current")
 
-    def read_table(self, table: str) -> dict[str, object]:
+    def read_table(
+        self, table: str, *, connection: Any | None = None
+    ) -> dict[str, object]:
+        del connection
         path = self.root / f"{table}.json"
         if not path.exists():
             return {}
@@ -156,69 +184,99 @@ class ProjectedCurrentStateReadAdapter:
             polymarket_balance=PolymarketBalanceRepository(postgres_root),
         )
 
-    def read_table(self, table: str) -> dict[str, object]:
+    def read_table(
+        self, table: str, *, connection: Any | None = None
+    ) -> dict[str, object]:
         if table == "sportsbook_odds":
             if self.sportsbook_odds is None:
                 return {}
-            current_rows = _read_current_if_available(self.sportsbook_odds)
+            current_rows = _read_current_if_available(
+                self.sportsbook_odds, connection=connection
+            )
             rows = (
                 current_rows
                 if current_rows is not None
-                else _coerce_table_payload(self.sportsbook_odds.read_all())
+                else _read_all_with_optional_connection(
+                    self.sportsbook_odds, connection=connection
+                )
             )
             return _coerce_table_payload(project_sportsbook_quote_state(rows.values()))
         if table == "polymarket_markets":
             return _coerce_table_payload(
                 project_polymarket_market_state(
-                    self.polymarket_markets.read_all().values()
+                    _read_all_with_optional_connection(
+                        self.polymarket_markets, connection=connection
+                    ).values()
                 )
             )
         if table == "polymarket_bbo":
             return _coerce_table_payload(
-                project_polymarket_bbo_state(self.bbo_rows.read_all().values())
+                project_polymarket_bbo_state(
+                    _read_all_with_optional_connection(
+                        self.bbo_rows, connection=connection
+                    ).values()
+                )
             )
         if table == "sportsbook_events":
             return _coerce_table_payload(
                 project_sportsbook_event_state(
-                    self.sportsbook_events.read_all().values()
+                    _read_all_with_optional_connection(
+                        self.sportsbook_events, connection=connection
+                    ).values()
                 )
             )
         if table == "source_health":
-            current_rows = _read_current_if_available(self.source_health)
+            current_rows = _read_current_if_available(
+                self.source_health, connection=connection
+            )
             rows = (
                 current_rows
                 if current_rows is not None
-                else _coerce_table_payload(self.source_health.read_all())
+                else _read_all_with_optional_connection(
+                    self.source_health, connection=connection
+                )
             )
             return _coerce_table_payload(project_source_health_state((), existing=rows))
         if table == "polymarket_orders":
             if self.polymarket_orders is None:
                 return {}
-            current_rows = _read_current_if_available(self.polymarket_orders)
+            current_rows = _read_current_if_available(
+                self.polymarket_orders, connection=connection
+            )
             rows = (
                 current_rows
                 if current_rows is not None
-                else _coerce_table_payload(self.polymarket_orders.read_all())
+                else _read_all_with_optional_connection(
+                    self.polymarket_orders, connection=connection
+                )
             )
             return _coerce_table_payload(project_polymarket_order_state(rows.values()))
         if table == "polymarket_fills":
             if self.polymarket_fills is None:
                 return {}
-            current_rows = _read_current_if_available(self.polymarket_fills)
+            current_rows = _read_current_if_available(
+                self.polymarket_fills, connection=connection
+            )
             rows = (
                 current_rows
                 if current_rows is not None
-                else _coerce_table_payload(self.polymarket_fills.read_all())
+                else _read_all_with_optional_connection(
+                    self.polymarket_fills, connection=connection
+                )
             )
             return _coerce_table_payload(project_polymarket_fill_state(rows.values()))
         if table == "polymarket_positions":
             if self.polymarket_positions is None:
                 return {}
-            current_rows = _read_current_if_available(self.polymarket_positions)
+            current_rows = _read_current_if_available(
+                self.polymarket_positions, connection=connection
+            )
             rows = (
                 current_rows
                 if current_rows is not None
-                else _coerce_table_payload(self.polymarket_positions.read_all())
+                else _read_all_with_optional_connection(
+                    self.polymarket_positions, connection=connection
+                )
             )
             return _coerce_table_payload(
                 project_polymarket_position_state(rows.values())
@@ -226,21 +284,25 @@ class ProjectedCurrentStateReadAdapter:
         if table == "polymarket_balance":
             if self.polymarket_balance is None:
                 return {}
-            current_rows = _read_current_if_available(self.polymarket_balance)
+            current_rows = _read_current_if_available(
+                self.polymarket_balance, connection=connection
+            )
             rows = (
                 current_rows
                 if current_rows is not None
-                else _coerce_table_payload(self.polymarket_balance.read_all())
+                else _read_all_with_optional_connection(
+                    self.polymarket_balance, connection=connection
+                )
             )
             return _coerce_table_payload(
                 project_polymarket_balance_state(rows.values())
             )
         if table == "market_mappings":
-            current_rows = _read_current_if_available(self.mappings)
+            current_rows = _read_current_if_available(self.mappings, connection=connection)
             if current_rows is not None:
                 return current_rows
             return _project_latest_rows(
-                self.mappings.read_all(),
+                _read_all_with_optional_connection(self.mappings, connection=connection),
                 key_builder=lambda payload: "|".join(
                     [
                         str(payload.get("polymarket_market_id") or ""),
@@ -249,20 +311,28 @@ class ProjectedCurrentStateReadAdapter:
                 ),
             )
         if table == "fair_values":
-            current_rows = _read_current_if_available(self.fair_values)
+            current_rows = _read_current_if_available(
+                self.fair_values, connection=connection
+            )
             if current_rows is not None:
                 return current_rows
             return _project_latest_rows(
-                self.fair_values.read_all(),
+                _read_all_with_optional_connection(
+                    self.fair_values, connection=connection
+                ),
                 key_builder=lambda payload: str(payload.get("market_id") or ""),
                 timestamp_field="as_of",
             )
         if table == "opportunities":
-            current_rows = _read_current_if_available(self.opportunities)
+            current_rows = _read_current_if_available(
+                self.opportunities, connection=connection
+            )
             if current_rows is not None:
                 return current_rows
             return _project_latest_rows(
-                self.opportunities.read_all(),
+                _read_all_with_optional_connection(
+                    self.opportunities, connection=connection
+                ),
                 key_builder=lambda payload: "|".join(
                     [
                         str(payload.get("market_id") or ""),

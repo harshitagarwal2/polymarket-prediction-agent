@@ -4,8 +4,22 @@
     "result": "Aggregate across the discovery sequence:\n\nRan 97 tests in 2.032s\n\nOK (skipped=1)"
   },
   "full_suite": {
-    "command": "uv run --locked --extra research --extra postgres --extra polymarket python -m unittest discover -s tests -p \"test_*.py\"",
-    "result": "Ran 650 tests in 7.671s\n\nOK (skipped=1)"
+    "command": "uv run --locked --extra dev --extra postgres --extra polymarket python -m unittest discover -s tests -p \"test_*.py\"",
+    "result": "Ran 785 tests in 4.936s\n\nOK (skipped=1)"
+  },
+  "lock_check": {
+    "command": "uv lock --check",
+    "observed": {
+      "lock_matches_dependencies": true
+    }
+  },
+  "operator_status": {
+    "command": "uv run --locked --extra postgres --extra polymarket operator-cli status --state-file runtime/safety-state.json --quiet",
+    "observed": {
+      "command_exits_zero": true,
+      "machine_readable_payload": true,
+      "healthy_supervised_baseline": true
+    }
   },
   "docker_build": {
     "command": "docker build -t prediction-market-agent .",
@@ -20,7 +34,40 @@
       "deterministic_builders_run_against_projected_state": true,
       "run_agent_loop_preview_completed": true,
       "projected_preview_context_available": true,
-      "postgres_authority_required": true
+      "postgres_authority_required": true,
+      "projected_account_truth_available": true,
+      "user_channel_projection_required": true
+    }
+  },
+  "tax_audit_smoke": {
+    "command": "make smoke-tax-audit",
+    "observed": {
+      "compose_network_bootstrap_supported": true,
+      "execution_ledger_seeded": true,
+      "projected_fill_sync_applied": true,
+      "ledger_backed_csv_exported": true
+    }
+  },
+  "supervised_live_account_truth_smoke": {
+    "command": "make smoke-supervised-live-account-truth",
+    "observed": {
+      "runtime_bootstrap_projected_authority": true,
+      "run_agent_loop_contract_tests_pass": true,
+      "current_projection_worker_contract_tests_pass": true,
+      "polymarket_capture_worker_contract_tests_pass": true
+    }
+  },
+  "unattended_guardrails_smoke": {
+    "command": "make smoke-unattended-guardrails",
+    "observed": {
+      "alerting_baseline": true,
+      "heartbeat_baseline": true,
+      "tax_audit_baseline": true,
+      "model_drift_baseline": true,
+      "supervised_account_truth_baseline": true,
+      "continuous_builder_baseline": true,
+      "multi_provider_sportsbook_baseline": true,
+      "polymarket_depth_trades_baseline": true
     }
   },
   "compose_projection_smoke": {

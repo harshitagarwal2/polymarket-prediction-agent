@@ -1041,6 +1041,35 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertIsNone(persisted["mismatch_reason"])
         self.assertTrue(persisted["is_active"])
 
+    def test_build_mappings_can_fail_closed_when_postgres_authority_is_required(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            self._seed_mapping_build_inputs(root)
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "PREDICTION_MARKET_POSTGRES_DSN": "",
+                    "POSTGRES_DSN": "",
+                    "DATABASE_URL": "",
+                },
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data build-mappings requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "build-mappings",
+                            "--market",
+                            "h2h",
+                            "--root",
+                            str(root),
+                            "--require-postgres-authority",
+                            "--quiet",
+                        ]
+                    )
+
     def test_build_mappings_uses_research_block_reason_for_event_mismatch(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
@@ -1060,6 +1089,32 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(persisted["mismatch_reason"], "event key mismatch")
         self.assertEqual(persisted["match_confidence"], 0.0)
         self.assertFalse(persisted["is_active"])
+
+    def test_build_fair_values_can_fail_closed_when_postgres_authority_is_required(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "PREDICTION_MARKET_POSTGRES_DSN": "",
+                    "POSTGRES_DSN": "",
+                    "DATABASE_URL": "",
+                },
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data build-fair-values requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "build-fair-values",
+                            "--root",
+                            str(root),
+                            "--require-postgres-authority",
+                            "--quiet",
+                        ]
+                    )
 
     def test_build_opportunities_persists_pre_start_freeze_reason(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1088,6 +1143,34 @@ class IngestLiveDataTests(unittest.TestCase):
         )
         self.assertIn("edge_buy_after_costs_bps", persisted)
         self.assertIn("edge_sell_after_costs_bps", persisted)
+
+    def test_build_opportunities_can_fail_closed_when_postgres_authority_is_required(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "PREDICTION_MARKET_POSTGRES_DSN": "",
+                    "POSTGRES_DSN": "",
+                    "DATABASE_URL": "",
+                },
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data build-opportunities requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "build-opportunities",
+                            "--root",
+                            str(root),
+                            "--require-postgres-authority",
+                            "--quiet",
+                        ]
+                    )
 
     def test_build_opportunities_persists_all_known_blocked_reasons_in_order(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2826,6 +2909,34 @@ class IngestLiveDataTests(unittest.TestCase):
         self.assertEqual(latest_rows[0]["blocked_reasons"], [])
         self.assertTrue(latest_rows[0]["record_id"].startswith("pm-1|sb-1|"))
         self.assertIsNotNone(latest_rows[0]["recorded_at"])
+
+    def test_build_inference_dataset_can_fail_closed_when_postgres_authority_is_required(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "PREDICTION_MARKET_POSTGRES_DSN": "",
+                    "POSTGRES_DSN": "",
+                    "DATABASE_URL": "",
+                },
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "ingest-live-data build-inference-dataset requires Postgres authority",
+                ):
+                    ingest_live_data.main(
+                        [
+                            "build-inference-dataset",
+                            "--root",
+                            str(root),
+                            "--require-postgres-authority",
+                            "--quiet",
+                        ]
+                    )
 
     def test_build_training_dataset_persists_rows_and_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:

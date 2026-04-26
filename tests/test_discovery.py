@@ -14,10 +14,9 @@ from engine.contract_rules import (
 from engine.discovery import (
     FairValueManifestEntry,
     ManifestFairValueProvider,
-    OpportunityRanker,
-    PairOpportunityRanker,
     StaticFairValueProvider,
 )
+from opportunity.ranker import OpportunityRanker, PairOpportunityRanker
 
 
 class FakePolymarketClient:
@@ -223,6 +222,8 @@ class DiscoveryTests(unittest.TestCase):
                 "market": {
                     "active": True,
                     "closed": False,
+                    "resolving": True,
+                    "disputed": False,
                     "acceptingOrders": False,
                     "enableOrderBook": False,
                     "description": "Resolve according to the official league report.",
@@ -236,6 +237,8 @@ class DiscoveryTests(unittest.TestCase):
 
         self.assertTrue(rules.active)
         self.assertFalse(rules.closed)
+        self.assertTrue(getattr(rules, "resolving"))
+        self.assertFalse(getattr(rules, "disputed"))
         self.assertFalse(rules.accepting_orders)
         self.assertFalse(rules.order_book_enabled)
         self.assertEqual(rules.expires_at, expires_at)
@@ -254,7 +257,7 @@ class DiscoveryTests(unittest.TestCase):
             ),
             active=True,
             expires_at=now + timedelta(minutes=10),
-            raw={"market": {"acceptingOrders": False}},
+            raw={"market": {"acceptingOrders": False, "disputed": True}},
         )
 
         reasons = contract_freeze_reasons(
@@ -267,6 +270,7 @@ class DiscoveryTests(unittest.TestCase):
             any("not accepting orders" in reason for reason in reasons),
             msg=reasons,
         )
+        self.assertTrue(any("disputed" in reason for reason in reasons), msg=reasons)
         self.assertTrue(
             any("expiry freeze window" in reason for reason in reasons),
             msg=reasons,
@@ -324,6 +328,64 @@ class DiscoveryTests(unittest.TestCase):
         ).rank([yes_market, no_market])
 
         self.assertEqual(candidates, [])
+
+    def test_pair_ranker_applies_time_lock_penalty_to_long_dated_pairs(self):
+        now = datetime.now(timezone.utc)
+        near_yes = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="near-yes", outcome=OutcomeSide.YES
+            ),
+            title="Near pair",
+            best_bid=0.44,
+            best_ask=0.47,
+            active=True,
+            expires_at=now + timedelta(hours=4),
+            raw={"market": {"condition_id": "near-pair"}},
+        )
+        near_no = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="near-no", outcome=OutcomeSide.NO
+            ),
+            title="Near pair",
+            best_bid=0.44,
+            best_ask=0.48,
+            active=True,
+            expires_at=now + timedelta(hours=4),
+            raw={"market": {"condition_id": "near-pair"}},
+        )
+        far_yes = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="far-yes", outcome=OutcomeSide.YES
+            ),
+            title="Far pair",
+            best_bid=0.44,
+            best_ask=0.47,
+            active=True,
+            expires_at=now + timedelta(hours=168),
+            raw={"market": {"condition_id": "far-pair"}},
+        )
+        far_no = MarketSummary(
+            contract=Contract(
+                venue=Venue.POLYMARKET, symbol="far-no", outcome=OutcomeSide.NO
+            ),
+            title="Far pair",
+            best_bid=0.44,
+            best_ask=0.48,
+            active=True,
+            expires_at=now + timedelta(hours=168),
+            raw={"market": {"condition_id": "far-pair"}},
+        )
+
+        candidates = PairOpportunityRanker(
+            edge_threshold=0.01,
+            time_lock_penalty_weight=0.05,
+            time_lock_penalty_saturation_hours=168.0,
+        ).rank([far_yes, far_no, near_yes, near_no])
+
+        self.assertEqual(candidates[0].market_key, "near-pair")
+        self.assertEqual(candidates[1].market_key, "far-pair")
+        self.assertGreater(candidates[0].score, candidates[1].score)
+        self.assertIn("time_lock_penalty", candidates[1].rationale)
 
     def test_opportunity_ranker_matches_allowed_categories_against_series_and_tags(
         self,

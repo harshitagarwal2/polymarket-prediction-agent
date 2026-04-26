@@ -5,8 +5,18 @@ import sys
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from scripts import build_fair_values, build_sports_fair_values, train_models
+from scripts import (
+    build_current_state_fair_values,
+    build_fair_values,
+    build_inference_dataset,
+    build_mappings,
+    build_opportunities,
+    build_sports_fair_values,
+    build_training_dataset,
+    train_models,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,6 +68,22 @@ class ConsoleScriptEntryPointsTests(unittest.TestCase):
         self.assertEqual(
             targets["run-replay-attribution"],
             "scripts.run_replay_attribution:main",
+        )
+        self.assertEqual(targets["build-mappings"], "scripts.build_mappings:main")
+        self.assertEqual(
+            targets["build-current-state-fair-values"],
+            "scripts.build_current_state_fair_values:main",
+        )
+        self.assertEqual(
+            targets["build-opportunities"], "scripts.build_opportunities:main"
+        )
+        self.assertEqual(
+            targets["build-inference-dataset"],
+            "scripts.build_inference_dataset:main",
+        )
+        self.assertEqual(
+            targets["build-training-dataset"],
+            "scripts.build_training_dataset:main",
         )
 
     def test_console_script_modules_import_without_sys_path_mutation(self):
@@ -118,6 +144,78 @@ class ConsoleScriptEntryPointsTests(unittest.TestCase):
             build_sports_fair_values.main.__module__,
             "research.fair_values_cli",
         )
+
+    def test_builder_wrapper_entrypoints_delegate_to_ingest_live_data(self):
+        self.assertEqual(build_mappings.main.__module__, "scripts.build_mappings")
+        self.assertEqual(
+            build_opportunities.main.__module__, "scripts.build_opportunities"
+        )
+        self.assertEqual(
+            build_inference_dataset.main.__module__,
+            "scripts.build_inference_dataset",
+        )
+        self.assertEqual(
+            build_current_state_fair_values.main.__module__,
+            "scripts.build_current_state_fair_values",
+        )
+        self.assertEqual(
+            build_training_dataset.main.__module__,
+            "scripts.build_training_dataset",
+        )
+
+    def test_serious_builder_wrappers_require_postgres_authority_by_default(self):
+        with patch("scripts.build_mappings.ingest_live_data.main", return_value=0) as mappings:
+            build_mappings.main(["--root", "runtime/data"])
+
+        with patch(
+            "scripts.build_opportunities.ingest_live_data.main", return_value=0
+        ) as opportunities:
+            build_opportunities.main(["--root", "runtime/data"])
+
+        with patch(
+            "scripts.build_inference_dataset.ingest_live_data.main", return_value=0
+        ) as inference:
+            build_inference_dataset.main(["--root", "runtime/data"])
+
+        with patch(
+            "scripts.build_current_state_fair_values.ingest_live_data.main",
+            return_value=0,
+        ) as fair_values:
+            build_current_state_fair_values.main(["--root", "runtime/data"])
+
+        with patch(
+            "scripts.build_training_dataset.ingest_live_data.main", return_value=0
+        ) as training:
+            build_training_dataset.main(["--root", "runtime/data"])
+
+        mappings.assert_called_once_with(
+            ["build-mappings", "--require-postgres-authority", "--root", "runtime/data"]
+        )
+        opportunities.assert_called_once_with(
+            [
+                "build-opportunities",
+                "--require-postgres-authority",
+                "--root",
+                "runtime/data",
+            ]
+        )
+        inference.assert_called_once_with(
+            [
+                "build-inference-dataset",
+                "--require-postgres-authority",
+                "--root",
+                "runtime/data",
+            ]
+        )
+        fair_values.assert_called_once_with(
+            [
+                "build-fair-values",
+                "--require-postgres-authority",
+                "--root",
+                "runtime/data",
+            ]
+        )
+        training.assert_called_once_with(["build-training-dataset", "--root", "runtime/data"])
 
 
 if __name__ == "__main__":

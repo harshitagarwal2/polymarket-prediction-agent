@@ -1,5 +1,11 @@
 """Execution engine, order state, and strategy protocols."""
 
+from engine.alerting import (
+    build_runtime_heartbeat,
+    load_heartbeat,
+    send_heartbeat,
+    write_heartbeat,
+)
 from engine.order_state import (
     LifecycleDecision,
     OrderFillSummary,
@@ -15,5 +21,9 @@ __all__ = [
     "OrderLifecycleManager",
     "OrderLifecyclePolicy",
     "RuntimeProposalJournal",
+    "build_runtime_heartbeat",
+    "load_heartbeat",
+    "send_heartbeat",
     "summarize_fill_state",
+    "write_heartbeat",
 ]

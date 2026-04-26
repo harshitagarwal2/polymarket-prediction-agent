@@ -771,6 +771,79 @@ class SafetyStateStore:
                 "daily_loss_last_updated_at",
                 warnings,
             ),
+            weekly_loss_period=_safe_str(
+                payload.get("weekly_loss_period"), "weekly_loss_period", warnings
+            ),
+            weekly_loss_baseline_balance=_safe_float(
+                payload.get("weekly_loss_baseline_balance"),
+                "weekly_loss_baseline_balance",
+                warnings,
+                None,
+            ),
+            weekly_loss_current_balance=_safe_float(
+                payload.get("weekly_loss_current_balance"),
+                "weekly_loss_current_balance",
+                warnings,
+                None,
+            ),
+            weekly_loss_source=_safe_str(
+                payload.get("weekly_loss_source"), "weekly_loss_source", warnings
+            ),
+            weekly_loss_approximation=_safe_str(
+                payload.get("weekly_loss_approximation"),
+                "weekly_loss_approximation",
+                warnings,
+            ),
+            weekly_realized_pnl=float(
+                _safe_float(
+                    payload.get("weekly_realized_pnl"),
+                    "weekly_realized_pnl",
+                    warnings,
+                    0.0,
+                )
+                or 0.0
+            ),
+            weekly_loss_last_updated_at=_safe_datetime(
+                payload.get("weekly_loss_last_updated_at"),
+                "weekly_loss_last_updated_at",
+                warnings,
+            ),
+            cumulative_loss_baseline_balance=_safe_float(
+                payload.get("cumulative_loss_baseline_balance"),
+                "cumulative_loss_baseline_balance",
+                warnings,
+                None,
+            ),
+            cumulative_loss_current_balance=_safe_float(
+                payload.get("cumulative_loss_current_balance"),
+                "cumulative_loss_current_balance",
+                warnings,
+                None,
+            ),
+            cumulative_loss_source=_safe_str(
+                payload.get("cumulative_loss_source"),
+                "cumulative_loss_source",
+                warnings,
+            ),
+            cumulative_loss_approximation=_safe_str(
+                payload.get("cumulative_loss_approximation"),
+                "cumulative_loss_approximation",
+                warnings,
+            ),
+            cumulative_realized_pnl=float(
+                _safe_float(
+                    payload.get("cumulative_realized_pnl"),
+                    "cumulative_realized_pnl",
+                    warnings,
+                    0.0,
+                )
+                or 0.0
+            ),
+            cumulative_loss_last_updated_at=_safe_datetime(
+                payload.get("cumulative_loss_last_updated_at"),
+                "cumulative_loss_last_updated_at",
+                warnings,
+            ),
             pending_cancels=_safe_deserialize_items(
                 payload.get("pending_cancels"),
                 "pending_cancels",
@@ -866,6 +939,16 @@ class SafetyStateStore:
         if isinstance(daily_loss_last_updated_at, datetime):
             payload["daily_loss_last_updated_at"] = (
                 daily_loss_last_updated_at.isoformat()
+            )
+        weekly_loss_last_updated_at = payload.get("weekly_loss_last_updated_at")
+        if isinstance(weekly_loss_last_updated_at, datetime):
+            payload["weekly_loss_last_updated_at"] = (
+                weekly_loss_last_updated_at.isoformat()
+            )
+        cumulative_loss_last_updated_at = payload.get("cumulative_loss_last_updated_at")
+        if isinstance(cumulative_loss_last_updated_at, datetime):
+            payload["cumulative_loss_last_updated_at"] = (
+                cumulative_loss_last_updated_at.isoformat()
             )
         payload["pending_cancels"] = [
             _serialize_pending_cancel(item) for item in state.pending_cancels

@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
 from scripts.run_service_stack_smoke import _build_readiness_summary
 
@@ -22,6 +23,7 @@ class RunServiceStackSmokeTests(unittest.TestCase):
                     "projection_sportsbook_odds": {"status": "ok"},
                     "projection_polymarket_market_catalog": {"status": "ok"},
                     "projection_polymarket_market_channel": {"status": "ok"},
+                    "projection_polymarket_user_channel": {"status": "ok"},
                     "market_mappings": {"status": "ok"},
                     "fair_values": {"status": "red"},
                 },
@@ -32,6 +34,14 @@ class RunServiceStackSmokeTests(unittest.TestCase):
             self._write_json(root / "current" / "fair_values.json", {"pm-1": {}})
             self._write_json(
                 root / "current" / "opportunities.json", {"pm-1|buy_yes": {}}
+            )
+            self._write_json(root / "current" / "polymarket_orders.json", {"order-1": {}})
+            self._write_json(root / "current" / "polymarket_fills.json", {"fill-1": {}})
+            self._write_json(
+                root / "current" / "polymarket_positions.json", {"asset-1:yes": {}}
+            )
+            self._write_json(
+                root / "current" / "polymarket_balance.json", {"polymarket": {}}
             )
 
             with self.assertRaisesRegex(
@@ -49,6 +59,7 @@ class RunServiceStackSmokeTests(unittest.TestCase):
                     "projection_sportsbook_odds": {"status": "ok"},
                     "projection_polymarket_market_catalog": {"status": "ok"},
                     "projection_polymarket_market_channel": {"status": "ok"},
+                    "projection_polymarket_user_channel": {"status": "ok"},
                     "market_mappings": {"status": "ok"},
                     "fair_values": {"status": "ok"},
                 },
@@ -61,13 +72,26 @@ class RunServiceStackSmokeTests(unittest.TestCase):
                 root / "current" / "opportunities.json",
                 {"pm-1|buy_yes": {}, "pm-1|sell_yes": {}},
             )
+            self._write_json(root / "current" / "polymarket_orders.json", {"order-1": {}})
+            self._write_json(root / "current" / "polymarket_fills.json", {"fill-1": {}})
+            self._write_json(
+                root / "current" / "polymarket_positions.json", {"asset-1:yes": {}}
+            )
+            self._write_json(
+                root / "current" / "polymarket_balance.json", {"polymarket": {}}
+            )
 
             summary = _build_readiness_summary(root)
 
-        self.assertEqual(summary["source_health"]["fair_values"], "ok")
-        self.assertEqual(summary["counts"]["market_mappings"], 1)
-        self.assertEqual(summary["counts"]["fair_values"], 1)
-        self.assertEqual(summary["counts"]["opportunities"], 2)
+        counts = cast(dict[str, object], summary["counts"])
+        source_health = cast(dict[str, object], summary["source_health"])
+
+        self.assertEqual(source_health["fair_values"], "ok")
+        self.assertEqual(counts["market_mappings"], 1)
+        self.assertEqual(counts["fair_values"], 1)
+        self.assertEqual(counts["opportunities"], 2)
+        self.assertEqual(counts["polymarket_orders"], 1)
+        self.assertEqual(counts["polymarket_fills"], 1)
 
 
 if __name__ == "__main__":

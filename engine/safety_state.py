@@ -142,6 +142,19 @@ class EngineSafetyState:
     daily_loss_approximation: str | None = None
     daily_realized_pnl: float = 0.0
     daily_loss_last_updated_at: datetime | None = None
+    weekly_loss_period: str | None = None
+    weekly_loss_baseline_balance: float | None = None
+    weekly_loss_current_balance: float | None = None
+    weekly_loss_source: str | None = None
+    weekly_loss_approximation: str | None = None
+    weekly_realized_pnl: float = 0.0
+    weekly_loss_last_updated_at: datetime | None = None
+    cumulative_loss_baseline_balance: float | None = None
+    cumulative_loss_current_balance: float | None = None
+    cumulative_loss_source: str | None = None
+    cumulative_loss_approximation: str | None = None
+    cumulative_realized_pnl: float = 0.0
+    cumulative_loss_last_updated_at: datetime | None = None
     pending_cancels: list[PendingCancelState] = field(default_factory=list)
     pending_submissions: list[PendingSubmissionState] = field(default_factory=list)
     pending_refresh_requests: list[PendingRefreshRequestState] = field(

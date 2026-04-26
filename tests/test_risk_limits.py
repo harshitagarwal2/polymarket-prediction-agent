@@ -322,6 +322,58 @@ class RiskLimitsTests(unittest.TestCase):
         self.assertEqual(decision.approved, [intent])
         self.assertFalse(decision.rejected)
 
+    def test_weekly_loss_limit_rejects_intents(self):
+        contract = make_contract()
+        intent = OrderIntent(
+            contract=contract,
+            action=OrderAction.BUY,
+            price=0.45,
+            quantity=1,
+        )
+        engine = RiskEngine(
+            RiskLimits(
+                max_contracts_per_market=10,
+                max_global_contracts=10,
+                max_weekly_loss=10.0,
+            ),
+            state=RiskState(weekly_realized_pnl=-10.0),
+        )
+
+        decision = engine.evaluate(
+            [intent],
+            position=PositionSnapshot(contract=contract, quantity=0),
+            open_orders=[],
+        )
+
+        self.assertFalse(decision.approved)
+        self.assertEqual(decision.rejected[0].reason, "weekly loss limit reached")
+
+    def test_cumulative_loss_limit_rejects_intents(self):
+        contract = make_contract()
+        intent = OrderIntent(
+            contract=contract,
+            action=OrderAction.BUY,
+            price=0.45,
+            quantity=1,
+        )
+        engine = RiskEngine(
+            RiskLimits(
+                max_contracts_per_market=10,
+                max_global_contracts=10,
+                max_cumulative_loss=25.0,
+            ),
+            state=RiskState(cumulative_realized_pnl=-25.0),
+        )
+
+        decision = engine.evaluate(
+            [intent],
+            position=PositionSnapshot(contract=contract, quantity=0),
+            open_orders=[],
+        )
+
+        self.assertFalse(decision.approved)
+        self.assertEqual(decision.rejected[0].reason, "cumulative loss limit reached")
+
     def test_rejects_event_exposure_over_cap_across_registered_markets(self):
         contract = make_contract(symbol="TEST-1")
         other_contract = make_contract(symbol="TEST-2")
@@ -496,7 +548,52 @@ class RiskLimitsTests(unittest.TestCase):
         self.assertFalse(decision.approved)
         self.assertEqual(decision.rejected[0].reason, "per-event exposure cap exceeded")
 
-    def test_register_markets_infers_mutually_exclusive_groups_from_market_identity(self):
+    def test_rejects_event_notional_exposure_over_cap_across_registered_markets(self):
+        contract = make_contract(symbol="TEST-1")
+        other_contract = make_contract(symbol="TEST-2")
+        engine = RiskEngine(
+            RiskLimits(
+                max_contracts_per_market=10,
+                max_global_contracts=10,
+                max_notional_per_event=1.10,
+            )
+        )
+        engine.register_market_event(contract.market_key, event_key="event-1")
+        engine.register_market_event(other_contract.market_key, event_key="event-1")
+        intent = OrderIntent(
+            contract=contract,
+            action=OrderAction.BUY,
+            price=0.45,
+            quantity=1,
+        )
+
+        decision = engine.evaluate(
+            [intent],
+            position=PositionSnapshot(contract=contract, quantity=0),
+            positions=[
+                PositionSnapshot(
+                    contract=contract,
+                    quantity=0,
+                    average_price=0.45,
+                ),
+                PositionSnapshot(
+                    contract=other_contract,
+                    quantity=2,
+                    average_price=0.45,
+                ),
+            ],
+            open_orders=[],
+        )
+
+        self.assertFalse(decision.approved)
+        self.assertEqual(
+            decision.rejected[0].reason,
+            "per-event capital-at-risk cap exceeded",
+        )
+
+    def test_register_markets_infers_mutually_exclusive_groups_from_market_identity(
+        self,
+    ):
         yes_contract = make_contract(symbol="TOKEN-YES", outcome=OutcomeSide.YES)
         no_contract = make_contract(symbol="TOKEN-NO", outcome=OutcomeSide.NO)
         engine = RiskEngine(

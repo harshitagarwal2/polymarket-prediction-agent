@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import os
 from pathlib import Path
@@ -103,6 +104,46 @@ def connect_postgres(dsn: str):
             "psycopg is required for Postgres storage. Install the optional 'postgres' extra."
         ) from exc
     return psycopg.connect(dsn)
+
+
+def advisory_lock_key(name: str) -> int:
+    digest = hashlib.blake2b(name.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big", signed=True)
+
+
+class PostgresAdvisoryLock:
+    def __init__(self, dsn: str, name: str):
+        self.dsn = dsn
+        self.name = name
+        self.key = advisory_lock_key(name)
+        self._connection = None
+        self._acquired = False
+
+    def acquire(self) -> bool:
+        if self._connection is not None:
+            return self._acquired
+        connection = connect_postgres(self.dsn)
+        connection.autocommit = True
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_try_advisory_lock(%s)", (self.key,))
+            row = cursor.fetchone()
+        self._acquired = bool(row and row[0])
+        if self._acquired:
+            self._connection = connection
+            return True
+        connection.close()
+        return False
+
+    def release(self) -> None:
+        if self._connection is None:
+            return
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute("SELECT pg_advisory_unlock(%s)", (self.key,))
+        finally:
+            self._connection.close()
+            self._connection = None
+            self._acquired = False
 
 
 def write_dsn_marker(root: str | Path, dsn: str) -> Path:

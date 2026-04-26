@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
+import time
 from typing import Any, Mapping
 from urllib.parse import urlencode
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.parse import urlparse
 
 
 USER_AGENT = "prediction-market-agent/0.1.0"
+_LAST_REQUEST_AT: dict[str, float] = {}
 
 
 def _request_headers(extra_headers: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -28,6 +32,29 @@ def _httpx() -> Any | None:
         return None
 
 
+def _throttle_host(url: str) -> str:
+    parsed = urlparse(url)
+    return str(parsed.hostname or url)
+
+
+def _apply_min_interval_throttle(url: str) -> None:
+    raw = os.getenv("PREDICTION_MARKET_HTTP_MIN_INTERVAL_SECONDS")
+    if raw in (None, ""):
+        return
+    minimum = float(raw)
+    if minimum <= 0:
+        return
+    host = _throttle_host(url)
+    now = time.monotonic()
+    previous = _LAST_REQUEST_AT.get(host)
+    if previous is not None:
+        elapsed = now - previous
+        if elapsed < minimum:
+            time.sleep(minimum - elapsed)
+            now = time.monotonic()
+    _LAST_REQUEST_AT[host] = now
+
+
 def get_json(
     url: str,
     *,
@@ -38,6 +65,7 @@ def get_json(
     follow_redirects: bool = True,
 ) -> Any:
     merged_headers = _request_headers(headers)
+    _apply_min_interval_throttle(url)
     if client is not None:
         response = client.get(
             url,

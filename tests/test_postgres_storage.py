@@ -217,6 +217,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                 "003_capture_substrate.sql",
                 "004_sportsbook_capture_timestamps.sql",
                 "005_account_truth_projection.sql",
+                "006_runtime_execution_ledger.sql",
             ],
         )
 

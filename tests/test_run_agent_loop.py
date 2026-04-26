@@ -50,6 +50,21 @@ class FakeAdapter:
         self.close_calls += 1
 
 
+class FakeExecutionLock:
+    def __init__(self, name: str, acquired: bool):
+        self.name = name
+        self._acquired = acquired
+        self.acquire_calls = 0
+        self.release_calls = 0
+
+    def acquire(self) -> bool:
+        self.acquire_calls += 1
+        return self._acquired
+
+    def release(self) -> None:
+        self.release_calls += 1
+
+
 class RunAgentLoopTests(unittest.TestCase):
     def test_main_wires_lifecycle_manager_by_default(self):
         adapter = FakeAdapter()
@@ -110,6 +125,170 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertEqual(adapter.stop_heartbeat_calls, 1)
         self.assertEqual(adapter.close_calls, 1)
 
+    def test_main_records_execution_ledger_for_run_mode(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(
+            selected=SimpleNamespace(contract=SimpleNamespace(market_key="token-1:yes")),
+            execution=None,
+            policy_allowed=False,
+            policy_reasons=[],
+            gate_trace=[],
+            shadow_quote_plan=None,
+        )
+        stdout = io.StringIO()
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "_build_runtime_kill_switch",
+                return_value=(KillSwitchState(), ()),
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_projected_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_projected_account_snapshot_provider",
+                return_value=lambda contract: None,
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_preview_order_proposals",
+                return_value=([], []),
+            ),
+            patch.object(
+                run_agent_loop,
+                "TradingEngine",
+                return_value=fake_engine,
+            ),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(
+                run_agent_loop,
+                "persist_runtime_execution_ledger",
+            ) as record_ledger,
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+            patch("sys.stdout", stdout),
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+            record_ledger.return_value = {
+                "cycle_count": 1,
+                "decision_count": 0,
+                "order_count": 0,
+                "fill_count": 2,
+            }
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--mode",
+                    "run",
+                    "--opportunity-root",
+                    "runtime/data",
+                ],
+            ):
+                result = run_agent_loop.main()
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 0)
+        record_ledger.assert_called_once()
+        self.assertEqual(payload["ledger_summary"]["cycle_count"], 1)
+        self.assertEqual(payload["ledger_summary"]["fill_count"], 2)
+
+    def test_main_fails_closed_when_ledger_persistence_fails(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(halted=False, paused=False)
+        )
+        halt_reasons: list[str] = []
+        fake_engine.halt = lambda reason: halt_reasons.append(reason)
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_cycle = SimpleNamespace(
+            selected=SimpleNamespace(contract=SimpleNamespace(market_key="token-1:yes")),
+            execution=None,
+            policy_allowed=False,
+            policy_reasons=[],
+            gate_trace=[],
+            shadow_quote_plan=None,
+        )
+        stdout = io.StringIO()
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "_build_runtime_kill_switch",
+                return_value=(KillSwitchState(), ()),
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_projected_fair_value_provider",
+                return_value=SimpleNamespace(),
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_projected_account_snapshot_provider",
+                return_value=lambda contract: None,
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_preview_order_proposals",
+                return_value=([], []),
+            ),
+            patch.object(
+                run_agent_loop,
+                "TradingEngine",
+                return_value=fake_engine,
+            ),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(
+                run_agent_loop,
+                "persist_runtime_execution_ledger",
+                side_effect=RuntimeError("ledger write failed"),
+            ),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+            patch("sys.stdout", stdout),
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--mode",
+                    "run",
+                    "--opportunity-root",
+                    "runtime/data",
+                ],
+            ):
+                result = run_agent_loop.main()
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 1)
+        self.assertTrue(halt_reasons)
+        self.assertEqual(payload["ledger_summary"]["error_kind"], "RuntimeError")
+
     def test_validate_runtime_rejects_missing_fair_values_file(self):
         args = SimpleNamespace(
             venue="polymarket",
@@ -132,8 +311,135 @@ class RunAgentLoopTests(unittest.TestCase):
         )
 
         with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaisesRegex(RuntimeError, "POLYMARKET_PRIVATE_KEY"):
+            with self.assertRaisesRegex(RuntimeError, "POLYMARKET_PRIVATE_KEY_FILE"):
                 run_agent_loop.validate_runtime(args)
+
+    def test_validate_runtime_accepts_polymarket_private_key_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            journal = Path(temp_dir) / "runtime" / "events.jsonl"
+            state = Path(temp_dir) / "runtime" / "safety-state.json"
+            fair_values = Path(temp_dir) / "fair-values.json"
+            fair_values.write_text("{}", encoding="utf-8")
+            key_file = Path(temp_dir) / "polymarket.key"
+            key_file.write_text("file-private-key", encoding="utf-8")
+            args = SimpleNamespace(
+                venue="polymarket",
+                fair_values_file=str(fair_values),
+                journal=str(journal),
+                state_file=str(state),
+                policy_file=None,
+                mode="preview",
+                opportunity_root=None,
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "POLYMARKET_PRIVATE_KEY": "",
+                    "POLYMARKET_PRIVATE_KEY_FILE": str(key_file),
+                    "POLYMARKET_ROUTE_LABEL": "eu-proxy-1",
+                    "POLYMARKET_GEO_COMPLIANCE_ACK": "true",
+                },
+                clear=True,
+            ):
+                run_agent_loop.validate_runtime(args)
+
+    def test_validate_runtime_rejects_live_mode_without_geo_routing_ack(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            journal = Path(temp_dir) / "runtime" / "events.jsonl"
+            state = Path(temp_dir) / "runtime" / "safety-state.json"
+            args = SimpleNamespace(
+                venue="polymarket",
+                fair_values_file=None,
+                policy_file=None,
+                journal=str(journal),
+                state_file=str(state),
+                mode="run",
+                opportunity_root=str(Path(temp_dir) / "data"),
+            )
+
+            with (
+                patch.dict(
+                    "os.environ",
+                    {"POLYMARKET_PRIVATE_KEY": "pk"},
+                    clear=True,
+                ),
+                patch.object(
+                    run_agent_loop,
+                    "build_current_state_read_adapter",
+                    return_value=object(),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "POLYMARKET_ROUTE_LABEL"):
+                    run_agent_loop.validate_runtime(args)
+
+    def test_validate_runtime_rejects_private_order_flow_without_private_host(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            journal = Path(temp_dir) / "runtime" / "events.jsonl"
+            state = Path(temp_dir) / "runtime" / "safety-state.json"
+            args = SimpleNamespace(
+                venue="polymarket",
+                fair_values_file=None,
+                policy_file=None,
+                journal=str(journal),
+                state_file=str(state),
+                mode="run",
+                opportunity_root=str(Path(temp_dir) / "data"),
+            )
+
+            with (
+                patch.dict(
+                    "os.environ",
+                    {
+                        "POLYMARKET_PRIVATE_KEY": "pk",
+                        "POLYMARKET_ROUTE_LABEL": "eu-proxy-1",
+                        "POLYMARKET_GEO_COMPLIANCE_ACK": "true",
+                        "POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED": "true",
+                        "POLYMARKET_CLOB_HOST": PolymarketConfig.host,
+                    },
+                    clear=True,
+                ),
+                patch.object(
+                    run_agent_loop,
+                    "build_current_state_read_adapter",
+                    return_value=object(),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "non-default POLYMARKET_CLOB_HOST"
+                ):
+                    run_agent_loop.validate_runtime(args)
+
+    def test_validate_autonomous_mode_requires_guardrail_contracts(self):
+        args = SimpleNamespace(
+            autonomous_mode=True,
+            mode="run",
+            execution_lock_name=None,
+            drift_report_file=None,
+        )
+        with self.assertRaisesRegex(RuntimeError, "--execution-lock-name"):
+            run_agent_loop._validate_autonomous_mode(args, None)
+
+    def test_validate_autonomous_mode_accepts_complete_guardrail_contract(self):
+        args = SimpleNamespace(
+            autonomous_mode=True,
+            mode="run",
+            execution_lock_name="primary-loop",
+            drift_report_file="runtime/data/current/model_drift.json",
+        )
+        policy = SimpleNamespace(
+            trading_engine=SimpleNamespace(
+                autonomous_mode=True,
+                max_active_wallet_balance=250.0,
+            ),
+            risk_limits=SimpleNamespace(max_weekly_loss=10.0, max_cumulative_loss=50.0),
+        )
+        with patch.dict(
+            "os.environ",
+            {"POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED": "true"},
+            clear=False,
+        ):
+            run_agent_loop._validate_autonomous_mode(args, policy)
 
     def test_validate_runtime_creates_output_directories(self):
         with patch.dict("os.environ", {"POLYMARKET_PRIVATE_KEY": "pk"}, clear=False):
@@ -527,6 +833,76 @@ class RunAgentLoopTests(unittest.TestCase):
         self.assertEqual(len(snapshot.positions), 1)
         self.assertEqual(len(snapshot.fills), 1)
 
+    def test_projected_account_snapshot_provider_rejects_mixed_snapshot_cohorts(self):
+        now_iso = datetime.now(timezone.utc).isoformat()
+        adapter = SimpleNamespace(
+            read_table=lambda table: {
+                "source_health": {
+                    "polymarket_user_channel": {
+                        "status": "ok",
+                        "last_success_at": now_iso,
+                        "stale_after_ms": 60000,
+                        "details": {
+                            "account_snapshot": True,
+                            "account_snapshot_complete": True,
+                            "account_snapshot_issues": [],
+                        },
+                    },
+                    "projection_polymarket_user_channel": {
+                        "status": "ok",
+                        "last_success_at": now_iso,
+                        "stale_after_ms": 60000,
+                    },
+                },
+                "polymarket_balance": {
+                    "polymarket:USDC": {
+                        "venue": "polymarket",
+                        "available": 100.0,
+                        "total": 100.0,
+                        "currency": "USDC",
+                        "snapshot_cohort_id": "cohort-1",
+                        "snapshot_observed_at": now_iso,
+                    }
+                },
+                "polymarket_orders": {
+                    "order-1": {
+                        "order_id": "order-1",
+                        "contract": {
+                            "venue": "polymarket",
+                            "symbol": "asset-1",
+                            "outcome": "yes",
+                            "title": None,
+                        },
+                        "action": "buy",
+                        "price": 0.45,
+                        "quantity": 2.0,
+                        "remaining_quantity": 2.0,
+                        "status": "resting",
+                        "snapshot_cohort_id": "cohort-2",
+                        "snapshot_observed_at": now_iso,
+                    }
+                },
+                "polymarket_positions": {},
+                "polymarket_fills": {},
+            }[table]
+        )
+
+        with patch.object(
+            run_agent_loop,
+            "build_current_state_read_adapter",
+            return_value=adapter,
+        ):
+            provider = run_agent_loop._build_projected_account_snapshot_provider(
+                SimpleNamespace(opportunity_root="runtime/data")
+            )
+            snapshot = provider(None)
+
+        self.assertFalse(snapshot.complete)
+        self.assertIn(
+            "projected account truth spans multiple snapshot cohorts",
+            snapshot.issues,
+        )
+
     def test_main_run_mode_uses_projected_fair_values_without_manifest(self):
         adapter = FakeAdapter()
         fake_engine = SimpleNamespace(
@@ -589,6 +965,148 @@ class RunAgentLoopTests(unittest.TestCase):
         build_read_adapter.assert_called()
         provider = orchestrator_ctor.call_args.kwargs["fair_value_provider"]
         self.assertIsInstance(provider, ManifestFairValueProvider)
+
+    def test_main_run_mode_enters_watcher_mode_when_execution_lock_is_held(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(
+                halted=False,
+                paused=False,
+                hold_new_orders=False,
+                hold_reason=None,
+            )
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_engine.set_new_order_hold = lambda reason: (
+            setattr(fake_engine.safety_state, "hold_new_orders", True),
+            setattr(fake_engine.safety_state, "hold_reason", reason),
+        )
+        fake_engine.clear_new_order_hold = lambda: None
+        fake_cycle = SimpleNamespace(selected=None)
+        current_state_adapter = SimpleNamespace(read_table=lambda table: {})
+        lock = FakeExecutionLock("primary-loop", acquired=False)
+        stdout = io.StringIO()
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=current_state_adapter,
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_projected_fair_value_provider",
+                return_value=ManifestFairValueProvider(records={}),
+            ),
+            patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+            patch.object(run_agent_loop, "_build_execution_lock", return_value=lock),
+            patch("sys.stdout", stdout),
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--mode",
+                    "run",
+                    "--opportunity-root",
+                    "runtime/data",
+                ],
+            ):
+                result = run_agent_loop.main()
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(result, 0)
+        self.assertTrue(fake_engine.safety_state.hold_new_orders)
+        self.assertIn(
+            "watcher mode: execution lock 'primary-loop'",
+            fake_engine.safety_state.hold_reason,
+        )
+        self.assertTrue(payload["watcher_mode"])
+        self.assertFalse(payload["execution_lock_acquired"])
+        self.assertEqual(lock.acquire_calls, 1)
+        self.assertEqual(lock.release_calls, 1)
+        lifecycle_manager = polling_loop.call_args.kwargs["lifecycle_manager"]
+        self.assertIsNotNone(lifecycle_manager.cancel_handler)
+        self.assertIs(lifecycle_manager.cancel_handler, run_agent_loop._noop_cancel_handler)
+
+    def test_main_run_mode_releases_execution_lock_when_acquired(self):
+        adapter = FakeAdapter()
+        fake_engine = SimpleNamespace(
+            safety_state=SimpleNamespace(
+                halted=False,
+                paused=False,
+                hold_new_orders=True,
+                hold_reason="watcher mode: execution lock 'primary-loop' held by another process",
+            )
+        )
+        fake_engine.status_snapshot = lambda: SimpleNamespace(
+            heartbeat_active=False,
+            heartbeat_healthy_for_trading=True,
+            pending_cancels=[],
+        )
+        fake_engine.request_cancel_order = lambda order, reason: None
+        fake_engine.set_new_order_hold = lambda reason: None
+        fake_engine.clear_new_order_hold = lambda: (
+            setattr(fake_engine.safety_state, "hold_new_orders", False),
+            setattr(fake_engine.safety_state, "hold_reason", None),
+        )
+        fake_cycle = SimpleNamespace(selected=None)
+        current_state_adapter = SimpleNamespace(read_table=lambda table: {})
+        lock = FakeExecutionLock("primary-loop", acquired=True)
+
+        with (
+            patch.object(run_agent_loop, "build_adapter", return_value=adapter),
+            patch.object(run_agent_loop, "validate_runtime"),
+            patch.object(
+                run_agent_loop,
+                "build_current_state_read_adapter",
+                return_value=current_state_adapter,
+            ),
+            patch.object(
+                run_agent_loop,
+                "_build_projected_fair_value_provider",
+                return_value=ManifestFairValueProvider(records={}),
+            ),
+            patch.object(run_agent_loop, "TradingEngine", return_value=fake_engine),
+            patch.object(run_agent_loop, "AgentOrchestrator"),
+            patch.object(run_agent_loop, "PollingAgentLoop") as polling_loop,
+            patch.object(run_agent_loop, "_build_execution_lock", return_value=lock),
+        ):
+            polling_loop.return_value.run.return_value = [fake_cycle]
+
+            with patch(
+                "sys.argv",
+                [
+                    "run_agent_loop.py",
+                    "--venue",
+                    "polymarket",
+                    "--mode",
+                    "run",
+                    "--opportunity-root",
+                    "runtime/data",
+                    "--quiet",
+                ],
+            ):
+                result = run_agent_loop.main()
+
+        self.assertEqual(result, 0)
+        self.assertFalse(fake_engine.safety_state.hold_new_orders)
+        self.assertIsNone(fake_engine.safety_state.hold_reason)
+        self.assertEqual(lock.acquire_calls, 1)
+        self.assertEqual(lock.release_calls, 1)
 
     def test_main_can_apply_venue_from_config_file(self):
         adapter = FakeAdapter()

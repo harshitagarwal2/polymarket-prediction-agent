@@ -40,16 +40,42 @@ OK (skipped=1)
 Command:
 
 ```bash
-uv run --locked --extra research --extra postgres --extra polymarket python -m unittest discover -s tests -p "test_*.py"
+uv run --locked --extra dev --extra postgres --extra polymarket python -m unittest discover -s tests -p "test_*.py"
 ```
 
 Observed result:
 
 ```text
-Ran 650 tests in 7.671s
+ Ran 785 tests in 4.936s
 
 OK (skipped=1)
 ```
+
+## Release-gate check — lockfile
+
+Command:
+
+```bash
+uv lock --check
+```
+
+Observed behavior:
+
+- `uv.lock` matches the current dependency declarations
+
+## Release-gate check — supervised runtime status payload
+
+Command:
+
+```bash
+uv run --locked --extra postgres --extra polymarket operator-cli status --state-file runtime/safety-state.json --quiet
+```
+
+Observed behavior:
+
+- command exits `0`
+- runtime safety payload is machine-readable JSON
+- supervised runtime reports a healthy, non-halted baseline when no live state is active
 
 ## Automated / CI-equivalent smoke — runtime image build
 
@@ -63,6 +89,20 @@ Observed behavior:
 
 - the runtime-capable image builds successfully with the checked-in extras and scripts
 
+## Automated / CI-equivalent smoke — ledger-backed tax audit baseline
+
+Command:
+
+```bash
+make smoke-tax-audit
+```
+
+Observed behavior:
+
+- the smoke provisions Postgres authority through the compose network when no DSN is supplied
+- the smoke seeds `runtime_cycles`, an accepted `execution_orders` row, and projected `polymarket_fills`
+- `operator-cli export-tax-audit` preflights ledger authority, syncs projected fills onto accepted execution-order rows, and exports the resulting `execution_fills` ledger view
+
 ## Automated / CI-equivalent smoke — deterministic service stack
 
 Command:
@@ -75,9 +115,36 @@ Observed behavior:
 
 - sportsbook capture raw ingress succeeds against a deterministic local source
 - Polymarket market snapshot + BBO seed the same Postgres authority path used by the projector
+- Polymarket user-channel/account snapshot ingress seeds projected `polymarket_orders`, `polymarket_fills`, `polymarket_positions`, and `polymarket_balance`
 - `build-mappings`, `build-fair-values`, and `build-opportunities` run against the projected current state
 - the real `run-agent-loop --mode preview` entrypoint completes against the deterministic smoke root
 - projected runtime preview reads back proposals/blocked state from projected authority
+
+## Automated / CI-equivalent smoke — supervised account-truth baseline
+
+Command:
+
+```bash
+make smoke-supervised-live-account-truth
+```
+
+Observed behavior:
+
+- runtime bootstrap reads projected Postgres current-state authority in serious modes
+- supervised `run-agent-loop` and current projection worker keep the account-truth path green under the targeted contract tests
+- Polymarket capture worker tests still validate the account/user-channel ingestion boundary used by the projector
+
+## Automated / CI-equivalent smoke — unattended guardrail bundle
+
+Command:
+
+```bash
+make smoke-unattended-guardrails
+```
+
+Observed behavior:
+
+- alerting, heartbeat, tax-audit, model-drift, supervised account-truth, continuous builder, multi-provider sportsbook, and Polymarket depth/trades baselines all remain executable from the checked-in branch state
 
 ## Automated / CI-equivalent smoke — compose bootstrap and projector ordering
 

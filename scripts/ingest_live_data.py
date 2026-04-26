@@ -217,6 +217,11 @@ def build_new_parser() -> argparse.ArgumentParser:
     mappings.add_argument("--market", default=None)
     mappings.add_argument("--root", default="runtime/data")
     mappings.add_argument("--config-file", default=None)
+    mappings.add_argument(
+        "--require-postgres-authority",
+        action="store_true",
+        help="Fail closed unless projected Postgres authority is configured.",
+    )
     add_quiet_flag(mappings)
 
     fair_values = subparsers.add_parser("build-fair-values")
@@ -226,6 +231,11 @@ def build_new_parser() -> argparse.ArgumentParser:
     fair_values.add_argument("--model-version", default="v1")
     fair_values.add_argument("--consensus-artifact", default=None)
     fair_values.add_argument("--calibration-artifact", default=None)
+    fair_values.add_argument(
+        "--require-postgres-authority",
+        action="store_true",
+        help="Fail closed unless projected Postgres authority is configured.",
+    )
     add_quiet_flag(fair_values)
 
     inference_dataset = subparsers.add_parser("build-inference-dataset")
@@ -234,6 +244,11 @@ def build_new_parser() -> argparse.ArgumentParser:
     inference_dataset.add_argument("--min-bookmaker-count", type=int, default=1)
     inference_dataset.add_argument("--min-match-confidence", type=float, default=0.6)
     inference_dataset.add_argument("--max-book-dispersion", type=float, default=0.1)
+    inference_dataset.add_argument(
+        "--require-postgres-authority",
+        action="store_true",
+        help="Fail closed unless projected Postgres authority is configured.",
+    )
     add_quiet_flag(inference_dataset)
 
     training_dataset = subparsers.add_parser("build-training-dataset")
@@ -247,6 +262,11 @@ def build_new_parser() -> argparse.ArgumentParser:
     opportunities.add_argument("--fee-bps", type=float, default=0.0)
     opportunities.add_argument("--slippage-bps", type=float, default=0.0)
     opportunities.add_argument("--policy-file", default=None)
+    opportunities.add_argument(
+        "--require-postgres-authority",
+        action="store_true",
+        help="Fail closed unless projected Postgres authority is configured.",
+    )
     add_quiet_flag(opportunities)
     return parser
 
@@ -412,7 +432,10 @@ def _stores_for_command(args):
     command = getattr(args, "command", None)
     return _stores(
         args.root,
-        require_postgres=_command_requires_postgres_authority(command),
+        require_postgres=(
+            _command_requires_postgres_authority(command)
+            or bool(getattr(args, "require_postgres_authority", False))
+        ),
         authority_context=(
             f"ingest-live-data {command}"
             if command not in (None, "")

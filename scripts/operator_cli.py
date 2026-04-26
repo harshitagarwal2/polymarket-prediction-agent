@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
@@ -30,6 +31,16 @@ from engine.accounting import (
     compare_truth_summaries,
     summarize_account_snapshot,
 )
+from engine.alerting import (
+    build_runtime_alerts,
+    build_runtime_heartbeat,
+    load_alerts,
+    load_heartbeat,
+    send_alerts,
+    send_heartbeat,
+    write_alerts,
+    write_heartbeat,
+)
 from engine.config_loader import load_config_file, nested_config_value
 from engine import (
     OrderLifecycleManager,
@@ -39,7 +50,13 @@ from engine import (
 from engine.cli_output import add_quiet_flag, emit_json, emit_lines
 from engine.interfaces import NoopStrategy
 from engine.runtime_policy import load_runtime_policy
+from engine.runtime_bootstrap import build_current_state_read_adapter
 from engine.runtime_bootstrap import build_adapter as _build_adapter
+from engine.model_drift import build_model_drift_report, write_model_drift_report
+from engine.model_drift import (
+    build_model_drift_report,
+    write_model_drift_report,
+)
 from engine.runner import TradingEngine
 from engine.safety_state import (
     EngineSafetyState,
@@ -53,6 +70,11 @@ from storage.journal import (
     summarize_recent_runtime,
     summarize_scan_cycle_events,
 )
+from storage import (
+    record_operator_sync_quote_result,
+    sync_execution_fills_from_projected_state,
+)
+from storage.postgres import ExecutionFillRepository, bootstrap_postgres, require_postgres_dsn
 from llm import (
     advisory_summary_payload,
     build_llm_advisory_artifact,
@@ -92,7 +114,21 @@ def _operator_risk_limits(policy) -> RiskLimits:
 def _operator_engine_kwargs(policy) -> dict[str, Any]:
     if policy is None:
         return {}
-    return dict(policy.trading_engine.build_kwargs())
+    supported_keys = {
+        "cancel_retry_interval_seconds",
+        "cancel_retry_max_attempts",
+        "cancel_attention_timeout_seconds",
+        "overlay_max_age_seconds",
+        "max_active_wallet_balance",
+        "forced_refresh_debounce_seconds",
+        "pending_submission_recovery_seconds",
+        "pending_submission_expiry_seconds",
+    }
+    return {
+        key: value
+        for key, value in dict(policy.trading_engine.build_kwargs()).items()
+        if key in supported_keys
+    }
 
 
 def _normalize_payload(value: Any) -> Any:
@@ -223,6 +259,11 @@ def _runtime_health_payload(state: EngineSafetyState) -> dict[str, Any]:
         item for item in state.recovery_items if item.status == "open"
     ]
     reasons: list[str] = []
+    watcher_mode = bool(
+        state.hold_new_orders
+        and isinstance(state.hold_reason, str)
+        and state.hold_reason.startswith("watcher mode:")
+    )
     if state.halted and state.reason:
         reasons.append(state.reason)
     if state.paused and state.pause_reason:
@@ -242,6 +283,8 @@ def _runtime_health_payload(state: EngineSafetyState) -> dict[str, Any]:
 
     if state.halted:
         runtime_state = "halted"
+    elif watcher_mode:
+        runtime_state = "watcher"
     elif state.paused:
         runtime_state = "paused"
     elif state.hold_new_orders:
@@ -262,6 +305,7 @@ def _runtime_health_payload(state: EngineSafetyState) -> dict[str, Any]:
 
     kill_switch_reasons = extract_kill_switch_reasons(state.reason)
     kill_switch_active = bool(kill_switch_reasons)
+    hold_reason = state.hold_reason or ""
 
     return _normalize_payload(
         {
@@ -275,6 +319,19 @@ def _runtime_health_payload(state: EngineSafetyState) -> dict[str, Any]:
             "open_recovery_count": len(open_recovery_items),
             "overlay_degraded": state.overlay_degraded,
             "overlay_delta_suppressed": state.overlay_delta_suppressed,
+            "watcher_mode": watcher_mode,
+            "daily_realized_pnl": state.daily_realized_pnl,
+            "weekly_realized_pnl": float(
+                getattr(state, "weekly_realized_pnl", 0.0) or 0.0
+            ),
+            "cumulative_realized_pnl": float(
+                getattr(state, "cumulative_realized_pnl", 0.0) or 0.0
+            ),
+            "daily_loss_hold": "daily loss limit reached" in hold_reason,
+            "weekly_loss_hold": "weekly loss limit reached" in hold_reason,
+            "cumulative_loss_hold": "cumulative loss limit reached" in hold_reason,
+            "wallet_balance_cap_hold": "active wallet balance exceeds cap"
+            in hold_reason,
             "resume_trading_eligible": (
                 not state.halted
                 and not state.paused
@@ -414,6 +471,14 @@ def _journal_action(args, action: str, payload: dict) -> None:
     if "cycle_id" not in payload:
         payload = {"cycle_id": uuid.uuid4().hex, **payload}
     EventJournal(journal_path).append(action, payload)
+
+
+def _preflight_execution_ledger(args, *, context: str) -> None:
+    opportunity_root = getattr(args, "opportunity_root", None)
+    if opportunity_root in (None, ""):
+        return
+    dsn = require_postgres_dsn(Path(opportunity_root) / "postgres", context=context)
+    bootstrap_postgres(dsn)
 
 
 def _recent_execution_status(recent_runtime: dict, snapshot) -> dict:
@@ -634,6 +699,137 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_build_alerts(args) -> int:
+    status_payload = json.loads(
+        Path(args.runtime_status_file).read_text(encoding="utf-8")
+    )
+    if not isinstance(status_payload, dict):
+        raise ValueError("runtime status payload must be a JSON object")
+    payload = build_runtime_alerts(status_payload)
+    if getattr(args, "output", None):
+        write_alerts(args.output, payload)
+    emit_json(payload, quiet=args.quiet)
+    return 0
+
+
+def cmd_send_alerts(args) -> int:
+    payload = load_alerts(args.alerts_file)
+    result = send_alerts(
+        payload,
+        webhook_url=args.webhook_url,
+        minimum_severity=args.minimum_severity,
+        dedupe_state_file=args.dedupe_state_file,
+        dry_run=args.dry_run,
+    )
+    emit_json(result, quiet=args.quiet)
+    return 0
+
+
+def cmd_build_heartbeat(args) -> int:
+    status_payload = json.loads(
+        Path(args.runtime_status_file).read_text(encoding="utf-8")
+    )
+    if not isinstance(status_payload, dict):
+        raise ValueError("runtime status payload must be a JSON object")
+    payload = build_runtime_heartbeat(status_payload)
+    if getattr(args, "output", None):
+        write_heartbeat(args.output, payload)
+    emit_json(payload, quiet=args.quiet)
+    return 0
+
+
+def cmd_send_heartbeat(args) -> int:
+    payload = load_heartbeat(args.heartbeat_file)
+    result = send_heartbeat(
+        payload,
+        webhook_url=args.webhook_url,
+        dry_run=args.dry_run,
+    )
+    emit_json(result, quiet=args.quiet)
+    return 0
+
+
+def cmd_export_tax_audit(args) -> int:
+    if args.opportunity_root in (None, ""):
+        raise RuntimeError("tax audit export requires --opportunity-root")
+    _preflight_execution_ledger(args, context="operator-cli export-tax-audit")
+    synced_fill_count = sync_execution_fills_from_projected_state(args.opportunity_root)
+    fill_rows = ExecutionFillRepository(Path(args.opportunity_root) / "postgres").read_all()
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "fill_id",
+        "order_id",
+        "venue",
+        "symbol",
+        "outcome",
+        "action",
+        "price",
+        "quantity",
+        "fee",
+        "fill_ts",
+        "snapshot_observed_at",
+        "snapshot_cohort_id",
+    ]
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for payload in fill_rows.values():
+            if not isinstance(payload, dict):
+                continue
+            contract_key = str(payload.get("contract_key") or "")
+            symbol = contract_key.split(":", 1)[0] if contract_key else None
+            outcome = (
+                contract_key.split(":", 1)[1]
+                if contract_key and ":" in contract_key
+                else None
+            )
+            raw_payload = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+            writer.writerow(
+                {
+                    "fill_id": payload.get("fill_key") or payload.get("fill_id"),
+                    "order_id": payload.get("order_id"),
+                    "venue": "polymarket",
+                    "symbol": symbol,
+                    "outcome": outcome,
+                    "action": raw_payload.get("action") if isinstance(raw_payload, dict) else None,
+                    "price": payload.get("price"),
+                    "quantity": payload.get("quantity"),
+                    "fee": payload.get("fee"),
+                    "fill_ts": payload.get("fill_ts"),
+                    "snapshot_observed_at": payload.get("snapshot_observed_at"),
+                    "snapshot_cohort_id": payload.get("snapshot_cohort_id"),
+                }
+            )
+    emit_json(
+        {
+            "ok": True,
+            "output": str(output_path),
+            "row_count": len(fill_rows),
+            "synced_fill_count": synced_fill_count,
+        },
+        quiet=args.quiet,
+    )
+    return 0
+
+
+def cmd_build_model_drift(args) -> int:
+    benchmark_payload = json.loads(
+        Path(args.benchmark_report_file).read_text(encoding="utf-8")
+    )
+    if not isinstance(benchmark_payload, dict):
+        raise ValueError("benchmark report payload must be a JSON object")
+    payload = build_model_drift_report(
+        benchmark_payload,
+        max_brier_score=args.max_brier_score,
+        max_expected_calibration_error=args.max_expected_calibration_error,
+    )
+    if getattr(args, "output", None):
+        write_model_drift_report(args.output, payload)
+    emit_json(payload, quiet=args.quiet)
+    return 0
+
+
 def cmd_pause(args) -> int:
     engine = _control_engine(args)
     engine.pause(args.reason)
@@ -834,6 +1030,7 @@ def cmd_cancel_stale(args) -> int:
 def cmd_sync_quote(args) -> int:
     policy = _load_operator_policy(args)
     adapter = _build_adapter(args.venue, args, policy=policy)
+    _preflight_execution_ledger(args, context="operator-cli sync-quote")
     contract = Contract(
         venue=Venue(args.venue),
         symbol=args.symbol,
@@ -860,18 +1057,39 @@ def cmd_sync_quote(args) -> int:
         proposal,
         reason=args.rationale,
     )
+    cycle_id = uuid.uuid4().hex
+    ledger_summary = None
+    ledger_error = False
+    opportunity_root = getattr(args, "opportunity_root", None)
+    if opportunity_root not in (None, ""):
+        try:
+            ledger_summary = record_operator_sync_quote_result(
+                opportunity_root,
+                cycle_id=cycle_id,
+                contract=contract,
+                proposal=proposal,
+                quote_result=result,
+            )
+        except Exception as exc:
+            ledger_error = True
+            ledger_summary = {
+                "error_kind": exc.__class__.__name__,
+                "error_message": str(exc),
+            }
     payload = {
         "venue": args.venue,
         "symbol": args.symbol,
         "outcome": args.outcome,
+        "cycle_id": cycle_id,
         "shell_action": result.action,
         "cancelled_order_ids": list(result.cancelled_order_ids),
         "submitted_order_ids": list(result.submitted_order_ids),
         "placement_count": len(result.placements),
+        "ledger_summary": ledger_summary,
     }
     _journal_action(args, "operator_sync_quote", payload)
     print(json.dumps(payload, indent=2))
-    return 0
+    return 1 if ledger_error else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -888,7 +1106,59 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument(
         "--outcome", choices=["yes", "no", "unknown"], default="unknown"
     )
+    add_quiet_flag(status)
     status.set_defaults(func=cmd_status)
+
+    build_alerts = subparsers.add_parser("build-alerts")
+    build_alerts.add_argument("--runtime-status-file", required=True)
+    build_alerts.add_argument("--output", default=None)
+    add_quiet_flag(build_alerts)
+    build_alerts.set_defaults(func=cmd_build_alerts)
+
+    send_alerts_cmd = subparsers.add_parser("send-alerts")
+    send_alerts_cmd.add_argument("--alerts-file", required=True)
+    send_alerts_cmd.add_argument("--webhook-url", required=True)
+    send_alerts_cmd.add_argument(
+        "--minimum-severity",
+        choices=["info", "warning", "critical"],
+        default="warning",
+    )
+    send_alerts_cmd.add_argument(
+        "--dedupe-state-file", default="runtime/alert_dedupe_state.json"
+    )
+    send_alerts_cmd.add_argument("--dry-run", action="store_true")
+    add_quiet_flag(send_alerts_cmd)
+    send_alerts_cmd.set_defaults(func=cmd_send_alerts)
+
+    build_heartbeat = subparsers.add_parser("build-heartbeat")
+    build_heartbeat.add_argument("--runtime-status-file", required=True)
+    build_heartbeat.add_argument("--output", default=None)
+    add_quiet_flag(build_heartbeat)
+    build_heartbeat.set_defaults(func=cmd_build_heartbeat)
+
+    send_heartbeat_cmd = subparsers.add_parser("send-heartbeat")
+    send_heartbeat_cmd.add_argument("--heartbeat-file", required=True)
+    send_heartbeat_cmd.add_argument("--webhook-url", required=True)
+    send_heartbeat_cmd.add_argument("--dry-run", action="store_true")
+    add_quiet_flag(send_heartbeat_cmd)
+    send_heartbeat_cmd.set_defaults(func=cmd_send_heartbeat)
+
+    export_tax_audit = subparsers.add_parser("export-tax-audit")
+    export_tax_audit.add_argument("--opportunity-root", required=True)
+    export_tax_audit.add_argument("--output", required=True)
+    export_tax_audit.add_argument("--require-postgres", action="store_true")
+    add_quiet_flag(export_tax_audit)
+    export_tax_audit.set_defaults(func=cmd_export_tax_audit)
+
+    build_model_drift_cmd = subparsers.add_parser("build-model-drift")
+    build_model_drift_cmd.add_argument("--benchmark-report-file", required=True)
+    build_model_drift_cmd.add_argument("--output", default=None)
+    build_model_drift_cmd.add_argument("--max-brier-score", type=float, default=None)
+    build_model_drift_cmd.add_argument(
+        "--max-expected-calibration-error", type=float, default=None
+    )
+    add_quiet_flag(build_model_drift_cmd)
+    build_model_drift_cmd.set_defaults(func=cmd_build_model_drift)
 
     pause = subparsers.add_parser("pause")
     pause.add_argument("--state-file", default="runtime/safety-state.json")
@@ -982,6 +1252,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync_quote.add_argument("--rationale", default="operator quote sync")
     sync_quote.add_argument("--journal", default=None)
     sync_quote.add_argument("--state-file", default="runtime/safety-state.json")
+    sync_quote.add_argument("--opportunity-root", default="runtime/data")
     sync_quote.add_argument("--policy-file", default=None)
     sync_quote.add_argument("--config-file", default=None)
     sync_quote.set_defaults(func=cmd_sync_quote)

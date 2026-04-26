@@ -163,3 +163,55 @@ class ModelRegistryRecord:
     feature_spec: dict
     metrics: dict
     artifact_uri: str
+
+
+@dataclass(frozen=True)
+class RuntimeCycleRecord:
+    cycle_id: str
+    mode: str
+    started_at: str
+    selected_market_key: str | None
+    policy_allowed: bool | None
+    halted: bool
+    payload: dict
+
+
+@dataclass(frozen=True)
+class TradeDecisionRecord:
+    cycle_id: str
+    market_id: str
+    contract_key: str | None
+    side: str | None
+    fair_value: float | None
+    market_price: float | None
+    score: float | None
+    blocked: bool
+    blocked_reason: str | None
+    blocked_reasons: tuple[str, ...]
+    payload: dict
+
+
+@dataclass(frozen=True)
+class ExecutionOrderRecord:
+    cycle_id: str
+    decision_id: int | None
+    order_id: str | None
+    contract_key: str | None
+    accepted: bool
+    status: str
+    message: str | None
+    payload: dict
+
+
+@dataclass(frozen=True)
+class ExecutionFillRecord:
+    fill_key: str
+    order_id: str
+    contract_key: str | None
+    fill_ts: str | None
+    price: float | None
+    quantity: float | None
+    fee: float | None
+    snapshot_observed_at: str | None
+    snapshot_cohort_id: str | None
+    payload: dict

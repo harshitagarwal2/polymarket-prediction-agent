@@ -33,7 +33,9 @@ Operators should be able to inspect:
 - runtime preview/state via `operator-cli status`
 - pending cancels, pending submissions, recovery items, and refresh requests through the persisted safety state
 
-These checks are the current repo-backed substitute for external dashboards/alerts.
+These checks are the current repo-backed local observability baseline. The repo also now includes a webhook alerting baseline driven by `operator-cli build-alerts` / `send-alerts`, a heartbeat baseline driven by `operator-cli build-heartbeat` / `send-heartbeat`, a tax/audit CSV baseline driven by `operator-cli export-tax-audit`, and a benchmark-driven model-drift baseline driven by `operator-cli build-model-drift`. The tax/audit command now syncs authoritative projected fills onto accepted execution-order ledger rows before writing the CSV, so the export follows the execution ledger rather than raw projected fill snapshots alone. Use `make smoke-alerting`, `make smoke-heartbeat`, `make smoke-tax-audit`, `make smoke-model-drift`, or the umbrella `make smoke-unattended-guardrails` to exercise those baselines locally. Serious Polymarket live modes now also require explicit route/compliance attestation (`POLYMARKET_ROUTE_LABEL`, `POLYMARKET_GEO_COMPLIANCE_ACK=true`), support file-backed or command-based key injection (`POLYMARKET_PRIVATE_KEY_FILE`, `POLYMARKET_PRIVATE_KEY_COMMAND`), can fail closed on an explicit private-order-flow requirement (`POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true`), can apply a simple shared HTTP compliance throttle (`PREDICTION_MARKET_HTTP_MIN_INTERVAL_SECONDS`), and expose an explicit autonomous-mode contract (`--autonomous-mode` / `trading_engine.autonomous_mode`). Full unattended paging, external dead-man's-switch operations, and richer tax-lot treatment still remain downstream Stage B work.
+
+In practical terms, the autonomous-mode contract is not satisfied unless serious Polymarket live runs also provide `--execution-lock-name` and `--drift-report-file` on top of the policy-backed risk and wallet guardrails.
 
 ## Operations checklist
 

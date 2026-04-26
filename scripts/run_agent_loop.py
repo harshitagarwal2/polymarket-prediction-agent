@@ -33,7 +33,14 @@ from engine.fair_value_loader import (
     ReloadingFairValueProvider,
     build_fair_value_provider,
 )
-from engine.runtime_bootstrap import build_adapter, build_current_state_read_adapter
+from engine.model_drift import load_model_drift_report
+from engine.runtime_bootstrap import (
+    build_adapter,
+    build_current_state_read_adapter,
+    resolve_polymarket_private_key,
+    validate_polymarket_private_order_flow,
+    validate_polymarket_live_routing,
+)
 from engine.runtime_bootstrap import parse_comma_separated as _parse_comma_separated
 from engine.runtime_metrics import RuntimeMetricsCollector, RuntimeProposalJournal
 from engine.runtime_policy import load_runtime_policy
@@ -49,12 +56,18 @@ from risk.kill_switch import (
 from risk.limits import RiskEngine, RiskLimits
 from storage.current_projection import build_preview_runtime_context
 from storage.current_selection import best_mapping_by_market
+from storage import (
+    persist_runtime_execution_ledger,
+    record_runtime_cycle_results,
+    sync_execution_fills_from_projected_state,
+)
 from storage.journal import EventJournal
+from storage.postgres.bootstrap import PostgresAdvisoryLock, require_postgres_dsn
 
 
 def _required_env_vars(venue_name: str) -> list[str]:
     if venue_name == "polymarket":
-        return ["POLYMARKET_PRIVATE_KEY"]
+        return []
     if venue_name == "kalshi":
         return ["KALSHI_API_KEY_ID", "KALSHI_PRIVATE_KEY_PATH"]
     raise ValueError(f"unsupported venue: {venue_name}")
@@ -62,6 +75,67 @@ def _required_env_vars(venue_name: str) -> list[str]:
 
 def _runtime_requires_postgres_authority(args) -> bool:
     return getattr(args, "mode", None) in {"run", "pair-run"}
+
+
+def _watcher_hold_reason(lock_name: str) -> str:
+    return f"watcher mode: execution lock '{lock_name}' held by another process"
+
+
+def _build_execution_lock(args) -> PostgresAdvisoryLock | None:
+    lock_name = getattr(args, "execution_lock_name", None)
+    if lock_name in (None, "") or not _runtime_requires_postgres_authority(args):
+        return None
+    dsn = require_postgres_dsn(
+        Path(args.opportunity_root) / "postgres",
+        context="run-agent-loop execution lock",
+    )
+    return PostgresAdvisoryLock(dsn, str(lock_name))
+
+
+def _model_drift_hold_reason(args) -> str | None:
+    report_path = getattr(args, "drift_report_file", None)
+    if report_path in (None, "") or not _runtime_requires_postgres_authority(args):
+        return None
+    payload = load_model_drift_report(report_path)
+    if bool(payload.get("ok", False)):
+        return None
+    reasons = list(payload.get("reasons") or [])
+    suffix = f": {'; '.join(reasons)}" if reasons else ""
+    return f"model drift report blocked live mode{suffix}"
+
+
+def _autonomous_mode_requested(args, policy) -> bool:
+    if getattr(args, "autonomous_mode", False):
+        return True
+    return bool(policy is not None and policy.trading_engine.autonomous_mode)
+
+
+def _validate_autonomous_mode(args, policy) -> None:
+    if not _autonomous_mode_requested(args, policy):
+        return
+    if not _runtime_requires_postgres_authority(args):
+        raise RuntimeError("autonomous mode requires run or pair-run mode")
+    if getattr(args, "execution_lock_name", None) in (None, ""):
+        raise RuntimeError("autonomous mode requires --execution-lock-name")
+    if getattr(args, "drift_report_file", None) in (None, ""):
+        raise RuntimeError("autonomous mode requires --drift-report-file")
+    if policy is None:
+        raise RuntimeError("autonomous mode requires a runtime policy file")
+    if policy.trading_engine.max_active_wallet_balance is None:
+        raise RuntimeError(
+            "autonomous mode requires trading_engine.max_active_wallet_balance"
+        )
+    if policy.risk_limits.max_weekly_loss is None:
+        raise RuntimeError("autonomous mode requires risk_limits.max_weekly_loss")
+    if policy.risk_limits.max_cumulative_loss is None:
+        raise RuntimeError("autonomous mode requires risk_limits.max_cumulative_loss")
+    private_flow = (
+        (os.getenv("POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED") or "").strip().lower()
+    )
+    if private_flow not in {"1", "true", "yes"}:
+        raise RuntimeError(
+            "autonomous mode requires POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true"
+        )
 
 
 def validate_runtime(args) -> None:
@@ -92,6 +166,14 @@ def validate_runtime(args) -> None:
         raise RuntimeError(
             "missing required environment variables: " + ", ".join(missing_env_vars)
         )
+
+    if args.venue == "polymarket" and resolve_polymarket_private_key() in (None, ""):
+        raise RuntimeError(
+            "missing required Polymarket private key; set POLYMARKET_PRIVATE_KEY or POLYMARKET_PRIVATE_KEY_FILE"
+        )
+    if args.venue == "polymarket" and _runtime_requires_postgres_authority(args):
+        validate_polymarket_live_routing(context="run-agent-loop live mode")
+        validate_polymarket_private_order_flow(context="run-agent-loop live mode")
 
     if args.venue == "kalshi":
         private_key_path = Path(os.getenv("KALSHI_PRIVATE_KEY_PATH", ""))
@@ -140,6 +222,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--polymarket-live-user-markets", default=None)
     parser.add_argument("--polymarket-user-ws-host", default=None)
     parser.add_argument("--opportunity-root", default=None)
+    parser.add_argument("--execution-lock-name", default=None)
+    parser.add_argument("--drift-report-file", default=None)
+    parser.add_argument("--autonomous-mode", action="store_true")
     add_quiet_flag(parser)
     return parser
 
@@ -588,6 +673,19 @@ def _apply_runtime_kill_switch(engine, reason: str) -> None:
     setattr(safety_state, "reason", reason)
 
 
+def _noop_cancel_handler(order, reason) -> None:
+    del order, reason
+
+
+def _results_attempted_execution(results) -> bool:
+    for result in results:
+        if getattr(result, "execution", None) is not None:
+            return True
+        if getattr(result, "selected", None) is not None:
+            return True
+    return False
+
+
 def main() -> int:
     args = build_parser().parse_args()
     config = load_config_file(args.config_file) if args.config_file else {}
@@ -607,6 +705,23 @@ def main() -> int:
     )
     if args.opportunity_root is None and isinstance(configured_opportunity_root, str):
         args.opportunity_root = configured_opportunity_root
+    configured_execution_lock_name = nested_config_value(
+        config, "runtime", "execution_lock_name"
+    )
+    if args.execution_lock_name is None and isinstance(
+        configured_execution_lock_name, str
+    ):
+        args.execution_lock_name = configured_execution_lock_name
+    configured_drift_report_file = nested_config_value(
+        config, "runtime", "drift_report_file"
+    )
+    if args.drift_report_file is None and isinstance(configured_drift_report_file, str):
+        args.drift_report_file = configured_drift_report_file
+    configured_autonomous_mode = nested_config_value(
+        config, "runtime", "autonomous_mode"
+    )
+    if not args.autonomous_mode and isinstance(configured_autonomous_mode, bool):
+        args.autonomous_mode = configured_autonomous_mode
     configured_interval_seconds = nested_config_value(
         config, "runtime", "interval_seconds"
     )
@@ -630,7 +745,10 @@ def main() -> int:
         args.mode = "preview" if configured_preview_only else "run"
     validate_runtime(args)
     policy = load_runtime_policy(args.policy_file) if args.policy_file else None
+    _validate_autonomous_mode(args, policy)
     adapter = build_adapter(args.venue, args, policy=policy)
+    execution_lock = _build_execution_lock(args)
+    execution_lock_acquired: bool | None = None
     try:
         fair_value_field = policy.fair_value.field if policy is not None else "raw"
 
@@ -747,6 +865,18 @@ def main() -> int:
                     trading_engine_policy.pending_submission_expiry_seconds
                 ),
             )
+        if execution_lock is not None:
+            execution_lock_acquired = execution_lock.acquire()
+            if execution_lock_acquired:
+                if getattr(
+                    engine.safety_state, "hold_reason", None
+                ) == _watcher_hold_reason(execution_lock.name):
+                    engine.clear_new_order_hold()
+            else:
+                engine.set_new_order_hold(_watcher_hold_reason(execution_lock.name))
+        drift_hold_reason = _model_drift_hold_reason(args)
+        if drift_hold_reason is not None:
+            engine.set_new_order_hold(drift_hold_reason)
         kill_switch_state, kill_switch_reasons = _build_runtime_kill_switch(args)
         kill_switch_reason = format_kill_switch_reason(kill_switch_state)
         if kill_switch_reason is not None:
@@ -773,10 +903,33 @@ def main() -> int:
             lifecycle_manager=OrderLifecycleManager(
                 adapter=adapter,
                 policy=lifecycle_policy,
-                cancel_handler=getattr(engine, "request_cancel_order", None),
+                cancel_handler=(
+                    _noop_cancel_handler
+                    if execution_lock is not None and execution_lock_acquired is False
+                    else getattr(engine, "request_cancel_order", None)
+                ),
             ),
         )
         results = loop.run()
+        ledger_summary = None
+        ledger_error: Exception | None = None
+        ledger_required = _results_attempted_execution(results)
+        if _runtime_requires_postgres_authority(args) and args.opportunity_root:
+            try:
+                ledger_summary = persist_runtime_execution_ledger(
+                    args.opportunity_root,
+                    mode=args.mode,
+                    results=results,
+                )
+            except Exception as exc:
+                ledger_error = exc
+                halt = getattr(engine, "halt", None)
+                if ledger_required and callable(halt):
+                    halt(f"ledger persistence failure: {exc}")
+                ledger_summary = {
+                    "error_kind": exc.__class__.__name__,
+                    "error_message": str(exc),
+                }
         metrics = _metrics_collector(args)
         preview_order_proposals, blocked_preview_orders = (
             _build_preview_order_proposals(
@@ -865,6 +1018,13 @@ def main() -> int:
                 "pending_cancel_post_fill_seen": any(
                     getattr(item, "post_cancel_fill_seen", False)
                     for item in pending_cancels
+                ),
+                "execution_lock_name": (
+                    execution_lock.name if execution_lock is not None else None
+                ),
+                "execution_lock_acquired": execution_lock_acquired,
+                "watcher_mode": bool(
+                    execution_lock is not None and execution_lock_acquired is False
                 ),
                 "last_depth_assessment": getattr(status, "last_depth_assessment", None),
                 "last_live_delta_applied_at": (
@@ -1041,6 +1201,7 @@ def main() -> int:
                 "preview_order_proposals": preview_order_proposals,
                 "preview_order_blocked_count": len(blocked_preview_orders),
                 "preview_order_blocked": blocked_preview_orders,
+                "ledger_summary": ledger_summary,
                 "shadow_quote_plan": (
                     getattr(results[-1], "shadow_quote_plan", None) if results else None
                 ),
@@ -1056,8 +1217,10 @@ def main() -> int:
             preview_order_proposal_count=len(preview_order_proposals),
             preview_order_blocked_count=len(blocked_preview_orders),
         )
-        return 0
+        return 1 if ledger_error is not None and ledger_required else 0
     finally:
+        if execution_lock is not None:
+            execution_lock.release()
         stop_heartbeat = getattr(adapter, "stop_heartbeat", None)
         if callable(stop_heartbeat):
             stop_heartbeat()

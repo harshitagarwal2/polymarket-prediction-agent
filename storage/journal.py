@@ -1,11 +1,25 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 import uuid
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
+
+from adapters.types import Contract, OrderIntent, PlacementResult
+from storage.current_read_adapter import ProjectedCurrentStateReadAdapter
+from storage.postgres import (
+    ExecutionFillRecord,
+    ExecutionFillRepository,
+    ExecutionOrderRecord,
+    ExecutionOrderRepository,
+    RuntimeCycleRecord,
+    RuntimeCycleRepository,
+    TradeDecisionRecord,
+    TradeDecisionRepository,
+)
 
 
 def _normalize_for_json(value: Any) -> Any:
@@ -372,3 +386,305 @@ def summarize_recent_runtime(events: list[dict[str, Any]]) -> dict[str, Any]:
         )
 
     return summary
+
+
+def _postgres_root(root: str | Path) -> Path:
+    root_path = Path(root)
+    return root_path if root_path.name == "postgres" else root_path / "postgres"
+
+
+def _selected_market_key(result: object) -> str | None:
+    selected = getattr(result, "selected", None)
+    if selected is None:
+        return None
+    contract = getattr(selected, "contract", None)
+    if isinstance(contract, Contract):
+        return contract.market_key
+    market_key = getattr(selected, "market_key", None)
+    return str(market_key) if market_key not in (None, "") else None
+
+
+def _cycle_started_at(result: object) -> str:
+    execution = getattr(result, "execution", None)
+    context = getattr(execution, "context", None)
+    book = getattr(context, "book", None)
+    observed_at = getattr(book, "observed_at", None)
+    if isinstance(observed_at, datetime):
+        return observed_at.astimezone(timezone.utc).isoformat()
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _placement_status(placement: PlacementResult) -> str:
+    status = getattr(placement, "status", None)
+    value = getattr(status, "value", None)
+    if value not in (None, ""):
+        return str(value)
+    if status not in (None, ""):
+        return str(status)
+    return "unknown"
+
+
+def _placement_contract_key(result: object, index: int) -> str | None:
+    intents = list(getattr(result, "intents", []) or [])
+    if index < len(intents) and isinstance(intents[index], OrderIntent):
+        return intents[index].contract.market_key
+    execution = getattr(result, "execution", None)
+    proposed = list(getattr(execution, "proposed", []) or [])
+    if index < len(proposed) and isinstance(proposed[index], OrderIntent):
+        return proposed[index].contract.market_key
+    return _selected_market_key(result)
+
+
+def record_runtime_cycle_results(
+    root: str | Path,
+    *,
+    mode: str,
+    results: Sequence[object],
+    connection: Any | None = None,
+) -> dict[str, int]:
+    postgres_root = _postgres_root(root)
+    cycle_repo = RuntimeCycleRepository(postgres_root)
+    decision_repo = TradeDecisionRepository(postgres_root)
+    order_repo = ExecutionOrderRepository(postgres_root)
+    cycle_count = 0
+    decision_count = 0
+    order_count = 0
+
+    for index, result in enumerate(results, start=1):
+        cycle_id = str(
+            getattr(result, "cycle_id", None) or uuid.uuid4().hex
+        )
+        execution = getattr(result, "execution", None)
+        selected = getattr(result, "selected", None)
+        cycle_repo.upsert(
+            cycle_id,
+            RuntimeCycleRecord(
+                cycle_id=cycle_id,
+                mode=mode,
+                started_at=_cycle_started_at(result),
+                selected_market_key=_selected_market_key(result),
+                policy_allowed=getattr(result, "policy_allowed", None),
+                halted=False,
+                payload={
+                    "policy_reasons": list(getattr(result, "policy_reasons", []) or []),
+                    "gate_trace": list(getattr(result, "gate_trace", []) or []),
+                    "shadow_quote_plan": getattr(result, "shadow_quote_plan", None),
+                    "selected": normalize_for_json(selected),
+                    "execution": normalize_for_json(execution),
+                },
+            ),
+            connection=connection,
+        )
+        cycle_count += 1
+
+        decision_id: int | None = None
+        if selected is not None:
+            contract = getattr(selected, "contract", None)
+            decision_row = decision_repo.append(
+                TradeDecisionRecord(
+                    cycle_id=cycle_id,
+                    market_id=str(
+                        getattr(contract, "symbol", None)
+                        or getattr(selected, "market_key", None)
+                        or "unknown"
+                    ),
+                    contract_key=(
+                        contract.market_key if isinstance(contract, Contract) else None
+                    ),
+                    side=getattr(getattr(selected, "action", None), "value", None),
+                    fair_value=(
+                        float(getattr(selected, "fair_value"))
+                        if getattr(selected, "fair_value", None) is not None
+                        else None
+                    ),
+                    market_price=(
+                        float(getattr(selected, "market_price"))
+                        if getattr(selected, "market_price", None) is not None
+                        else None
+                    ),
+                    score=(
+                        float(getattr(selected, "score"))
+                        if getattr(selected, "score", None) is not None
+                        else None
+                    ),
+                    blocked=not bool(getattr(result, "policy_allowed", False)),
+                    blocked_reason=(
+                        (list(getattr(result, "policy_reasons", []) or []) or [None])[0]
+                    ),
+                    blocked_reasons=tuple(
+                        str(item)
+                        for item in list(getattr(result, "policy_reasons", []) or [])
+                    ),
+                    payload={
+                        "selected": normalize_for_json(selected),
+                        "execution": normalize_for_json(execution),
+                    },
+                ),
+                connection=connection,
+            )
+            decision_id = int(decision_row["decision_id"])
+            decision_count += 1
+
+        placements = list(getattr(execution, "placements", []) or [])
+        for placement_index, placement in enumerate(placements):
+            if not isinstance(placement, PlacementResult):
+                continue
+            order_repo.append(
+                ExecutionOrderRecord(
+                    cycle_id=cycle_id,
+                    decision_id=decision_id,
+                    order_id=placement.order_id,
+                    contract_key=_placement_contract_key(result, placement_index),
+                    accepted=placement.accepted,
+                    status=_placement_status(placement),
+                    message=placement.message,
+                    payload={
+                        "placement": normalize_for_json(placement),
+                        "selected_market_key": _selected_market_key(result),
+                    },
+                ),
+                connection=connection,
+            )
+            order_count += 1
+
+    return {
+        "cycle_count": cycle_count,
+        "decision_count": decision_count,
+        "order_count": order_count,
+    }
+
+
+def sync_execution_fills_from_projected_state(root: str | Path) -> int:
+    return _sync_execution_fills_from_projected_state(root)
+
+
+def _sync_execution_fills_from_projected_state(
+    root: str | Path,
+    *,
+    connection: Any | None = None,
+) -> int:
+    postgres_root = _postgres_root(root)
+    order_repo = ExecutionOrderRepository(postgres_root)
+    fill_repo = ExecutionFillRepository(postgres_root)
+    accepted_order_ids = {
+        str(payload.get("order_id"))
+        for payload in order_repo.read_all(connection=connection).values()
+        if isinstance(payload, dict)
+        and bool(payload.get("accepted", False))
+        and payload.get("order_id") not in (None, "")
+    }
+    if not accepted_order_ids:
+        return 0
+
+    read_adapter = ProjectedCurrentStateReadAdapter.from_root(root)
+    projected_fills = read_adapter.read_table("polymarket_fills")
+    synced = 0
+    for payload in projected_fills.values():
+        if not isinstance(payload, dict):
+            continue
+        order_id = str(payload.get("order_id") or "")
+        if not order_id or order_id not in accepted_order_ids:
+            continue
+        fill_key = str(payload.get("fill_id") or payload.get("fill_key") or "")
+        if not fill_key:
+            continue
+        raw_contract = payload.get("contract")
+        contract: dict[str, object] = raw_contract if isinstance(raw_contract, dict) else {}
+        contract_key = (
+            f"{contract.get('symbol')}:{contract.get('outcome')}"
+            if contract.get("symbol") not in (None, "")
+            and contract.get("outcome") not in (None, "")
+            else None
+        )
+        fill_repo.upsert(
+            fill_key,
+            ExecutionFillRecord(
+                fill_key=fill_key,
+                order_id=order_id,
+                contract_key=contract_key,
+                fill_ts=payload.get("snapshot_observed_at"),
+                price=(float(payload["price"]) if payload.get("price") is not None else None),
+                quantity=(
+                    float(payload["quantity"]) if payload.get("quantity") is not None else None
+                ),
+                fee=(float(payload["fee"]) if payload.get("fee") is not None else None),
+                snapshot_observed_at=payload.get("snapshot_observed_at"),
+                snapshot_cohort_id=payload.get("snapshot_cohort_id"),
+                payload=dict(payload),
+            ),
+            connection=connection,
+        )
+        synced += 1
+    return synced
+
+
+def persist_runtime_execution_ledger(
+    root: str | Path,
+    *,
+    mode: str,
+    results: Sequence[object],
+) -> dict[str, int]:
+    postgres_root = _postgres_root(root)
+    cycle_repo = RuntimeCycleRepository(postgres_root)
+    active_connection, owns_connection = cycle_repo._acquire_connection(None)
+    try:
+        counts = record_runtime_cycle_results(
+            root,
+            mode=mode,
+            results=results,
+            connection=active_connection,
+        )
+        fill_count = _sync_execution_fills_from_projected_state(
+            root,
+            connection=active_connection,
+        )
+        if owns_connection:
+            active_connection.commit()
+        return {**counts, "fill_count": fill_count}
+    except Exception:
+        if owns_connection:
+            active_connection.rollback()
+        raise
+    finally:
+        if owns_connection:
+            active_connection.close()
+
+
+def record_operator_sync_quote_result(
+    root: str | Path,
+    *,
+    cycle_id: str,
+    contract: Contract,
+    proposal: Any,
+    quote_result: Any,
+) -> dict[str, int]:
+    execution = getattr(quote_result, "execution", None)
+    intents = list(getattr(execution, "proposed", []) or [])
+    selected_action = None
+    if intents and isinstance(intents[0], OrderIntent):
+        selected_action = intents[0].action
+    synthetic_selected = SimpleNamespace(
+        contract=contract,
+        action=selected_action,
+        fair_value=None,
+        market_price=getattr(proposal, "price", None),
+        score=None,
+    )
+    synthetic_result = SimpleNamespace(
+        cycle_id=cycle_id,
+        selected=synthetic_selected,
+        execution=execution,
+        policy_allowed=True,
+        policy_reasons=[],
+        gate_trace=[],
+        shadow_quote_plan={
+            "shell_action": getattr(quote_result, "action", None),
+            "proposal": normalize_for_json(proposal),
+        },
+        intents=intents,
+    )
+    return persist_runtime_execution_ledger(
+        root,
+        mode="operator_sync_quote",
+        results=[synthetic_result],
+    )

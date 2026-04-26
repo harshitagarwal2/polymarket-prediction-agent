@@ -99,6 +99,86 @@ class DocsSyncTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("runtime_status.json", path.read_text())
 
+    def test_operator_docs_reference_alerting_baseline_commands(self):
+        for path in (
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+            REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("build-alerts", text)
+                self.assertIn("send-alerts", text)
+                self.assertIn("smoke-alerting", text)
+
+    def test_operator_docs_reference_heartbeat_baseline_commands(self):
+        for path in (
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+            REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+            REPO_ROOT / "docs" / "PRODUCTION_READINESS.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("build-heartbeat", text)
+                self.assertIn("send-heartbeat", text)
+                self.assertIn("smoke-heartbeat", text)
+
+    def test_operator_docs_reference_tax_audit_baseline_commands(self):
+        for path in (
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+            REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+            REPO_ROOT / "docs" / "PRODUCTION_READINESS.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("export-tax-audit", text)
+                self.assertIn("smoke-tax-audit", text)
+
+    def test_operator_docs_reference_model_drift_baseline_commands(self):
+        for path in (
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+            REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+            REPO_ROOT / "docs" / "PRODUCTION_READINESS.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("build-model-drift", text)
+                self.assertIn("smoke-model-drift", text)
+                self.assertIn("smoke-unattended-guardrails", text)
+
+    def test_operator_docs_reference_autonomous_mode_contract(self):
+        for path in (
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+            REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+            REPO_ROOT / "docs" / "PRODUCTION_READINESS.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("--autonomous-mode", text)
+                self.assertIn("autonomous_mode", text)
+                self.assertIn("--execution-lock-name", text)
+                self.assertIn("--drift-report-file", text)
+
+    def test_operator_docs_reference_private_key_file_and_route_attestation(self):
+        for path in (
+            REPO_ROOT / "docs" / "GETTING_STARTED.md",
+            REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md",
+            REPO_ROOT / "docs" / "PRODUCTION_READINESS.md",
+        ):
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("POLYMARKET_PRIVATE_KEY_FILE", text)
+                self.assertIn("POLYMARKET_PRIVATE_KEY_COMMAND", text)
+                self.assertIn("POLYMARKET_ROUTE_LABEL", text)
+                self.assertIn("POLYMARKET_GEO_COMPLIANCE_ACK", text)
+                self.assertIn("POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED", text)
+                self.assertIn("PREDICTION_MARKET_HTTP_MIN_INTERVAL_SECONDS", text)
+
+    def test_operator_runbook_references_longer_window_drawdown_guards(self):
+        text = (REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md").read_text()
+        self.assertIn("max_weekly_loss", text)
+        self.assertIn("max_cumulative_loss", text)
+        self.assertIn("max_active_wallet_balance", text)
+
     def test_docs_reference_policy_guidance_for_advisory_preview_alignment(self):
         for path in DOCS_WITH_POLICY_GUIDANCE:
             with self.subTest(path=path):
@@ -206,6 +286,14 @@ class DocsSyncTests(unittest.TestCase):
     def test_getting_started_projects_user_channel_account_truth(self):
         text = (REPO_ROOT / "docs" / "GETTING_STARTED.md").read_text()
         self.assertIn("account-truth lanes", text)
+        self.assertIn("run-polymarket-capture user", text)
+        self.assertIn("smoke-supervised-live-account-truth", text)
+
+    def test_operator_runbook_documents_user_capture_market_contract(self):
+        text = (REPO_ROOT / "docs" / "OPERATOR_RUNBOOK.md").read_text()
+        self.assertIn("run-polymarket-capture user", text)
+        self.assertIn("POLYMARKET_LIVE_USER_MARKETS", text)
+        self.assertIn("smoke-supervised-live-account-truth", text)
 
     def test_production_readiness_mentions_projected_account_truth(self):
         text = (REPO_ROOT / "docs" / "PRODUCTION_READINESS.md").read_text()

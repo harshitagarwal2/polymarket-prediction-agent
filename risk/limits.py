@@ -14,11 +14,14 @@ class RiskLimits:
     max_global_contracts: int = 20
     max_contracts_per_market: int = 5
     max_contracts_per_event: int | None = None
+    max_notional_per_event: float | None = None
     reserve_contracts_buffer: int = 0
     max_order_notional: float | None = None
     min_price: float = 0.01
     max_price: float = 0.99
     max_daily_loss: float | None = None
+    max_weekly_loss: float | None = None
+    max_cumulative_loss: float | None = None
     enforce_atomic_batches: bool = True
 
 
@@ -37,11 +40,23 @@ class RiskDecision:
 @dataclass
 class RiskState:
     daily_realized_pnl: float = 0.0
+    weekly_realized_pnl: float = 0.0
+    cumulative_realized_pnl: float = 0.0
 
     def daily_loss_limit_reached(self, max_daily_loss: float | None) -> bool:
         if max_daily_loss is None:
             return False
         return self.daily_realized_pnl <= -abs(max_daily_loss)
+
+    def weekly_loss_limit_reached(self, max_weekly_loss: float | None) -> bool:
+        if max_weekly_loss is None:
+            return False
+        return self.weekly_realized_pnl <= -abs(max_weekly_loss)
+
+    def cumulative_loss_limit_reached(self, max_cumulative_loss: float | None) -> bool:
+        if max_cumulative_loss is None:
+            return False
+        return self.cumulative_realized_pnl <= -abs(max_cumulative_loss)
 
 
 class RiskEngine:
@@ -227,6 +242,55 @@ class RiskEngine:
             },
         )
 
+    def _position_notional(self, position: PositionSnapshot) -> float:
+        reference_price = position.mark_price
+        if reference_price is None:
+            reference_price = position.average_price
+        if reference_price is None:
+            return 0.0
+        return abs(position.quantity) * max(0.0, float(reference_price))
+
+    def _order_notional(self, order: NormalizedOrder) -> float:
+        if order.action.value == "sell" and order.reduce_only:
+            return 0.0
+        return max(0.0, order.remaining_quantity * order.price)
+
+    def _current_event_notional_exposure(
+        self,
+        event_exposure_key: str,
+        positions: list[PositionSnapshot],
+        open_orders: list[NormalizedOrder],
+    ) -> float:
+        market_keys = {
+            position.contract.market_key
+            for position in positions
+            if self.market_key_to_event_exposure_key.get(position.contract.market_key)
+            == event_exposure_key
+        }.union(
+            {
+                order.contract.market_key
+                for order in open_orders
+                if self.market_key_to_event_exposure_key.get(order.contract.market_key)
+                == event_exposure_key
+            }
+        )
+        return self.correlated_graph.grouped_cluster_exposure(
+            cluster_key=event_exposure_key,
+            exposure_by_market={
+                market_key: sum(
+                    self._position_notional(position)
+                    for position in positions
+                    if position.contract.market_key == market_key
+                )
+                + sum(
+                    self._order_notional(order)
+                    for order in open_orders
+                    if order.contract.market_key == market_key
+                )
+                for market_key in market_keys
+            },
+        )
+
     def _resolve_positions(
         self,
         position: PositionSnapshot,
@@ -284,6 +348,16 @@ class RiskEngine:
             for intent in intents:
                 decision.rejected.append(Rejection(intent, "daily loss limit reached"))
             return decision
+        if self.state.weekly_loss_limit_reached(self.limits.max_weekly_loss):
+            for intent in intents:
+                decision.rejected.append(Rejection(intent, "weekly loss limit reached"))
+            return decision
+        if self.state.cumulative_loss_limit_reached(self.limits.max_cumulative_loss):
+            for intent in intents:
+                decision.rejected.append(
+                    Rejection(intent, "cumulative loss limit reached")
+                )
+            return decision
 
         running_market_exposure = {
             current_position.contract.market_key: self._current_market_exposure(
@@ -307,11 +381,20 @@ class RiskEngine:
             )
         running_event_group_exposure: dict[str, dict[str, float]] = {}
         running_event_exposure: dict[str, float] = {}
+        running_event_group_notional: dict[str, dict[str, float]] = {}
+        running_event_notional: dict[str, float] = {}
         for event_exposure_key in set(self.market_key_to_event_exposure_key.values()):
             running_event_exposure[event_exposure_key] = self._current_event_exposure(
                 event_exposure_key,
                 current_positions,
                 open_orders,
+            )
+            running_event_notional[event_exposure_key] = (
+                self._current_event_notional_exposure(
+                    event_exposure_key,
+                    current_positions,
+                    open_orders,
+                )
             )
         for market_key, exposure in running_market_exposure.items():
             event_exposure_key = self.market_key_to_event_exposure_key.get(market_key)
@@ -322,6 +405,22 @@ class RiskEngine:
             )
             group_key = self._mutually_exclusive_group_key_for_market_key(market_key)
             event_groups[group_key] = max(event_groups.get(group_key, 0.0), exposure)
+            event_notional_groups = running_event_group_notional.setdefault(
+                event_exposure_key, {}
+            )
+            event_notional_groups[group_key] = max(
+                event_notional_groups.get(group_key, 0.0),
+                sum(
+                    self._position_notional(position)
+                    for position in current_positions
+                    if position.contract.market_key == market_key
+                )
+                + sum(
+                    self._order_notional(order)
+                    for order in open_orders
+                    if order.contract.market_key == market_key
+                ),
+            )
         remaining_reduce_only_capacity = {
             current_position.contract.market_key: max(current_position.quantity, 0.0)
             for current_position in current_positions
@@ -398,6 +497,37 @@ class RiskEngine:
                     )
                     continue
 
+            projected_event_notional = None
+            if (
+                self.limits.max_notional_per_event is not None
+                and event_exposure_key is not None
+            ):
+                notional_groups = running_event_group_notional.setdefault(
+                    event_exposure_key, {}
+                )
+                group_key = self._mutually_exclusive_group_key_for_market_key(
+                    market_key
+                )
+                current_group_notional = notional_groups.get(group_key, 0.0)
+                current_event_notional = running_event_notional.get(
+                    event_exposure_key, 0.0
+                )
+                proposed_market_notional = projected_market * intent.price
+                projected_group_notional = max(
+                    current_group_notional,
+                    proposed_market_notional,
+                )
+                projected_event_notional = (
+                    current_event_notional
+                    - current_group_notional
+                    + projected_group_notional
+                )
+                if projected_event_notional > self.limits.max_notional_per_event:
+                    decision.rejected.append(
+                        Rejection(intent, "per-event capital-at-risk cap exceeded")
+                    )
+                    continue
+
             projected_global = running_global_exposure + exposure_increase
             max_global = max(
                 0,
@@ -422,6 +552,18 @@ class RiskEngine:
                     projected_market,
                 )
                 running_event_exposure[event_exposure_key] = projected_event
+            if projected_event_notional is not None and event_exposure_key is not None:
+                notional_groups = running_event_group_notional.setdefault(
+                    event_exposure_key, {}
+                )
+                group_key = self._mutually_exclusive_group_key_for_market_key(
+                    market_key
+                )
+                notional_groups[group_key] = max(
+                    notional_groups.get(group_key, 0.0),
+                    projected_market * intent.price,
+                )
+                running_event_notional[event_exposure_key] = projected_event_notional
             running_global_exposure = projected_global
             if intent.action.value == "buy":
                 remaining_reduce_only_capacity[market_key] = (

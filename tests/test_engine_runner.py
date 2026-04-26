@@ -246,6 +246,18 @@ class IncompleteLiveDeltaAdapter(LiveDeltaPreviewAdapter):
         return snapshot
 
 
+class HighBalanceAdapter(SequencedAdapter):
+    def get_account_snapshot(self, contract: Contract | None = None) -> AccountSnapshot:
+        contract = contract or self.contract
+        return AccountSnapshot(
+            venue=self.venue,
+            balance=BalanceSnapshot(venue=self.venue, available=500.0, total=500.0),
+            positions=[PositionSnapshot(contract=contract, quantity=0.0)],
+            open_orders=[],
+            fills=[],
+        )
+
+
 class TerminalDeltaAdapter(LiveDeltaPreviewAdapter):
     def __init__(self):
         super().__init__()
@@ -1078,6 +1090,25 @@ class EngineRunnerTests(unittest.TestCase):
 
         self.assertEqual(adapter.cancel_calls, 1)
         self.assertEqual(len(engine.pending_cancels(unresolved_only=True)), 1)
+
+    def test_run_once_blocks_when_active_wallet_balance_exceeds_cap(self):
+        adapter = HighBalanceAdapter()
+        engine = TradingEngine(
+            adapter=adapter,
+            strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+            risk_engine=RiskEngine(
+                RiskLimits(max_contracts_per_market=10, max_global_contracts=10)
+            ),
+            max_active_wallet_balance=250.0,
+        )
+
+        result = engine.run_once(adapter.contract, fair_value=0.60)
+
+        self.assertFalse(result.risk.approved)
+        self.assertIn(
+            "active wallet balance exceeds cap",
+            result.risk.rejected[0].reason,
+        )
 
 
 if __name__ == "__main__":

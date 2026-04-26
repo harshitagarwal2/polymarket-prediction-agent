@@ -583,6 +583,34 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(payload["runtime_health"]["state"], "hold_new_orders")
             self.assertFalse(payload["runtime_health"]["resume_trading_eligible"])
 
+    def test_status_reports_watcher_mode_for_execution_lock_hold(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            store = operator_cli.SafetyStateStore(state_path)
+            state = store.load()
+            state.hold_new_orders = True
+            state.hold_reason = (
+                "watcher mode: execution lock 'primary-loop' held by another process"
+            )
+            store.save(state)
+            args = argparse.Namespace(
+                state_file=str(state_path),
+                journal=None,
+                venue=None,
+                symbol=None,
+                outcome="unknown",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                result = operator_cli.cmd_status(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(payload["runtime_health"]["state"], "watcher")
+            self.assertTrue(payload["runtime_health"]["watcher_mode"])
+            self.assertFalse(payload["runtime_health"]["resume_trading_eligible"])
+
     def test_force_refresh_command_persists_scoped_request(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             state_path = Path(temp_dir) / "safety-state.json"
@@ -673,6 +701,41 @@ class OperatorControlTests(unittest.TestCase):
                 ["source health red", "daily loss breach"],
             )
 
+    def test_status_reports_extended_loss_and_wallet_guardrails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            store = operator_cli.SafetyStateStore(state_path)
+            state = store.load()
+            state.daily_realized_pnl = -6.0
+            setattr(state, "weekly_realized_pnl", -12.0)
+            setattr(state, "cumulative_realized_pnl", -20.0)
+            state.hold_new_orders = True
+            state.hold_reason = "weekly loss limit reached; active wallet balance exceeds cap (500.0000 > 250.0000)"
+            store.save(state)
+            args = argparse.Namespace(
+                state_file=str(state_path),
+                journal=None,
+                venue=None,
+                symbol=None,
+                outcome="unknown",
+            )
+            stdout = io.StringIO()
+
+            with patch("sys.stdout", stdout):
+                result = operator_cli.cmd_status(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            self.assertEqual(payload["runtime_health"]["daily_realized_pnl"], -6.0)
+            self.assertEqual(payload["runtime_health"]["weekly_realized_pnl"], -12.0)
+            self.assertEqual(
+                payload["runtime_health"]["cumulative_realized_pnl"], -20.0
+            )
+            self.assertFalse(payload["runtime_health"]["daily_loss_hold"])
+            self.assertTrue(payload["runtime_health"]["weekly_loss_hold"])
+            self.assertFalse(payload["runtime_health"]["cumulative_loss_hold"])
+            self.assertTrue(payload["runtime_health"]["wallet_balance_cap_hold"])
+
     def test_sync_quote_places_via_execution_shell(self):
         adapter = PlaceableAdapter()
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -694,6 +757,7 @@ class OperatorControlTests(unittest.TestCase):
 
             with (
                 patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch.object(operator_cli, "_preflight_execution_ledger"),
                 patch("sys.stdout", stdout),
             ):
                 result = operator_cli.cmd_sync_quote(args)
@@ -702,6 +766,121 @@ class OperatorControlTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(payload["shell_action"], "place")
             self.assertEqual(payload["submitted_order_ids"], ["placed-1"])
+
+    def test_sync_quote_records_execution_ledger_when_opportunity_root_supplied(self):
+        adapter = PlaceableAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            stdout = io.StringIO()
+            args = argparse.Namespace(
+                venue="polymarket",
+                symbol="token-1",
+                outcome="yes",
+                side="buy_yes",
+                action="place",
+                price=0.5,
+                quantity=1.0,
+                tif="GTC",
+                rationale="operator quote sync",
+                journal=None,
+                state_file=str(state_path),
+                opportunity_root="runtime/data",
+            )
+
+            with (
+                patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch.object(operator_cli, "_preflight_execution_ledger"),
+                patch.object(
+                    operator_cli,
+                    "record_operator_sync_quote_result",
+                    return_value={
+                        "cycle_count": 1,
+                        "decision_count": 1,
+                        "order_count": 1,
+                        "fill_count": 2,
+                    },
+                ) as record_ledger,
+                patch("sys.stdout", stdout),
+            ):
+                result = operator_cli.cmd_sync_quote(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 0)
+            record_ledger.assert_called_once()
+            self.assertEqual(
+                record_ledger.call_args.kwargs["cycle_id"], payload["cycle_id"]
+            )
+            self.assertEqual(payload["ledger_summary"]["cycle_count"], 1)
+            self.assertEqual(payload["ledger_summary"]["fill_count"], 2)
+
+    def test_sync_quote_fails_when_ledger_persistence_fails(self):
+        adapter = PlaceableAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            stdout = io.StringIO()
+            args = argparse.Namespace(
+                venue="polymarket",
+                symbol="token-1",
+                outcome="yes",
+                side="buy_yes",
+                action="place",
+                price=0.5,
+                quantity=1.0,
+                tif="GTC",
+                rationale="operator quote sync",
+                journal=None,
+                state_file=str(state_path),
+                opportunity_root="runtime/data",
+            )
+
+            with (
+                patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch.object(operator_cli, "_preflight_execution_ledger"),
+                patch.object(
+                    operator_cli,
+                    "record_operator_sync_quote_result",
+                    side_effect=RuntimeError("ledger write failed"),
+                ),
+                patch("sys.stdout", stdout),
+            ):
+                result = operator_cli.cmd_sync_quote(args)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(result, 1)
+            self.assertEqual(payload["ledger_summary"]["error_kind"], "RuntimeError")
+
+    def test_sync_quote_preflights_ledger_before_quote_action(self):
+        adapter = PlaceableAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            args = argparse.Namespace(
+                venue="polymarket",
+                symbol="token-1",
+                outcome="yes",
+                side="buy_yes",
+                action="place",
+                price=0.5,
+                quantity=1.0,
+                tif="GTC",
+                rationale="operator quote sync",
+                journal=None,
+                state_file=str(state_path),
+                opportunity_root="runtime/data",
+            )
+
+            with (
+                patch.object(operator_cli, "_build_adapter", return_value=adapter),
+                patch.object(
+                    operator_cli,
+                    "_preflight_execution_ledger",
+                    side_effect=RuntimeError("ledger unavailable"),
+                ),
+                patch.object(operator_cli, "QuoteManager") as quote_manager,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "ledger unavailable"):
+                    operator_cli.cmd_sync_quote(args)
+
+            quote_manager.return_value.sync_quote.assert_not_called()
 
     def test_sync_quote_uses_runtime_policy_file_for_engine_and_adapter(self):
         adapter = PlaceableAdapter()

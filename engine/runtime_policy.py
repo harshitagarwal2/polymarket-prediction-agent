@@ -190,11 +190,14 @@ class RiskLimitsPolicy:
     max_global_contracts: int = 20
     max_contracts_per_market: int = 5
     max_contracts_per_event: int | None = None
+    max_notional_per_event: float | None = None
     reserve_contracts_buffer: int = 0
     max_order_notional: float | None = None
     min_price: float = 0.01
     max_price: float = 0.99
     max_daily_loss: float | None = None
+    max_weekly_loss: float | None = None
+    max_cumulative_loss: float | None = None
     enforce_atomic_batches: bool = True
 
     def build(self) -> RiskLimits:
@@ -202,11 +205,14 @@ class RiskLimitsPolicy:
             max_global_contracts=self.max_global_contracts,
             max_contracts_per_market=self.max_contracts_per_market,
             max_contracts_per_event=self.max_contracts_per_event,
+            max_notional_per_event=self.max_notional_per_event,
             reserve_contracts_buffer=self.reserve_contracts_buffer,
             max_order_notional=self.max_order_notional,
             min_price=self.min_price,
             max_price=self.max_price,
             max_daily_loss=self.max_daily_loss,
+            max_weekly_loss=self.max_weekly_loss,
+            max_cumulative_loss=self.max_cumulative_loss,
             enforce_atomic_batches=self.enforce_atomic_batches,
         )
 
@@ -226,12 +232,12 @@ class OpportunityRankerPolicy:
     complement_discount_bonus_cap: float = 0.005
     spread_penalty_weight: float = 0.25
     taker_fee_rate: float = 0.0
+    time_lock_penalty_weight: float = 0.0
+    time_lock_penalty_saturation_hours: float = 168.0
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
-    freeze_window_policy: FreezeWindowPolicy = field(
-        default_factory=FreezeWindowPolicy
-    )
+    freeze_window_policy: FreezeWindowPolicy = field(default_factory=FreezeWindowPolicy)
 
     def build(self) -> OpportunityRanker:
         return OpportunityRanker(
@@ -248,6 +254,8 @@ class OpportunityRankerPolicy:
             complement_discount_bonus_cap=self.complement_discount_bonus_cap,
             spread_penalty_weight=self.spread_penalty_weight,
             taker_fee_rate=self.taker_fee_rate,
+            time_lock_penalty_weight=self.time_lock_penalty_weight,
+            time_lock_penalty_saturation_hours=self.time_lock_penalty_saturation_hours,
             contract_rule_freeze=self.contract_rule_freeze,
             freeze_window_policy=self.freeze_window_policy,
         )
@@ -263,12 +271,12 @@ class PairOpportunityRankerPolicy:
     max_spread: float | None = None
     min_hours_to_expiry: float | None = None
     max_hours_to_expiry: float | None = None
+    time_lock_penalty_weight: float = 0.0
+    time_lock_penalty_saturation_hours: float = 168.0
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
-    freeze_window_policy: FreezeWindowPolicy = field(
-        default_factory=FreezeWindowPolicy
-    )
+    freeze_window_policy: FreezeWindowPolicy = field(default_factory=FreezeWindowPolicy)
 
     def build(self) -> PairOpportunityRanker:
         return PairOpportunityRanker(
@@ -280,6 +288,8 @@ class PairOpportunityRankerPolicy:
             max_spread=self.max_spread,
             min_hours_to_expiry=self.min_hours_to_expiry,
             max_hours_to_expiry=self.max_hours_to_expiry,
+            time_lock_penalty_weight=self.time_lock_penalty_weight,
+            time_lock_penalty_saturation_hours=self.time_lock_penalty_saturation_hours,
             contract_rule_freeze=self.contract_rule_freeze,
             freeze_window_policy=self.freeze_window_policy,
         )
@@ -329,16 +339,20 @@ class TradingEnginePolicy:
     cancel_retry_max_attempts: int = 3
     cancel_attention_timeout_seconds: float = 30.0
     overlay_max_age_seconds: float = 30.0
+    max_active_wallet_balance: float | None = None
+    autonomous_mode: bool = False
     forced_refresh_debounce_seconds: float = 0.0
     pending_submission_recovery_seconds: float = 5.0
     pending_submission_expiry_seconds: float = 30.0
 
-    def build_kwargs(self) -> dict[str, float | int]:
+    def build_kwargs(self) -> dict[str, float | int | bool | None]:
         return {
             "cancel_retry_interval_seconds": self.cancel_retry_interval_seconds,
             "cancel_retry_max_attempts": self.cancel_retry_max_attempts,
             "cancel_attention_timeout_seconds": self.cancel_attention_timeout_seconds,
             "overlay_max_age_seconds": self.overlay_max_age_seconds,
+            "max_active_wallet_balance": self.max_active_wallet_balance,
+            "autonomous_mode": self.autonomous_mode,
             "forced_refresh_debounce_seconds": self.forced_refresh_debounce_seconds,
             "pending_submission_recovery_seconds": self.pending_submission_recovery_seconds,
             "pending_submission_expiry_seconds": self.pending_submission_expiry_seconds,
@@ -458,11 +472,14 @@ def _load_risk_limits_policy(root: dict[str, Any]) -> RiskLimitsPolicy:
             "max_global_contracts",
             "max_contracts_per_market",
             "max_contracts_per_event",
+            "max_notional_per_event",
             "reserve_contracts_buffer",
             "max_order_notional",
             "min_price",
             "max_price",
             "max_daily_loss",
+            "max_weekly_loss",
+            "max_cumulative_loss",
             "enforce_atomic_batches",
         },
     )
@@ -486,6 +503,12 @@ def _load_risk_limits_policy(root: dict[str, Any]) -> RiskLimitsPolicy:
             defaults.max_contracts_per_event,
             context=key,
         ),
+        max_notional_per_event=_read_optional_float(
+            payload,
+            "max_notional_per_event",
+            defaults.max_notional_per_event,
+            context=key,
+        ),
         reserve_contracts_buffer=_read_int(
             payload,
             "reserve_contracts_buffer",
@@ -504,6 +527,18 @@ def _load_risk_limits_policy(root: dict[str, Any]) -> RiskLimitsPolicy:
             payload,
             "max_daily_loss",
             defaults.max_daily_loss,
+            context=key,
+        ),
+        max_weekly_loss=_read_optional_float(
+            payload,
+            "max_weekly_loss",
+            defaults.max_weekly_loss,
+            context=key,
+        ),
+        max_cumulative_loss=_read_optional_float(
+            payload,
+            "max_cumulative_loss",
+            defaults.max_cumulative_loss,
             context=key,
         ),
         enforce_atomic_batches=_read_bool(
@@ -534,6 +569,8 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             "complement_discount_bonus_cap",
             "spread_penalty_weight",
             "taker_fee_rate",
+            "time_lock_penalty_weight",
+            "time_lock_penalty_saturation_hours",
             "contract_rules",
             "freeze_windows",
         },
@@ -613,6 +650,18 @@ def _load_opportunity_ranker_policy(root: dict[str, Any]) -> OpportunityRankerPo
             defaults.taker_fee_rate,
             context=key,
         ),
+        time_lock_penalty_weight=_read_float(
+            payload,
+            "time_lock_penalty_weight",
+            defaults.time_lock_penalty_weight,
+            context=key,
+        ),
+        time_lock_penalty_saturation_hours=_read_float(
+            payload,
+            "time_lock_penalty_saturation_hours",
+            defaults.time_lock_penalty_saturation_hours,
+            context=key,
+        ),
         contract_rule_freeze=_load_contract_rule_freeze_policy(
             payload,
             key=key,
@@ -642,6 +691,8 @@ def _load_pair_opportunity_ranker_policy(
             "max_spread",
             "min_hours_to_expiry",
             "max_hours_to_expiry",
+            "time_lock_penalty_weight",
+            "time_lock_penalty_saturation_hours",
             "contract_rules",
             "freeze_windows",
         },
@@ -689,6 +740,18 @@ def _load_pair_opportunity_ranker_policy(
             payload,
             "max_hours_to_expiry",
             defaults.max_hours_to_expiry,
+            context=key,
+        ),
+        time_lock_penalty_weight=_read_float(
+            payload,
+            "time_lock_penalty_weight",
+            defaults.time_lock_penalty_weight,
+            context=key,
+        ),
+        time_lock_penalty_saturation_hours=_read_float(
+            payload,
+            "time_lock_penalty_saturation_hours",
+            defaults.time_lock_penalty_saturation_hours,
             context=key,
         ),
         contract_rule_freeze=_load_contract_rule_freeze_policy(
@@ -958,6 +1021,8 @@ def _load_trading_engine_policy(root: dict[str, Any]) -> TradingEnginePolicy:
             "cancel_retry_max_attempts",
             "cancel_attention_timeout_seconds",
             "overlay_max_age_seconds",
+            "max_active_wallet_balance",
+            "autonomous_mode",
             "forced_refresh_debounce_seconds",
             "pending_submission_recovery_seconds",
             "pending_submission_expiry_seconds",
@@ -987,6 +1052,18 @@ def _load_trading_engine_policy(root: dict[str, Any]) -> TradingEnginePolicy:
             payload,
             "overlay_max_age_seconds",
             defaults.overlay_max_age_seconds,
+            context=key,
+        ),
+        max_active_wallet_balance=_read_optional_float(
+            payload,
+            "max_active_wallet_balance",
+            defaults.max_active_wallet_balance,
+            context=key,
+        ),
+        autonomous_mode=_read_bool(
+            payload,
+            "autonomous_mode",
+            defaults.autonomous_mode,
             context=key,
         ),
         forced_refresh_debounce_seconds=_read_float(

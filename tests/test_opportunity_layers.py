@@ -137,6 +137,39 @@ class OpportunityLayerTests(unittest.TestCase):
         )
         self.assertEqual(candidates, [])
 
+    def test_ranker_applies_time_lock_penalty_to_long_dated_markets(self):
+        near_market = self._market()
+        near_market.contract = Contract(
+            venue=Venue.POLYMARKET, symbol="near-token", outcome=OutcomeSide.YES
+        )
+        near_market.expires_at = datetime.now(timezone.utc) + timedelta(hours=4)
+
+        far_market = self._market()
+        far_market.contract = Contract(
+            venue=Venue.POLYMARKET, symbol="far-token", outcome=OutcomeSide.YES
+        )
+        far_market.expires_at = datetime.now(timezone.utc) + timedelta(hours=168)
+
+        provider = StaticFairValueProvider(
+            {
+                near_market.contract.market_key: 0.60,
+                far_market.contract.market_key: 0.60,
+            }
+        )
+
+        candidates = OpportunityRanker(
+            edge_threshold=0.03,
+            time_lock_penalty_weight=0.05,
+            time_lock_penalty_saturation_hours=168.0,
+        ).rank([far_market, near_market], provider)
+
+        self.assertEqual(
+            [candidate.contract.symbol for candidate in candidates],
+            ["near-token", "far-token"],
+        )
+        self.assertGreater(candidates[0].score, candidates[1].score)
+        self.assertIn("time_lock_penalty", candidates[1].rationale)
+
 
 if __name__ == "__main__":
     unittest.main()

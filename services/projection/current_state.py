@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -183,6 +184,7 @@ def _write_projection_checkpoint(
     capture_id: int,
     checkpoint_ts: str | None,
     metadata: dict[str, Any],
+    connection: Any | None = None,
 ) -> dict[str, Any]:
     return upsert_capture_checkpoint(
         checkpoint_name,
@@ -191,18 +193,52 @@ def _write_projection_checkpoint(
         checkpoint_ts=checkpoint_ts,
         metadata=metadata,
         root=root / "postgres",
+        connection=connection,
     )
+
+
+def _call_repository_method(
+    repository: object,
+    method_name: str,
+    *args: Any,
+    connection: Any | None = None,
+) -> Any:
+    method = getattr(repository, method_name)
+    if connection is not None:
+        try:
+            return method(*args, connection=connection)
+        except TypeError as exc:
+            if "connection" not in str(exc):
+                raise
+    return method(*args)
+
+
+def _read_repository_current(
+    repository: object,
+    *,
+    connection: Any | None = None,
+) -> dict[str, object]:
+    return dict(_call_repository_method(repository, "read_current", connection=connection))
+
+
+def _open_lane_connection(stores: CurrentProjectionStores) -> Any | None:
+    connector = getattr(stores.source_health, "_connect", None)
+    if callable(connector):
+        return connector()
+    return None
 
 
 def materialize_current_compatibility_tables(
     stores: CurrentProjectionStores,
     tables: Sequence[str] | None = None,
+    *,
+    connection: Any | None = None,
 ) -> dict[str, dict[str, Any]]:
     adapter = stores.read_adapter()
     table_names = tuple(tables or CAPTURE_OWNED_COMPATIBILITY_TABLES)
     materialized: dict[str, dict[str, Any]] = {}
     for table in table_names:
-        payload = adapter.read_table(table)
+        payload = adapter.read_table(table, connection=connection)
         if table == "source_health":
             materialized[table] = materialize_capture_owned_source_health_state(
                 stores.current_health,
@@ -217,6 +253,8 @@ def materialize_current_compatibility_tables(
 def _project_sportsbook_capture_events(
     events: Sequence[dict[str, Any]],
     stores: CurrentProjectionStores,
+    *,
+    connection: Any | None = None,
 ) -> tuple[int, int]:
     row_count = 0
     for event in events:
@@ -252,11 +290,17 @@ def _project_sportsbook_capture_events(
             raw_json=payload,
         )
         if event_record.sportsbook_event_id:
-            stores.sportsbook_events.upsert(
-                event_record.sportsbook_event_id, event_record
+            _call_repository_method(
+                stores.sportsbook_events,
+                "upsert",
+                event_record.sportsbook_event_id,
+                event_record,
+                connection=connection,
             )
         for row in normalized_rows:
-            stores.sportsbook_odds.append(
+            _call_repository_method(
+                stores.sportsbook_odds,
+                "append",
                 SportsbookOddsRecord(
                     sportsbook_event_id=str(row["sportsbook_event_id"]),
                     source=str(row["source"]),
@@ -284,6 +328,8 @@ def _project_sportsbook_capture_events(
                     if row.get("capture_ts") not in (None, "")
                     else None,
                 )
+                ,
+                connection=connection,
             )
         row_count += len(normalized_rows)
     return len(events), row_count
@@ -292,6 +338,8 @@ def _project_sportsbook_capture_events(
 def _project_polymarket_market_catalog_events(
     events: Sequence[dict[str, Any]],
     stores: CurrentProjectionStores,
+    *,
+    connection: Any | None = None,
 ) -> tuple[int, int]:
     row_count = 0
     for event in events:
@@ -304,13 +352,16 @@ def _project_polymarket_market_catalog_events(
                 continue
             normalized = normalize_market_row(market)
             token_id_yes, token_id_no = _market_token_ids(market)
-            stores.markets.upsert(
+            _call_repository_method(
+                stores.markets,
+                "upsert",
                 str(normalized.get("market_id") or ""),
                 {
                     **normalized,
                     "token_id_yes": token_id_yes,
                     "token_id_no": token_id_no,
                 },
+                connection=connection,
             )
             row_count += 1
     return len(events), row_count
@@ -319,6 +370,8 @@ def _project_polymarket_market_catalog_events(
 def _project_polymarket_bbo_events(
     events: Sequence[dict[str, Any]],
     stores: CurrentProjectionStores,
+    *,
+    connection: Any | None = None,
 ) -> tuple[int, int]:
     row_count = 0
     for event in events:
@@ -330,7 +383,13 @@ def _project_polymarket_bbo_events(
         market_id = str(normalized.get("market_id") or "")
         if not market_id:
             continue
-        stores.bbo.upsert(market_id, normalized)
+        _call_repository_method(
+            stores.bbo,
+            "upsert",
+            market_id,
+            normalized,
+            connection=connection,
+        )
         row_count += 1
     return len(events), row_count
 
@@ -338,6 +397,8 @@ def _project_polymarket_bbo_events(
 def _project_polymarket_account_snapshot_events(
     events: Sequence[dict[str, Any]],
     stores: CurrentProjectionStores,
+    *,
+    connection: Any | None = None,
 ) -> tuple[int, int]:
     latest_snapshot: dict[str, Any] | None = None
     latest_seen_at: str | None = None
@@ -393,7 +454,12 @@ def _project_polymarket_account_snapshot_events(
         serialized["snapshot_cohort_id"] = snapshot_cohort_id
         serialized["snapshot_observed_at"] = snapshot_observed_at
         order_rows[order.order_id] = serialized
-    stores.polymarket_orders.replace_all(order_rows)
+    _call_repository_method(
+        stores.polymarket_orders,
+        "replace_all",
+        order_rows,
+        connection=connection,
+    )
 
     fill_rows: dict[str, Any] = {}
     for payload in latest_snapshot.get("fills", []):
@@ -406,7 +472,12 @@ def _project_polymarket_account_snapshot_events(
         serialized["snapshot_cohort_id"] = snapshot_cohort_id
         serialized["snapshot_observed_at"] = snapshot_observed_at
         fill_rows[fill.fill_key] = serialized
-    stores.polymarket_fills.replace_all(fill_rows)
+    _call_repository_method(
+        stores.polymarket_fills,
+        "replace_all",
+        fill_rows,
+        connection=connection,
+    )
 
     position_rows: dict[str, Any] = {}
     for payload in latest_snapshot.get("positions", []):
@@ -418,7 +489,12 @@ def _project_polymarket_account_snapshot_events(
         serialized["snapshot_cohort_id"] = snapshot_cohort_id
         serialized["snapshot_observed_at"] = snapshot_observed_at
         position_rows[position.contract.market_key] = serialized
-    stores.polymarket_positions.replace_all(position_rows)
+    _call_repository_method(
+        stores.polymarket_positions,
+        "replace_all",
+        position_rows,
+        connection=connection,
+    )
 
     balance_payload = latest_snapshot.get("balance")
     balance_rows: dict[str, Any] = {}
@@ -430,7 +506,12 @@ def _project_polymarket_account_snapshot_events(
         serialized["snapshot_cohort_id"] = snapshot_cohort_id
         serialized["snapshot_observed_at"] = snapshot_observed_at
         balance_rows[balance_key] = serialized
-    stores.polymarket_balance.replace_all(balance_rows)
+    _call_repository_method(
+        stores.polymarket_balance,
+        "replace_all",
+        balance_rows,
+        connection=connection,
+    )
 
     row_count = (
         len(order_rows) + len(fill_rows) + len(position_rows) + len(balance_rows)
@@ -473,6 +554,7 @@ def _project_lane(
         "event_count": 0,
         "row_count": 0,
     }
+    connection = _open_lane_connection(stores)
     try:
         if require_matching_event and events and not projected_events:
             raise RuntimeError(
@@ -489,7 +571,11 @@ def _project_lane(
                 for event in projected_events
                 if int(event["capture_id"]) <= last_matching_capture_id
             ]
-        event_count, row_count = processor(projected_events, stores)
+        event_count, row_count = processor(
+            projected_events,
+            stores,
+            connection=connection,
+        )
         checkpoint_capture_id: int | None = None
         checkpoint_ts: str | None = None
         checkpoint_metadata = {
@@ -507,7 +593,9 @@ def _project_lane(
             checkpoint_capture_id = int(last_event["capture_id"])
             checkpoint_ts = str(last_event.get("captured_at") or "")
         materialized = materialize_current_compatibility_tables(
-            stores, materialize_tables
+            stores,
+            materialize_tables,
+            connection=connection,
         )
         if checkpoint_capture_id is not None:
             checkpoint = _write_projection_checkpoint(
@@ -516,10 +604,13 @@ def _project_lane(
                 capture_id=checkpoint_capture_id,
                 checkpoint_ts=checkpoint_ts,
                 metadata=checkpoint_metadata,
+                connection=connection,
             )
         else:
             checkpoint = None
-        stores.source_health.upsert(
+        _call_repository_method(
+            stores.source_health,
+            "upsert",
             checkpoint_name,
             {
                 "source_name": checkpoint_name,
@@ -533,9 +624,24 @@ def _project_lane(
                     "trailing_unmatched_events": trailing_unmatched,
                 },
             },
+            connection=connection,
         )
+        if "source_health" in materialized:
+            materialized["source_health"] = materialize_capture_owned_source_health_state(
+                stores.current_health,
+                _read_repository_current(
+                    stores.source_health,
+                    connection=connection,
+                ).values(),
+            )
+        if connection is not None:
+            connection.commit()
     except Exception as exc:
-        stores.source_health.upsert(
+        if connection is not None:
+            connection.rollback()
+        _call_repository_method(
+            stores.source_health,
+            "upsert",
             checkpoint_name,
             {
                 "source_name": checkpoint_name,
@@ -549,17 +655,16 @@ def _project_lane(
                     "error_kind": exc.__class__.__name__,
                 },
             },
+            connection=None,
         )
         materialize_capture_owned_source_health_state(
             stores.current_health,
             stores.source_health.read_current().values(),
         )
         raise
-    if "source_health" in materialized:
-        materialized["source_health"] = materialize_capture_owned_source_health_state(
-            stores.current_health,
-            stores.source_health.read_current().values(),
-        )
+    finally:
+        if connection is not None:
+            connection.close()
     return {
         "checkpoint_name": checkpoint_name,
         "source": source,

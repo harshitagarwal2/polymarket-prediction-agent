@@ -401,9 +401,46 @@ For non-preview configuration surfaces, use the new staging/supervised artifacts
 
 The sample config also carries the normal preview-loop defaults for `max_fair_value_age_seconds`, `interval_seconds`, and `max_cycles`, so you only need extra CLI flags when you want to override them.
 
-For Polymarket, the runtime now also derives live user-stream condition IDs from that configured fair-value manifest by default. You only need `POLYMARKET_LIVE_USER_MARKETS` when you want to override the derived subscription set manually.
+For Polymarket, the runtime now also derives live user-stream condition IDs from that configured fair-value manifest by default. The dedicated `run-polymarket-capture user` worker follows the same contract in supervised/live flows: it derives condition IDs from projected fair-value coverage plus current market metadata when Postgres authority is present, and only needs `POLYMARKET_LIVE_USER_MARKETS` when you want to override the subscription set manually.
+
+Serious Polymarket live flows are now also expected to carry:
+
+- one of `POLYMARKET_PRIVATE_KEY`, `POLYMARKET_PRIVATE_KEY_FILE`, or `POLYMARKET_PRIVATE_KEY_COMMAND`
+- `POLYMARKET_ROUTE_LABEL`
+- `POLYMARKET_GEO_COMPLIANCE_ACK=true`
+
+Those variables make the active route and compliance posture explicit instead of leaving private/proxy routing as an invisible assumption.
+
+If you want a simple process-local compliance throttle on live HTTP calls, set:
+
+```bash
+export PREDICTION_MARKET_HTTP_MIN_INTERVAL_SECONDS=0.25
+```
+
+That env var applies a per-host minimum interval inside `engine.http_client.get_json`, which is used by the shared HTTP paths for sportsbook feeds and Polymarket HTTP surfaces.
+
+If you already have an external secret helper on the machine, you can inject the key through:
+
+```bash
+export POLYMARKET_PRIVATE_KEY_COMMAND="python -c \"print('your-private-key')\""
+```
+
+If you want serious live modes to require private order flow as well, set:
+
+```bash
+export POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true
+export POLYMARKET_CLOB_HOST=https://private-clob.example.invalid
+```
 
 For a long-running supervised preview process, add `--interval-seconds` and a larger `--max-cycles`.
+
+To exercise the supervised-live account-truth contract locally, run:
+
+```bash
+make smoke-supervised-live-account-truth
+```
+
+That gate runs the focused runtime/bootstrap/projection/Polymarket capture suites that protect the user-channel -> projection -> runtime truth path.
 
 ### 5. Inspect state and journal output
 
@@ -431,6 +468,112 @@ operator-cli status --state-file runtime/safety-state.json --llm-advisory-file r
 `runtime/data/current/llm_advisory.json` is a review artifact for operators and dashboards. It is not an execution input.
 
 Pass `--policy-file` when you want the advisory preview proposals and blocked reasons to match the same runtime policy that `run-agent-loop` is using.
+
+To build and dry-run the webhook alerting baseline from the machine-readable status payload, run:
+
+```bash
+operator-cli status \
+  --state-file runtime/safety-state.json \
+  --output runtime/data/current/runtime_status.json
+
+operator-cli build-alerts \
+  --runtime-status-file runtime/data/current/runtime_status.json \
+  --output runtime/data/current/runtime_alerts.json
+
+operator-cli send-alerts \
+  --alerts-file runtime/data/current/runtime_alerts.json \
+  --webhook-url https://example.invalid/hooks/runtime \
+  --dry-run
+```
+
+For the deterministic baseline smoke gate, run:
+
+```bash
+make smoke-alerting
+```
+
+To exercise the reverse-alerting heartbeat baseline, run:
+
+```bash
+operator-cli build-heartbeat \
+  --runtime-status-file runtime/data/current/runtime_status.json \
+  --output runtime/data/current/runtime_heartbeat.json
+
+operator-cli send-heartbeat \
+  --heartbeat-file runtime/data/current/runtime_heartbeat.json \
+  --webhook-url https://example.invalid/heartbeat \
+  --dry-run
+
+make smoke-heartbeat
+```
+
+To export a baseline tax/audit CSV from authoritative projected fill rows, run:
+
+```bash
+operator-cli export-tax-audit \
+  --opportunity-root runtime/data \
+  --output runtime/data/current/tax_audit.csv
+
+make smoke-tax-audit
+```
+
+To build a model-drift report from a benchmark JSON and exercise the fail-closed baseline, run:
+
+```bash
+operator-cli build-model-drift \
+  --benchmark-report-file runtime/benchmark_report.json \
+  --output runtime/data/current/model_drift.json \
+  --max-brier-score 0.20 \
+  --max-expected-calibration-error 0.10
+
+make smoke-model-drift
+```
+
+To run the current unattended guardrail baselines together, use:
+
+```bash
+make smoke-unattended-guardrails
+```
+
+If you want serious live modes to hold when the latest report is unhealthy, pass the report back into the loop:
+
+```bash
+run-agent-loop \
+  --venue polymarket \
+  --mode run \
+  --opportunity-root runtime/data \
+  --drift-report-file runtime/data/current/model_drift.json
+```
+
+If you want the loop to treat itself as explicitly autonomous rather than just supervised live, add:
+
+```bash
+run-agent-loop \
+  --venue polymarket \
+  --mode run \
+  --opportunity-root runtime/data \
+  --policy-file runtime/policy.json \
+  --execution-lock-name primary-loop \
+  --drift-report-file runtime/data/current/model_drift.json \
+  --autonomous-mode
+```
+
+You can also set the same posture in the runtime policy under `trading_engine.autonomous_mode = true`.
+
+If you want the loop to treat itself as explicitly autonomous rather than just supervised live, add:
+
+```bash
+run-agent-loop \
+  --venue polymarket \
+  --mode run \
+  --opportunity-root runtime/data \
+  --policy-file runtime/policy.json \
+  --execution-lock-name primary-loop \
+  --drift-report-file runtime/data/current/model_drift.json \
+  --autonomous-mode
+```
+
+That flag is intentionally fail-closed: the loop refuses to start in autonomous mode unless the required guardrail contract is already in place.
 
 ## Runtime policy files
 

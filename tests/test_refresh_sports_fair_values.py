@@ -31,6 +31,7 @@ class RefreshSportsFairValuesTests(unittest.TestCase):
             refresh_interval_seconds=0.0,
             max_cycles=1,
             api_key_env="THE_ODDS_API_KEY",
+            max_fair_value_delta=0.35,
             quiet=False,
         )
 
@@ -191,3 +192,155 @@ class RefreshSportsFairValuesTests(unittest.TestCase):
         self.assertEqual(manifest["values"]["token-1:yes"]["fair_value"], 0.6)
         self.assertFalse(status_payload["ok"])
         self.assertEqual(status_payload["last_success_at"], "2026-04-07T12:00:00+00:00")
+
+    def test_run_refresh_cycle_records_velocity_metadata_when_within_threshold(self):
+        markets = [
+            MarketSummary(
+                contract=Contract(
+                    venue=Venue.POLYMARKET, symbol="token-yes", outcome=OutcomeSide.YES
+                ),
+                title="Will Home Team win?",
+                sport="nba",
+                sports_market_type="moneyline",
+                active=True,
+                raw={"market": {"condition_id": "condition-1"}},
+            ),
+            MarketSummary(
+                contract=Contract(
+                    venue=Venue.POLYMARKET, symbol="token-no", outcome=OutcomeSide.NO
+                ),
+                title="Will Home Team win?",
+                sport="nba",
+                sports_market_type="moneyline",
+                active=True,
+                raw={"market": {"condition_id": "condition-1"}},
+            ),
+        ]
+        payload = [
+            {
+                "id": "event-1",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "bookmakers": [
+                    {
+                        "key": "book-a",
+                        "last_update": "2026-04-07T12:00:00Z",
+                        "markets": [
+                            {
+                                "key": "h2h",
+                                "outcomes": [
+                                    {"name": "Home Team", "price": 1.7},
+                                    {"name": "Away Team", "price": 2.3},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle,
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as status_handle,
+            patch.object(
+                refresh_sports_fair_values, "build_adapter"
+            ) as build_adapter_mock,
+            patch.object(
+                refresh_sports_fair_values, "fetch_odds_payload", return_value=payload
+            ),
+        ):
+            json.dump(
+                {
+                    "values": {
+                        "token-yes:yes": {"fair_value": 0.60},
+                        "token-no:no": {"fair_value": 0.40},
+                    }
+                },
+                output_handle,
+            )
+            output_handle.flush()
+            build_adapter_mock.return_value = SimpleNamespace(
+                list_markets=lambda limit=200: markets
+            )
+            args = self._args(output_handle.name, status_handle.name)
+
+            status = refresh_sports_fair_values._run_refresh_cycle_impl(args)
+
+        self.assertEqual(status["velocity_violation_count"], 0)
+        self.assertEqual(status["max_fair_value_delta"], 0.35)
+
+    def test_run_refresh_cycle_blocks_implausible_velocity_jump(self):
+        markets = [
+            MarketSummary(
+                contract=Contract(
+                    venue=Venue.POLYMARKET, symbol="token-yes", outcome=OutcomeSide.YES
+                ),
+                title="Will Home Team win?",
+                sport="nba",
+                sports_market_type="moneyline",
+                active=True,
+                raw={"market": {"condition_id": "condition-1"}},
+            ),
+            MarketSummary(
+                contract=Contract(
+                    venue=Venue.POLYMARKET, symbol="token-no", outcome=OutcomeSide.NO
+                ),
+                title="Will Home Team win?",
+                sport="nba",
+                sports_market_type="moneyline",
+                active=True,
+                raw={"market": {"condition_id": "condition-1"}},
+            ),
+        ]
+        payload = [
+            {
+                "id": "event-1",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "bookmakers": [
+                    {
+                        "key": "book-a",
+                        "last_update": "2026-04-07T12:00:00Z",
+                        "markets": [
+                            {
+                                "key": "h2h",
+                                "outcomes": [
+                                    {"name": "Home Team", "price": 1.01},
+                                    {"name": "Away Team", "price": 100.0},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        with (
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as output_handle,
+            tempfile.NamedTemporaryFile("w+", suffix=".json") as status_handle,
+            patch.object(
+                refresh_sports_fair_values, "build_adapter"
+            ) as build_adapter_mock,
+            patch.object(
+                refresh_sports_fair_values, "fetch_odds_payload", return_value=payload
+            ),
+        ):
+            json.dump(
+                {
+                    "values": {
+                        "token-yes:yes": {"fair_value": 0.60},
+                        "token-no:no": {"fair_value": 0.40},
+                    }
+                },
+                output_handle,
+            )
+            output_handle.flush()
+            build_adapter_mock.return_value = SimpleNamespace(
+                list_markets=lambda limit=200: markets
+            )
+            args = self._args(output_handle.name, status_handle.name)
+
+            with self.assertRaisesRegex(
+                RuntimeError, "fair value velocity check failed"
+            ):
+                refresh_sports_fair_values._run_refresh_cycle_impl(args)

@@ -13,6 +13,8 @@ class ContractRuleFreezePolicy:
     freeze_before_expiry_seconds: float | None = 3600.0
     freeze_when_closed: bool = True
     freeze_when_inactive: bool = True
+    freeze_when_resolving: bool = True
+    freeze_when_disputed: bool = True
     freeze_when_not_accepting_orders: bool = True
     freeze_when_order_book_disabled: bool = True
 
@@ -21,6 +23,8 @@ class ContractRuleFreezePolicy:
 class ParsedContractRules:
     active: bool | None = None
     closed: bool | None = None
+    resolving: bool | None = None
+    disputed: bool | None = None
     accepting_orders: bool | None = None
     order_book_enabled: bool | None = None
     expires_at: datetime | None = None
@@ -81,9 +85,9 @@ def parse_contract_rules(market: MarketSummary) -> ParsedContractRules:
     return ParsedContractRules(
         active=_payload_bool(payload, "active"),
         closed=_payload_bool(payload, "closed"),
-        accepting_orders=_payload_bool(
-            payload, "acceptingOrders", "accepting_orders"
-        ),
+        resolving=_payload_bool(payload, "resolving", "isResolving", "is_resolving"),
+        disputed=_payload_bool(payload, "disputed", "isDisputed", "is_disputed"),
+        accepting_orders=_payload_bool(payload, "acceptingOrders", "accepting_orders"),
         order_book_enabled=_payload_bool(
             payload, "enableOrderBook", "enable_order_book"
         ),
@@ -112,6 +116,10 @@ def contract_freeze_reasons(
         rules.active is False or (rules.active is None and not market.active)
     ):
         reasons.append("market marked inactive in contract rules")
+    if policy.freeze_when_resolving and rules.resolving is True:
+        reasons.append("market marked resolving in contract rules")
+    if policy.freeze_when_disputed and rules.disputed is True:
+        reasons.append("market marked disputed in contract rules")
     if policy.freeze_when_not_accepting_orders and rules.accepting_orders is False:
         reasons.append("market not accepting orders in contract rules")
     if policy.freeze_when_order_book_disabled and rules.order_book_enabled is False:

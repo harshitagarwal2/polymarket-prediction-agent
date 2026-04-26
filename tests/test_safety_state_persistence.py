@@ -608,6 +608,88 @@ class SafetyStatePersistenceTests(unittest.TestCase):
                 "daily loss limit reached",
             )
 
+    def test_weekly_and_cumulative_loss_state_persist_and_block_after_restart(self):
+        adapter = DailyLossAdapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "safety-state.json"
+            engine = TradingEngine(
+                adapter=adapter,
+                strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+                risk_engine=RiskEngine(
+                    RiskLimits(
+                        max_contracts_per_market=20,
+                        max_global_contracts=20,
+                        max_weekly_loss=5.0,
+                        max_cumulative_loss=5.0,
+                    )
+                ),
+                safety_state_path=state_path,
+            )
+
+            engine.preview_once(adapter.contract, fair_value=0.60)
+            adapter.phase = 1
+            first_blocked = engine.preview_once(adapter.contract, fair_value=0.60)
+
+            self.assertAlmostEqual(engine.risk_engine.state.weekly_realized_pnl, -6.0)
+            self.assertAlmostEqual(
+                engine.risk_engine.state.cumulative_realized_pnl, -6.0
+            )
+            self.assertFalse(first_blocked.risk.approved)
+            self.assertEqual(
+                first_blocked.risk.rejected[0].reason,
+                "weekly loss limit reached",
+            )
+
+            restarted = TradingEngine(
+                adapter=adapter,
+                strategy=FairValueBandStrategy(quantity=1, edge_threshold=0.03),
+                risk_engine=RiskEngine(
+                    RiskLimits(
+                        max_contracts_per_market=20,
+                        max_global_contracts=20,
+                        max_weekly_loss=5.0,
+                        max_cumulative_loss=5.0,
+                    )
+                ),
+                safety_state_path=state_path,
+            )
+            second_blocked = restarted.preview_once(adapter.contract, fair_value=0.60)
+
+            status = restarted.status_snapshot()
+            self.assertAlmostEqual(
+                restarted.risk_engine.state.weekly_realized_pnl, -6.0
+            )
+            self.assertAlmostEqual(
+                restarted.risk_engine.state.cumulative_realized_pnl, -6.0
+            )
+            self.assertEqual(
+                getattr(restarted.safety_state, "weekly_loss_period", None),
+                restarted._current_utc_week(),
+            )
+            self.assertAlmostEqual(
+                float(getattr(restarted.safety_state, "weekly_realized_pnl", 0.0)),
+                -6.0,
+            )
+            self.assertAlmostEqual(
+                float(getattr(restarted.safety_state, "cumulative_realized_pnl", 0.0)),
+                -6.0,
+            )
+            self.assertTrue(
+                restarted.risk_engine.state.weekly_loss_limit_reached(
+                    restarted.risk_engine.limits.max_weekly_loss
+                )
+            )
+            self.assertTrue(
+                restarted.risk_engine.state.cumulative_loss_limit_reached(
+                    restarted.risk_engine.limits.max_cumulative_loss
+                )
+            )
+            self.assertFalse(second_blocked.risk.approved)
+            self.assertEqual(
+                second_blocked.risk.rejected[0].reason,
+                "weekly loss limit reached",
+            )
+
     def test_resume_reconciles_against_persisted_truth_before_sync(self):
         adapter = PersistedUnexpectedFillAdapter()
         with tempfile.TemporaryDirectory() as temp_dir:

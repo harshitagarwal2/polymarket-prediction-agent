@@ -9,9 +9,22 @@ import subprocess
 import sys
 from typing import Any, cast
 
+from adapters.types import (
+    AccountSnapshot,
+    BalanceSnapshot,
+    Contract,
+    FillSnapshot,
+    NormalizedOrder,
+    OrderAction,
+    OrderStatus,
+    OutcomeSide,
+    PositionSnapshot,
+    Venue,
+)
 from engine.cli_output import add_quiet_flag, emit_json
 from scripts import ingest_live_data
 from services.capture import (
+    PolymarketCaptureStores,
     PolymarketMarketSnapshotRequest,
     SportsbookCaptureRequest,
     SportsbookCaptureStores,
@@ -19,7 +32,9 @@ from services.capture import (
     capture_sportsbook_odds_once,
     hydrate_polymarket_market_snapshot,
     persist_polymarket_bbo_input_events,
+    persist_polymarket_user_message,
 )
+from services.capture.polymarket import serialize_account_snapshot
 from services.projection import project_current_state_once
 from storage.postgres.bootstrap import write_dsn_marker
 
@@ -29,6 +44,7 @@ _REQUIRED_READY_SOURCES = (
     "projection_sportsbook_odds",
     "projection_polymarket_market_catalog",
     "projection_polymarket_market_channel",
+    "projection_polymarket_user_channel",
     "market_mappings",
     "fair_values",
 )
@@ -108,12 +124,28 @@ def _build_readiness_summary(root: Path) -> dict[str, object]:
     mapping_rows = _read_current_json(root, "market_mappings")
     fair_value_rows = _read_current_json(root, "fair_values")
     opportunity_rows = _read_current_json(root, "opportunities")
+    order_rows = _read_current_json(root, "polymarket_orders")
+    fill_rows = _read_current_json(root, "polymarket_fills")
+    position_rows = _read_current_json(root, "polymarket_positions")
+    balance_rows = _read_current_json(root, "polymarket_balance")
     if not mapping_rows:
         raise RuntimeError("market_mappings current-state table is empty after smoke")
     if not fair_value_rows:
         raise RuntimeError("fair_values current-state table is empty after smoke")
     if not opportunity_rows:
         raise RuntimeError("opportunities current-state table is empty after smoke")
+    if not order_rows:
+        raise RuntimeError("polymarket_orders current-state table is empty after smoke")
+    if not fill_rows:
+        raise RuntimeError("polymarket_fills current-state table is empty after smoke")
+    if not position_rows:
+        raise RuntimeError(
+            "polymarket_positions current-state table is empty after smoke"
+        )
+    if not balance_rows:
+        raise RuntimeError(
+            "polymarket_balance current-state table is empty after smoke"
+        )
 
     return {
         "source_health": ready_sources,
@@ -121,8 +153,60 @@ def _build_readiness_summary(root: Path) -> dict[str, object]:
             "market_mappings": len(mapping_rows),
             "fair_values": len(fair_value_rows),
             "opportunities": len(opportunity_rows),
+            "polymarket_orders": len(order_rows),
+            "polymarket_fills": len(fill_rows),
+            "polymarket_positions": len(position_rows),
+            "polymarket_balance": len(balance_rows),
         },
     }
+
+
+def _account_snapshot_payload() -> dict[str, object]:
+    contract = Contract(
+        venue=Venue.POLYMARKET, symbol="yes-token", outcome=OutcomeSide.YES
+    )
+    snapshot = AccountSnapshot(
+        venue=Venue.POLYMARKET,
+        balance=BalanceSnapshot(
+            venue=Venue.POLYMARKET,
+            available=100.0,
+            total=100.0,
+            currency="USDC",
+        ),
+        positions=[
+            PositionSnapshot(
+                contract=contract,
+                quantity=1.0,
+                average_price=0.44,
+                mark_price=0.46,
+            )
+        ],
+        open_orders=[
+            NormalizedOrder(
+                order_id="order-1",
+                contract=contract,
+                action=OrderAction.BUY,
+                price=0.45,
+                quantity=2.0,
+                remaining_quantity=2.0,
+                status=OrderStatus.RESTING,
+            )
+        ],
+        fills=[
+            FillSnapshot(
+                order_id="order-1",
+                contract=contract,
+                action=OrderAction.BUY,
+                price=0.45,
+                quantity=0.5,
+                fill_id="fill-1",
+            )
+        ],
+        observed_at=datetime(2026, 5, 21, 18, 2, 30, tzinfo=timezone.utc),
+        complete=True,
+        issues=[],
+    )
+    return serialize_account_snapshot(snapshot)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -191,6 +275,18 @@ def main(argv: list[str] | None = None) -> int:
         ],
         root=str(root),
         observed_at=datetime(2026, 5, 21, 18, 2, tzinfo=timezone.utc),
+    )
+    persist_polymarket_user_message(
+        {
+            "orders": [{"id": "order-1", "asset_id": "pm-1"}],
+            "fills": [{"trade_id": "fill-1", "asset_id": "pm-1"}],
+        },
+        stores=PolymarketCaptureStores.from_root(root),
+        observed_at=datetime(2026, 5, 21, 18, 2, 30, tzinfo=timezone.utc),
+        stale_after_ms=4_000,
+        order_payloads=[{"id": "order-1", "asset_id": "pm-1"}],
+        fill_payloads=[{"trade_id": "fill-1", "asset_id": "pm-1"}],
+        account_snapshot_payload=_account_snapshot_payload(),
     )
     projection_payload = project_current_state_once(root)
     ingest_live_data.main(

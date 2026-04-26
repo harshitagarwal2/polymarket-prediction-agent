@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import json
+import subprocess
+import shlex
 from typing import TYPE_CHECKING, Any
 
 from adapters.base import TradingAdapter
@@ -30,7 +32,58 @@ def parse_comma_separated(value: str | None) -> list[str] | None:
     return items or None
 
 
-def _load_manifest_condition_ids(path: str | None) -> list[str] | None:
+def resolve_polymarket_private_key() -> str | None:
+    env_value = os.getenv("POLYMARKET_PRIVATE_KEY")
+    if env_value not in (None, ""):
+        return env_value
+    command = os.getenv("POLYMARKET_PRIVATE_KEY_COMMAND")
+    if command not in (None, ""):
+        completed = subprocess.run(
+            shlex.split(command),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        value = completed.stdout.strip()
+        if not value:
+            raise RuntimeError("Polymarket private key command produced empty output")
+        return value
+    file_path = os.getenv("POLYMARKET_PRIVATE_KEY_FILE")
+    if file_path in (None, ""):
+        return None
+    candidate = Path(file_path)
+    if not candidate.exists():
+        raise RuntimeError(f"Polymarket private key file not found: {candidate}")
+    value = candidate.read_text(encoding="utf-8").strip()
+    if not value:
+        raise RuntimeError(f"Polymarket private key file is empty: {candidate}")
+    return value
+
+
+def validate_polymarket_live_routing(*, context: str) -> str:
+    route_label = os.getenv("POLYMARKET_ROUTE_LABEL")
+    if route_label in (None, ""):
+        raise RuntimeError(f"{context} requires POLYMARKET_ROUTE_LABEL")
+    geo_ack = (os.getenv("POLYMARKET_GEO_COMPLIANCE_ACK") or "").strip().lower()
+    if geo_ack not in {"1", "true", "yes"}:
+        raise RuntimeError(f"{context} requires POLYMARKET_GEO_COMPLIANCE_ACK=true")
+    return route_label
+
+
+def validate_polymarket_private_order_flow(*, context: str) -> None:
+    required = (
+        (os.getenv("POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED") or "").strip().lower()
+    )
+    if required not in {"1", "true", "yes"}:
+        return
+    host = os.getenv("POLYMARKET_CLOB_HOST") or PolymarketConfig.host
+    if host == PolymarketConfig.host:
+        raise RuntimeError(
+            f"{context} requires a non-default POLYMARKET_CLOB_HOST when POLYMARKET_PRIVATE_ORDER_FLOW_REQUIRED=true"
+        )
+
+
+def load_manifest_condition_ids(path: str | None) -> list[str] | None:
     if path in (None, ""):
         return None
     manifest_path = Path(path)
@@ -55,7 +108,7 @@ def _load_manifest_condition_ids(path: str | None) -> list[str] | None:
     return condition_ids or None
 
 
-def _load_projected_condition_ids(root: str | Path | None) -> list[str] | None:
+def load_projected_condition_ids(root: str | Path | None) -> list[str] | None:
     if root in (None, ""):
         return None
     adapter = build_current_state_read_adapter(root, require_postgres=True)
@@ -115,6 +168,34 @@ def build_current_state_read_adapter(
     return FileCurrentStateReadAdapter.from_opportunity_root(opportunity_root)
 
 
+def resolve_polymarket_live_user_markets(
+    *,
+    explicit_markets: str | list[str] | None = None,
+    env_markets: str | None = None,
+    runtime_mode: str | None = None,
+    opportunity_root: str | Path | None = None,
+    fair_values_file: str | None = None,
+) -> list[str] | None:
+    if isinstance(explicit_markets, list):
+        resolved: list[str] = []
+        for value in explicit_markets:
+            resolved.extend(parse_comma_separated(value) or [])
+        if resolved:
+            return resolved
+    else:
+        parsed_explicit = parse_comma_separated(explicit_markets)
+        if parsed_explicit:
+            return parsed_explicit
+
+    parsed_env = parse_comma_separated(env_markets)
+    if parsed_env:
+        return parsed_env
+
+    if runtime_mode in {"run", "pair-run"} and opportunity_root not in (None, ""):
+        return load_projected_condition_ids(opportunity_root)
+    return load_manifest_condition_ids(fair_values_file)
+
+
 def build_adapter(
     venue_name: str,
     args: Any = None,
@@ -122,24 +203,19 @@ def build_adapter(
     policy: RuntimePolicy | None = None,
 ) -> TradingAdapter:
     if venue_name == "polymarket":
-        markets = parse_comma_separated(
-            getattr(args, "polymarket_live_user_markets", None)
-            or os.getenv("POLYMARKET_LIVE_USER_MARKETS")
+        markets = resolve_polymarket_live_user_markets(
+            explicit_markets=getattr(args, "polymarket_live_user_markets", None),
+            env_markets=os.getenv("POLYMARKET_LIVE_USER_MARKETS"),
+            runtime_mode=getattr(args, "mode", None),
+            opportunity_root=getattr(args, "opportunity_root", None),
+            fair_values_file=getattr(args, "fair_values_file", None),
         )
-        if markets is None:
-            runtime_mode = getattr(args, "mode", None)
-            opportunity_root = getattr(args, "opportunity_root", None)
-            if runtime_mode in {"run", "pair-run"} and opportunity_root not in (
-                None,
-                "",
-            ):
-                markets = _load_projected_condition_ids(opportunity_root)
-            else:
-                markets = _load_manifest_condition_ids(
-                    getattr(args, "fair_values_file", None)
-                )
         config = PolymarketConfig(
-            private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
+            host=(os.getenv("POLYMARKET_CLOB_HOST") or PolymarketConfig.host),
+            data_api_host=(
+                os.getenv("POLYMARKET_DATA_API_HOST") or PolymarketConfig.data_api_host
+            ),
+            private_key=resolve_polymarket_private_key(),
             funder=os.getenv("POLYMARKET_FUNDER"),
             account_address=os.getenv("POLYMARKET_ACCOUNT_ADDRESS"),
             user_ws_host=(
@@ -165,5 +241,11 @@ def build_adapter(
 __all__ = [
     "build_adapter",
     "build_current_state_read_adapter",
+    "load_manifest_condition_ids",
+    "load_projected_condition_ids",
     "parse_comma_separated",
+    "validate_polymarket_private_order_flow",
+    "validate_polymarket_live_routing",
+    "resolve_polymarket_private_key",
+    "resolve_polymarket_live_user_markets",
 ]

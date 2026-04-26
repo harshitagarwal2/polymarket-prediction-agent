@@ -43,6 +43,8 @@ class PairOpportunityRanker:
     max_spread: float | None = None
     min_hours_to_expiry: float | None = None
     max_hours_to_expiry: float | None = None
+    time_lock_penalty_weight: float = 0.0
+    time_lock_penalty_saturation_hours: float = 168.0
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
@@ -106,6 +108,19 @@ class PairOpportunityRanker:
             return 0.0
         return max(0.0, self.taker_fee_rate * price * (1.0 - price))
 
+    def _time_lock_penalty(self, hours_to_expiry: float | None) -> float:
+        if (
+            hours_to_expiry is None
+            or self.time_lock_penalty_weight <= 0.0
+            or self.time_lock_penalty_saturation_hours <= 0.0
+        ):
+            return 0.0
+        normalized = min(
+            max(float(hours_to_expiry), 0.0) / self.time_lock_penalty_saturation_hours,
+            1.0,
+        )
+        return normalized * self.time_lock_penalty_weight
+
     def rank(self, markets: list[MarketSummary]) -> list[PairOpportunityCandidate]:
         now = datetime.now(timezone.utc)
         allowed_categories = self._normalize_allowed_categories()
@@ -139,6 +154,8 @@ class PairOpportunityRanker:
             net_edge = 1.0 - gross_cost - total_fee
             if net_edge < self.edge_threshold:
                 continue
+            hours_to_expiry = market_hours_to_expiry(yes_market, now=now)
+            time_lock_penalty = self._time_lock_penalty(hours_to_expiry)
             candidates.append(
                 PairOpportunityCandidate(
                     market_key=group_key,
@@ -149,9 +166,14 @@ class PairOpportunityRanker:
                     gross_cost=gross_cost,
                     total_fee=total_fee,
                     net_edge=net_edge,
-                    score=round(net_edge, 8),
+                    score=round(net_edge - time_lock_penalty, 8),
                     rationale=(
                         f"paired buy cost {gross_cost:.4f} plus fee {total_fee:.4f} leaves net edge {net_edge:.4f}"
+                        + (
+                            f" with time_lock_penalty {time_lock_penalty:.4f}"
+                            if time_lock_penalty > 0.0
+                            else ""
+                        )
                     ),
                     raw={"yes": yes_market.raw, "no": no_market.raw},
                 )
@@ -177,6 +199,8 @@ class OpportunityRanker:
     complement_discount_bonus_cap: float = 0.005
     spread_penalty_weight: float = 0.25
     taker_fee_rate: float = 0.0
+    time_lock_penalty_weight: float = 0.0
+    time_lock_penalty_saturation_hours: float = 168.0
     contract_rule_freeze: ContractRuleFreezePolicy = field(
         default_factory=ContractRuleFreezePolicy
     )
@@ -271,6 +295,7 @@ class OpportunityRanker:
         edge: float,
         market: MarketSummary,
         spread: float | None,
+        hours_to_expiry: float | None,
         complement_discount: float = 0.0,
     ) -> float:
         score = edge
@@ -282,6 +307,17 @@ class OpportunityRanker:
             score += normalized_volume * self.volume_bonus_cap
         if spread is not None:
             score -= spread * self.spread_penalty_weight
+        if (
+            hours_to_expiry is not None
+            and self.time_lock_penalty_weight > 0.0
+            and self.time_lock_penalty_saturation_hours > 0.0
+        ):
+            normalized = min(
+                max(float(hours_to_expiry), 0.0)
+                / self.time_lock_penalty_saturation_hours,
+                1.0,
+            )
+            score -= normalized * self.time_lock_penalty_weight
         if complement_discount > 0:
             score += min(
                 complement_discount * self.complement_discount_bonus_weight,
@@ -309,6 +345,18 @@ class OpportunityRanker:
             details.append(f"spread {spread:.4f}")
         if hours_to_expiry is not None:
             details.append(f"expires_in {hours_to_expiry:.1f}h")
+            if (
+                self.time_lock_penalty_weight > 0.0
+                and self.time_lock_penalty_saturation_hours > 0.0
+            ):
+                normalized = min(
+                    max(float(hours_to_expiry), 0.0)
+                    / self.time_lock_penalty_saturation_hours,
+                    1.0,
+                )
+                penalty = normalized * self.time_lock_penalty_weight
+                if penalty > 0.0:
+                    details.append(f"time_lock_penalty {penalty:.4f}")
         if complement_discount > 0:
             details.append(f"paired_ask_discount {complement_discount:.4f}")
         if fee_drag > 0:
@@ -379,6 +427,7 @@ class OpportunityRanker:
                                 edge=buy_assessment.edge,
                                 market=market,
                                 spread=spread,
+                                hours_to_expiry=hours_to_expiry,
                                 complement_discount=complement_discount,
                             ),
                             rationale=rationale,
@@ -420,6 +469,7 @@ class OpportunityRanker:
                                 edge=sell_assessment.edge,
                                 market=market,
                                 spread=spread,
+                                hours_to_expiry=hours_to_expiry,
                             ),
                             rationale=rationale,
                             raw=market.raw,

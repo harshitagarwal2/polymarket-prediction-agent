@@ -5,7 +5,7 @@ import json
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 from storage.postgres.bootstrap import (
     apply_migrations,
@@ -124,6 +124,12 @@ class _PostgresRepository(ABC):
         self._ensure_schema()
         return connect_postgres(self.dsn)
 
+    def _acquire_connection(self, connection: Any | None = None) -> tuple[Any, bool]:
+        active_connection: Any = (
+            cast(Any, connection) if connection is not None else self._connect()
+        )
+        return active_connection, connection is None
+
     def _record_raw_event(
         self,
         cursor: Any,
@@ -166,11 +172,16 @@ class _PostgresRepository(ABC):
         query: str,
         *,
         params: tuple[Any, ...] = (),
+        connection: Any | None = None,
     ) -> dict[str, Any]:
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(query, params)
                 rows = cursor.fetchall()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return {str(key): _decode_payload(payload) for key, payload in rows}
 
     def _fetch_indexed_payloads(
@@ -178,11 +189,16 @@ class _PostgresRepository(ABC):
         query: str,
         *,
         params: tuple[Any, ...] = (),
+        connection: Any | None = None,
     ) -> dict[str, Any]:
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(query, params)
                 rows = cursor.fetchall()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return {
             str(index): _decode_payload(payload)
             for index, (payload,) in enumerate(rows)
@@ -196,11 +212,14 @@ class _PostgresRepository(ABC):
         for key, row in rows.items():
             self.upsert(str(key), row)
 
-    def read_current(self) -> dict[str, Any]:
-        return self.read_all()
+    def read_current(self, *, connection: Any | None = None) -> dict[str, Any]:
+        read_all = cast(Any, self.read_all)
+        if connection is None:
+            return read_all()
+        return read_all(connection=connection)
 
     @abstractmethod
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         raise NotImplementedError
 
 
@@ -209,10 +228,13 @@ class MarketRepository(_PostgresRepository):
     source_name = "polymarket"
     layer_name = "market_catalog"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO polymarket_markets (
@@ -273,12 +295,17 @@ class MarketRepository(_PostgresRepository):
                     payload=payload,
                     captured_at=datetime.now(timezone.utc),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT market_id, payload FROM polymarket_markets ORDER BY market_id"
+            "SELECT market_id, payload FROM polymarket_markets ORDER BY market_id",
+            connection=connection,
         )
 
 
@@ -287,10 +314,13 @@ class BBORepository(_PostgresRepository):
     source_name = "polymarket"
     layer_name = "market_channel"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO polymarket_bbo (
@@ -355,12 +385,17 @@ class BBORepository(_PostgresRepository):
                     payload=payload,
                     captured_at=_captured_at(payload.get("book_ts")),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT market_id, payload FROM polymarket_bbo ORDER BY market_id"
+            "SELECT market_id, payload FROM polymarket_bbo ORDER BY market_id",
+            connection=connection,
         )
 
 
@@ -369,10 +404,13 @@ class SportsbookEventRepository(_PostgresRepository):
     source_name = "sportsbook"
     layer_name = "event_catalog"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO sportsbook_events (
@@ -419,12 +457,17 @@ class SportsbookEventRepository(_PostgresRepository):
                     payload=payload,
                     captured_at=datetime.now(timezone.utc),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT sportsbook_event_id, payload FROM sportsbook_events ORDER BY sportsbook_event_id"
+            "SELECT sportsbook_event_id, payload FROM sportsbook_events ORDER BY sportsbook_event_id",
+            connection=connection,
         )
 
 
@@ -433,10 +476,11 @@ class SportsbookOddsRepository(_PostgresRepository):
     source_name = "sportsbook"
     layer_name = "quote_events"
 
-    def append(self, row: Any) -> dict[str, Any]:
+    def append(self, row: Any, *, connection: Any | None = None) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO sportsbook_odds (
@@ -534,23 +578,30 @@ class SportsbookOddsRepository(_PostgresRepository):
                         payload.get("capture_ts") or payload.get("quote_ts")
                     ),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         del key
-        return self.append(row)
+        return self.append(row, connection=connection)
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_indexed_payloads(
             """
             SELECT payload
             FROM sportsbook_odds
             ORDER BY quote_ts, sportsbook_event_id, source, market_type, selection
-            """
+            """,
+            connection=connection,
         )
 
-    def read_current(self) -> dict[str, Any]:
+    def read_current(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
             """
             SELECT
@@ -558,7 +609,8 @@ class SportsbookOddsRepository(_PostgresRepository):
               payload
             FROM sportsbook_odds_current
             ORDER BY sportsbook_event_id, source, market_type, selection
-            """
+            """,
+            connection=connection,
         )
 
 
@@ -652,18 +704,20 @@ class MappingRepository(_PostgresRepository):
         del key
         return self.append(row)
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_indexed_payloads(
-            "SELECT payload FROM market_mappings ORDER BY created_at, mapping_id"
+            "SELECT payload FROM market_mappings ORDER BY created_at, mapping_id",
+            connection=connection,
         )
 
-    def read_current(self) -> dict[str, Any]:
+    def read_current(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
             """
             SELECT CONCAT(polymarket_market_id, '|', sportsbook_event_id) AS key, payload
             FROM market_mappings_current
             ORDER BY polymarket_market_id, sportsbook_event_id
-            """
+            """,
+            connection=connection,
         )
 
 
@@ -672,10 +726,13 @@ class SourceHealthRepository(_PostgresRepository):
     source_name = "projection"
     layer_name = "source_health"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO source_health (
@@ -739,12 +796,17 @@ class SourceHealthRepository(_PostgresRepository):
                     payload=payload,
                     captured_at=_captured_at(payload.get("last_seen_at")),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT source_name, payload FROM source_health ORDER BY source_name"
+            "SELECT source_name, payload FROM source_health ORDER BY source_name",
+            connection=connection,
         )
 
 
@@ -859,7 +921,7 @@ class FairValueRepository(_PostgresRepository):
     def write_all(self, rows: dict[str, Any]) -> None:
         self._upsert_rows(_row_payload(row) for row in rows.values())
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
             """
             SELECT
@@ -867,12 +929,14 @@ class FairValueRepository(_PostgresRepository):
               payload
             FROM fair_values
             ORDER BY as_of, market_id, model_name, model_version
-            """
+            """,
+            connection=connection,
         )
 
-    def read_current(self) -> dict[str, Any]:
+    def read_current(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT market_id, payload FROM fair_values_current ORDER BY market_id"
+            "SELECT market_id, payload FROM fair_values_current ORDER BY market_id",
+            connection=connection,
         )
 
 
@@ -990,18 +1054,20 @@ class OpportunityRepository(_PostgresRepository):
         del key
         return self.append(row)
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
             """
             SELECT CONCAT(market_id, '|', as_of::text, '|', side) AS key, payload
             FROM opportunities
             ORDER BY as_of, market_id, side
-            """
+            """,
+            connection=connection,
         )
 
-    def read_current(self) -> dict[str, Any]:
+    def read_current(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT CONCAT(market_id, '|', side) AS key, payload FROM opportunities_current ORDER BY market_id, side"
+            "SELECT CONCAT(market_id, '|', side) AS key, payload FROM opportunities_current ORDER BY market_id, side",
+            connection=connection,
         )
 
 
@@ -1067,9 +1133,10 @@ class TradeAttributionRepository(_PostgresRepository):
             connection.commit()
         return payload
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT trade_id, payload FROM trade_attribution ORDER BY trade_id"
+            "SELECT trade_id, payload FROM trade_attribution ORDER BY trade_id",
+            connection=connection,
         )
 
 
@@ -1132,13 +1199,271 @@ class ModelRegistryRepository(_PostgresRepository):
         )
         return self.upsert(key, payload)
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
             """
             SELECT CONCAT(model_name, '|', model_version) AS key, payload
             FROM model_registry
             ORDER BY model_name, model_version
-            """
+            """,
+            connection=connection,
+        )
+
+
+class RuntimeCycleRepository(_PostgresRepository):
+    table_name = "runtime_cycles"
+    source_name = "runtime"
+    layer_name = "cycle_ledger"
+
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
+        payload = _row_payload(row)
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO runtime_cycles (
+                      cycle_id,
+                      mode,
+                      started_at,
+                      selected_market_key,
+                      policy_allowed,
+                      halted,
+                      payload,
+                      updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (cycle_id) DO UPDATE SET
+                      mode = EXCLUDED.mode,
+                      started_at = EXCLUDED.started_at,
+                      selected_market_key = EXCLUDED.selected_market_key,
+                      policy_allowed = EXCLUDED.policy_allowed,
+                      halted = EXCLUDED.halted,
+                      payload = EXCLUDED.payload,
+                      updated_at = NOW()
+                    """,
+                    (
+                        str(key),
+                        payload.get("mode"),
+                        _parse_timestamp(payload.get("started_at")),
+                        payload.get("selected_market_key"),
+                        payload.get("policy_allowed"),
+                        bool(payload.get("halted", False)),
+                        _payload_json(payload),
+                    ),
+                )
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
+        return payload
+
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT cycle_id, payload FROM runtime_cycles ORDER BY started_at, cycle_id",
+            connection=connection,
+        )
+
+
+class TradeDecisionRepository(_PostgresRepository):
+    table_name = "trade_decisions"
+    source_name = "runtime"
+    layer_name = "decision_ledger"
+
+    def append(self, row: Any, *, connection: Any | None = None) -> dict[str, Any]:
+        payload = _row_payload(row)
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO trade_decisions (
+                      cycle_id,
+                      market_id,
+                      contract_key,
+                      side,
+                      fair_value,
+                      market_price,
+                      score,
+                      blocked,
+                      blocked_reason,
+                      blocked_reasons,
+                      payload
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                    RETURNING decision_id
+                    """,
+                    (
+                        payload.get("cycle_id"),
+                        payload.get("market_id"),
+                        payload.get("contract_key"),
+                        payload.get("side"),
+                        payload.get("fair_value"),
+                        payload.get("market_price"),
+                        payload.get("score"),
+                        bool(payload.get("blocked", False)),
+                        payload.get("blocked_reason"),
+                        _payload_json(
+                            {"blocked_reasons": payload.get("blocked_reasons", [])}
+                        ),
+                        _payload_json(payload),
+                    ),
+                )
+                payload["decision_id"] = int(cursor.fetchone()[0])
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
+        return payload
+
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
+        del key
+        return self.append(row, connection=connection)
+
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT decision_id::text, payload FROM trade_decisions ORDER BY decision_id",
+            connection=connection,
+        )
+
+
+class ExecutionOrderRepository(_PostgresRepository):
+    table_name = "execution_orders"
+    source_name = "runtime"
+    layer_name = "execution_order_ledger"
+
+    def append(self, row: Any, *, connection: Any | None = None) -> dict[str, Any]:
+        payload = _row_payload(row)
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO execution_orders (
+                      cycle_id,
+                      decision_id,
+                      order_id,
+                      contract_key,
+                      accepted,
+                      status,
+                      message,
+                      payload,
+                      updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (order_id) WHERE order_id IS NOT NULL DO UPDATE SET
+                      cycle_id = EXCLUDED.cycle_id,
+                      decision_id = EXCLUDED.decision_id,
+                      contract_key = EXCLUDED.contract_key,
+                      accepted = EXCLUDED.accepted,
+                      status = EXCLUDED.status,
+                      message = EXCLUDED.message,
+                      payload = EXCLUDED.payload,
+                      updated_at = NOW()
+                    RETURNING execution_order_id
+                    """,
+                    (
+                        payload.get("cycle_id"),
+                        payload.get("decision_id"),
+                        payload.get("order_id"),
+                        payload.get("contract_key"),
+                        bool(payload.get("accepted", False)),
+                        payload.get("status"),
+                        payload.get("message"),
+                        _payload_json(payload),
+                    ),
+                )
+                payload["execution_order_id"] = int(cursor.fetchone()[0])
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
+        return payload
+
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
+        del key
+        return self.append(row, connection=connection)
+
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT execution_order_id::text, payload FROM execution_orders ORDER BY execution_order_id",
+            connection=connection,
+        )
+
+
+class ExecutionFillRepository(_PostgresRepository):
+    table_name = "execution_fills"
+    source_name = "runtime"
+    layer_name = "execution_fill_ledger"
+
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
+        payload = _row_payload(row)
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO execution_fills (
+                      fill_key,
+                      order_id,
+                      contract_key,
+                      fill_ts,
+                      price,
+                      quantity,
+                      fee,
+                      snapshot_observed_at,
+                      snapshot_cohort_id,
+                      payload,
+                      updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (fill_key) DO UPDATE SET
+                      order_id = EXCLUDED.order_id,
+                      contract_key = EXCLUDED.contract_key,
+                      fill_ts = EXCLUDED.fill_ts,
+                      price = EXCLUDED.price,
+                      quantity = EXCLUDED.quantity,
+                      fee = EXCLUDED.fee,
+                      snapshot_observed_at = EXCLUDED.snapshot_observed_at,
+                      snapshot_cohort_id = EXCLUDED.snapshot_cohort_id,
+                      payload = EXCLUDED.payload,
+                      updated_at = NOW()
+                    """,
+                    (
+                        str(key),
+                        payload.get("order_id"),
+                        payload.get("contract_key"),
+                        _parse_timestamp(payload.get("fill_ts")),
+                        payload.get("price"),
+                        payload.get("quantity"),
+                        payload.get("fee"),
+                        _parse_timestamp(payload.get("snapshot_observed_at")),
+                        payload.get("snapshot_cohort_id"),
+                        _payload_json(payload),
+                    ),
+                )
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
+        return payload
+
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
+        return self._fetch_keyed_payloads(
+            "SELECT fill_key, payload FROM execution_fills ORDER BY updated_at, fill_key",
+            connection=connection,
         )
 
 
@@ -1147,10 +1472,13 @@ class PolymarketOrderRepository(_PostgresRepository):
     source_name = "polymarket"
     layer_name = "projected_account_truth"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO polymarket_orders_current (
@@ -1171,12 +1499,17 @@ class PolymarketOrderRepository(_PostgresRepository):
                         _payload_json(payload),
                     ),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def replace_all(self, rows: dict[str, Any]) -> None:
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+    def replace_all(self, rows: dict[str, Any], *, connection: Any | None = None) -> None:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute("DELETE FROM polymarket_orders_current")
                 for key, row in rows.items():
                     payload = _row_payload(row)
@@ -1196,11 +1529,16 @@ class PolymarketOrderRepository(_PostgresRepository):
                             _payload_json(payload),
                         ),
                     )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT order_id, payload FROM polymarket_orders_current ORDER BY order_id"
+            "SELECT order_id, payload FROM polymarket_orders_current ORDER BY order_id",
+            connection=connection,
         )
 
 
@@ -1209,10 +1547,13 @@ class PolymarketFillRepository(_PostgresRepository):
     source_name = "polymarket"
     layer_name = "projected_account_truth"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO polymarket_fills_current (
@@ -1236,12 +1577,17 @@ class PolymarketFillRepository(_PostgresRepository):
                         _payload_json(payload),
                     ),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def replace_all(self, rows: dict[str, Any]) -> None:
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+    def replace_all(self, rows: dict[str, Any], *, connection: Any | None = None) -> None:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute("DELETE FROM polymarket_fills_current")
                 for key, row in rows.items():
                     payload = _row_payload(row)
@@ -1263,11 +1609,16 @@ class PolymarketFillRepository(_PostgresRepository):
                             _payload_json(payload),
                         ),
                     )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT fill_key, payload FROM polymarket_fills_current ORDER BY fill_key"
+            "SELECT fill_key, payload FROM polymarket_fills_current ORDER BY fill_key",
+            connection=connection,
         )
 
 
@@ -1276,10 +1627,13 @@ class PolymarketPositionRepository(_PostgresRepository):
     source_name = "polymarket"
     layer_name = "projected_account_truth"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO polymarket_positions_current (
@@ -1297,12 +1651,17 @@ class PolymarketPositionRepository(_PostgresRepository):
                         _payload_json(payload),
                     ),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def replace_all(self, rows: dict[str, Any]) -> None:
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+    def replace_all(self, rows: dict[str, Any], *, connection: Any | None = None) -> None:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute("DELETE FROM polymarket_positions_current")
                 for key, row in rows.items():
                     payload = _row_payload(row)
@@ -1317,11 +1676,16 @@ class PolymarketPositionRepository(_PostgresRepository):
                         """,
                         (str(key), _payload_json(payload)),
                     )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT contract_key, payload FROM polymarket_positions_current ORDER BY contract_key"
+            "SELECT contract_key, payload FROM polymarket_positions_current ORDER BY contract_key",
+            connection=connection,
         )
 
 
@@ -1330,10 +1694,13 @@ class PolymarketBalanceRepository(_PostgresRepository):
     source_name = "polymarket"
     layer_name = "projected_account_truth"
 
-    def upsert(self, key: str, row: Any) -> dict[str, Any]:
+    def upsert(
+        self, key: str, row: Any, *, connection: Any | None = None
+    ) -> dict[str, Any]:
         payload = _row_payload(row)
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO polymarket_balance_current (
@@ -1351,12 +1718,17 @@ class PolymarketBalanceRepository(_PostgresRepository):
                         _payload_json(payload),
                     ),
                 )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
         return payload
 
-    def replace_all(self, rows: dict[str, Any]) -> None:
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
+    def replace_all(self, rows: dict[str, Any], *, connection: Any | None = None) -> None:
+        active_connection, owns_connection = self._acquire_connection(connection)
+        try:
+            with active_connection.cursor() as cursor:
                 cursor.execute("DELETE FROM polymarket_balance_current")
                 for key, row in rows.items():
                     payload = _row_payload(row)
@@ -1371,11 +1743,16 @@ class PolymarketBalanceRepository(_PostgresRepository):
                         """,
                         (str(key), _payload_json(payload)),
                     )
-            connection.commit()
+            if owns_connection:
+                active_connection.commit()
+        finally:
+            if owns_connection:
+                active_connection.close()
 
-    def read_all(self) -> dict[str, Any]:
+    def read_all(self, *, connection: Any | None = None) -> dict[str, Any]:
         return self._fetch_keyed_payloads(
-            "SELECT balance_key, payload FROM polymarket_balance_current ORDER BY balance_key"
+            "SELECT balance_key, payload FROM polymarket_balance_current ORDER BY balance_key",
+            connection=connection,
         )
 
 
@@ -1388,6 +1765,7 @@ def upsert_capture_checkpoint(
     metadata: dict[str, Any] | None = None,
     root: str | Path = "runtime/data/postgres",
     dsn: str | None = None,
+    connection: Any | None = None,
 ) -> dict[str, Any]:
     payload = {
         "checkpoint_name": checkpoint_name,
@@ -1400,8 +1778,10 @@ def upsert_capture_checkpoint(
     if resolved_dsn not in _MIGRATED_DSNS:
         apply_migrations(resolved_dsn)
         _MIGRATED_DSNS.add(resolved_dsn)
-    with connect_postgres(resolved_dsn) as connection:
-        with connection.cursor() as cursor:
+    active_connection = connection if connection is not None else connect_postgres(resolved_dsn)
+    owns_connection = connection is None
+    try:
+        with active_connection.cursor() as cursor:
             cursor.execute(
                 """
                 INSERT INTO capture_checkpoints (
@@ -1452,7 +1832,11 @@ def upsert_capture_checkpoint(
                     _payload_json(metadata or {}),
                 ),
             )
-        connection.commit()
+        if owns_connection:
+            active_connection.commit()
+    finally:
+        if owns_connection:
+            active_connection.close()
     return payload
 
 

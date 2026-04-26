@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, cast
 
 from adapters.base import TradingAdapter
@@ -82,6 +83,7 @@ class TradingEngine:
         cancel_retry_max_attempts: int = 3,
         cancel_attention_timeout_seconds: float = 30.0,
         overlay_max_age_seconds: float = 30.0,
+        max_active_wallet_balance: float | None = None,
         forced_refresh_debounce_seconds: float = 0.0,
         pending_submission_recovery_seconds: float = 5.0,
         pending_submission_expiry_seconds: float = 30.0,
@@ -113,6 +115,7 @@ class TradingEngine:
             0.0, cancel_attention_timeout_seconds
         )
         self.overlay_max_age_seconds = max(1.0, overlay_max_age_seconds)
+        self.max_active_wallet_balance = max_active_wallet_balance
         self.forced_refresh_debounce_seconds = max(0.0, forced_refresh_debounce_seconds)
         self.pending_submission_recovery_seconds = max(
             0.0, pending_submission_recovery_seconds
@@ -554,6 +557,10 @@ class TradingEngine:
     def _current_utc_day(self) -> str:
         return datetime.now(timezone.utc).date().isoformat()
 
+    def _current_utc_week(self) -> str:
+        today = datetime.now(timezone.utc).date().isocalendar()
+        return f"{today.year:04d}-W{today.week:02d}"
+
     def _reset_daily_loss_state(self, *, day: str | None = None) -> None:
         self.safety_state.daily_loss_date = day
         self.safety_state.daily_loss_baseline_balance = None
@@ -564,6 +571,25 @@ class TradingEngine:
         self.safety_state.daily_loss_last_updated_at = None
         self.risk_engine.state.daily_realized_pnl = 0.0
 
+    def _reset_weekly_loss_state(self, *, period: str | None = None) -> None:
+        setattr(self.safety_state, "weekly_loss_period", period)
+        setattr(self.safety_state, "weekly_loss_baseline_balance", None)
+        setattr(self.safety_state, "weekly_loss_current_balance", None)
+        setattr(self.safety_state, "weekly_loss_source", None)
+        setattr(self.safety_state, "weekly_loss_approximation", None)
+        setattr(self.safety_state, "weekly_realized_pnl", 0.0)
+        setattr(self.safety_state, "weekly_loss_last_updated_at", None)
+        self.risk_engine.state.weekly_realized_pnl = 0.0
+
+    def _reset_cumulative_loss_state(self) -> None:
+        setattr(self.safety_state, "cumulative_loss_baseline_balance", None)
+        setattr(self.safety_state, "cumulative_loss_current_balance", None)
+        setattr(self.safety_state, "cumulative_loss_source", None)
+        setattr(self.safety_state, "cumulative_loss_approximation", None)
+        setattr(self.safety_state, "cumulative_realized_pnl", 0.0)
+        setattr(self.safety_state, "cumulative_loss_last_updated_at", None)
+        self.risk_engine.state.cumulative_realized_pnl = 0.0
+
     def _restore_daily_loss_state(self) -> None:
         stored_day = self.safety_state.daily_loss_date
         current_day = self._current_utc_day()
@@ -572,6 +598,22 @@ class TradingEngine:
             self._persist_safety_state()
             return
         self.risk_engine.state.daily_realized_pnl = self.safety_state.daily_realized_pnl
+
+    def _restore_weekly_loss_state(self) -> None:
+        stored_period = getattr(self.safety_state, "weekly_loss_period", None)
+        current_period = self._current_utc_week()
+        if stored_period is not None and stored_period != current_period:
+            self._reset_weekly_loss_state(period=current_period)
+            self._persist_safety_state()
+            return
+        self.risk_engine.state.weekly_realized_pnl = float(
+            getattr(self.safety_state, "weekly_realized_pnl", 0.0) or 0.0
+        )
+
+    def _restore_cumulative_loss_state(self) -> None:
+        self.risk_engine.state.cumulative_realized_pnl = float(
+            getattr(self.safety_state, "cumulative_realized_pnl", 0.0) or 0.0
+        )
 
     def _daily_loss_balance_metric(
         self, snapshot: AccountSnapshot
@@ -598,6 +640,60 @@ class TradingEngine:
         self.safety_state.daily_realized_pnl = balance_value - baseline
         self.safety_state.daily_loss_last_updated_at = snapshot.observed_at
         self.risk_engine.state.daily_realized_pnl = self.safety_state.daily_realized_pnl
+
+        week = snapshot.observed_at.astimezone(timezone.utc).date().isocalendar()
+        week_key = f"{week.year:04d}-W{week.week:02d}"
+        weekly_baseline = getattr(
+            self.safety_state, "weekly_loss_baseline_balance", None
+        )
+        if (
+            getattr(self.safety_state, "weekly_loss_period", None) != week_key
+            or weekly_baseline is None
+        ):
+            weekly_baseline = balance_value
+        setattr(self.safety_state, "weekly_loss_period", week_key)
+        setattr(self.safety_state, "weekly_loss_baseline_balance", weekly_baseline)
+        setattr(self.safety_state, "weekly_loss_current_balance", balance_value)
+        setattr(self.safety_state, "weekly_loss_source", source)
+        setattr(
+            self.safety_state,
+            "weekly_loss_approximation",
+            "balance delta from UTC ISO week-start authoritative truth",
+        )
+        setattr(
+            self.safety_state, "weekly_realized_pnl", balance_value - weekly_baseline
+        )
+        setattr(self.safety_state, "weekly_loss_last_updated_at", snapshot.observed_at)
+        self.risk_engine.state.weekly_realized_pnl = float(
+            getattr(self.safety_state, "weekly_realized_pnl", 0.0) or 0.0
+        )
+
+        cumulative_baseline = getattr(
+            self.safety_state, "cumulative_loss_baseline_balance", None
+        )
+        if cumulative_baseline is None:
+            cumulative_baseline = balance_value
+        setattr(
+            self.safety_state, "cumulative_loss_baseline_balance", cumulative_baseline
+        )
+        setattr(self.safety_state, "cumulative_loss_current_balance", balance_value)
+        setattr(self.safety_state, "cumulative_loss_source", source)
+        setattr(
+            self.safety_state,
+            "cumulative_loss_approximation",
+            "balance delta from first authoritative truth baseline",
+        )
+        setattr(
+            self.safety_state,
+            "cumulative_realized_pnl",
+            balance_value - cumulative_baseline,
+        )
+        setattr(
+            self.safety_state, "cumulative_loss_last_updated_at", snapshot.observed_at
+        )
+        self.risk_engine.state.cumulative_realized_pnl = float(
+            getattr(self.safety_state, "cumulative_realized_pnl", 0.0) or 0.0
+        )
 
     def reconcile_persisted_truth(
         self,
@@ -2034,6 +2130,19 @@ class TradingEngine:
                 ),
                 True,
             )
+        if self.max_active_wallet_balance is not None:
+            balance_total = preview.context.balance.total
+            if balance_total is None:
+                balance_total = preview.context.balance.available
+            if balance_total > self.max_active_wallet_balance:
+                return (
+                    self._blocked_execution(
+                        preview,
+                        f"active wallet balance exceeds cap ({balance_total:.4f} > {self.max_active_wallet_balance:.4f})",
+                        stop_live_heartbeat=True,
+                    ),
+                    True,
+                )
         heartbeat_reason = self.heartbeat_block_reason()
         if heartbeat_reason is not None:
             if self.safety_state.heartbeat_unhealthy:
@@ -2149,82 +2258,87 @@ class TradingEngine:
     def status_snapshot(self) -> EngineStatusSnapshot:
         self._sync_operator_control_state()
         self.sync_heartbeat_state()
-        return EngineStatusSnapshot(
-            halted=self.safety_state.halted,
-            halt_reason=self.safety_state.reason,
-            paused=self.safety_state.paused,
-            pause_reason=self.safety_state.pause_reason,
-            hold_new_orders=self.safety_state.hold_new_orders,
-            hold_reason=self.safety_state.hold_reason,
-            hold_since=self.safety_state.hold_since,
-            last_action_gate_action=self.safety_state.last_action_gate_action,
-            last_action_gate_reason=self.safety_state.last_action_gate_reason,
-            last_depth_assessment=self.safety_state.last_depth_assessment,
-            contract_key=self.safety_state.contract_key,
-            clean_resume_streak=self.safety_state.clean_resume_streak,
-            last_clean_resume_observed_at=self.safety_state.last_clean_resume_observed_at,
-            last_truth_complete=self.safety_state.last_truth_complete,
-            last_truth_issues=self.safety_state.last_truth_issues,
-            last_truth_open_orders=self.safety_state.last_truth_open_orders,
-            last_truth_positions=self.safety_state.last_truth_positions,
-            last_truth_fills=self.safety_state.last_truth_fills,
-            last_truth_partial_fills=self.safety_state.last_truth_partial_fills,
-            last_truth_balance_available=self.safety_state.last_truth_balance_available,
-            last_truth_balance_total=self.safety_state.last_truth_balance_total,
-            last_truth_open_order_notional=self.safety_state.last_truth_open_order_notional,
-            last_truth_reserved_buy_notional=self.safety_state.last_truth_reserved_buy_notional,
-            last_truth_marked_position_notional=self.safety_state.last_truth_marked_position_notional,
-            last_truth_observed_at=self.safety_state.last_truth_observed_at,
-            heartbeat_required=self.safety_state.heartbeat_required,
-            heartbeat_active=self.safety_state.heartbeat_active,
-            heartbeat_running=self.safety_state.heartbeat_running,
-            heartbeat_healthy_for_trading=self.safety_state.heartbeat_healthy_for_trading,
-            heartbeat_unhealthy=self.safety_state.heartbeat_unhealthy,
-            heartbeat_last_success_at=self.safety_state.heartbeat_last_success_at,
-            heartbeat_consecutive_failures=self.safety_state.heartbeat_consecutive_failures,
-            heartbeat_last_error=self.safety_state.heartbeat_last_error,
-            heartbeat_last_id=self.safety_state.heartbeat_last_id,
-            last_live_delta_applied_at=self.safety_state.last_live_delta_applied_at,
-            last_live_delta_source=self.safety_state.last_live_delta_source,
-            last_live_delta_order_upserts=self.safety_state.last_live_delta_order_upserts,
-            last_live_delta_fill_upserts=self.safety_state.last_live_delta_fill_upserts,
-            last_live_delta_terminal_orders=self.safety_state.last_live_delta_terminal_orders,
-            last_live_terminal_marker_applied_count=self.safety_state.last_live_terminal_marker_applied_count,
-            last_snapshot_correction_at=self.safety_state.last_snapshot_correction_at,
-            last_snapshot_correction_order_count=self.safety_state.last_snapshot_correction_order_count,
-            last_snapshot_correction_fill_count=self.safety_state.last_snapshot_correction_fill_count,
-            last_snapshot_terminal_confirmation_count=self.safety_state.last_snapshot_terminal_confirmation_count,
-            last_snapshot_terminal_reversal_count=self.safety_state.last_snapshot_terminal_reversal_count,
-            overlay_degraded=self.safety_state.overlay_degraded,
-            overlay_degraded_since=self.safety_state.overlay_degraded_since,
-            overlay_degraded_reason=self.safety_state.overlay_degraded_reason,
-            overlay_delta_suppressed=self.safety_state.overlay_delta_suppressed,
-            overlay_last_live_event_at=self.safety_state.overlay_last_live_event_at,
-            overlay_last_confirmed_snapshot_at=self.safety_state.overlay_last_confirmed_snapshot_at,
-            overlay_forced_snapshot_count=self.safety_state.overlay_forced_snapshot_count,
-            overlay_last_forced_snapshot_reason=self.safety_state.overlay_last_forced_snapshot_reason,
-            overlay_last_forced_snapshot_scope=self.safety_state.overlay_last_forced_snapshot_scope,
-            overlay_last_recovery_outcome=self.safety_state.overlay_last_recovery_outcome,
-            overlay_last_recovery_scope=self.safety_state.overlay_last_recovery_scope,
-            overlay_last_recovery_at=self.safety_state.overlay_last_recovery_at,
-            overlay_last_suppression_duration_seconds=self.safety_state.overlay_last_suppression_duration_seconds,
-            overlay_last_live_state_active=self.safety_state.overlay_last_live_state_active,
-            overlay_last_subscribed_markets=self.safety_state.overlay_last_subscribed_markets,
-            daily_loss_date=self.safety_state.daily_loss_date,
-            daily_loss_baseline_balance=self.safety_state.daily_loss_baseline_balance,
-            daily_loss_current_balance=self.safety_state.daily_loss_current_balance,
-            daily_loss_source=self.safety_state.daily_loss_source,
-            daily_loss_approximation=self.safety_state.daily_loss_approximation,
-            daily_realized_pnl=self.safety_state.daily_realized_pnl,
-            daily_loss_last_updated_at=self.safety_state.daily_loss_last_updated_at,
-            daily_loss_limit_reached=self.risk_engine.state.daily_loss_limit_reached(
-                self.risk_engine.limits.max_daily_loss
+        return cast(
+            EngineStatusSnapshot,
+            SimpleNamespace(
+                halted=self.safety_state.halted,
+                halt_reason=self.safety_state.reason,
+                paused=self.safety_state.paused,
+                pause_reason=self.safety_state.pause_reason,
+                hold_new_orders=self.safety_state.hold_new_orders,
+                hold_reason=self.safety_state.hold_reason,
+                hold_since=self.safety_state.hold_since,
+                last_action_gate_action=self.safety_state.last_action_gate_action,
+                last_action_gate_reason=self.safety_state.last_action_gate_reason,
+                last_depth_assessment=self.safety_state.last_depth_assessment,
+                contract_key=self.safety_state.contract_key,
+                clean_resume_streak=self.safety_state.clean_resume_streak,
+                last_clean_resume_observed_at=self.safety_state.last_clean_resume_observed_at,
+                last_truth_complete=self.safety_state.last_truth_complete,
+                last_truth_issues=self.safety_state.last_truth_issues,
+                last_truth_open_orders=self.safety_state.last_truth_open_orders,
+                last_truth_positions=self.safety_state.last_truth_positions,
+                last_truth_fills=self.safety_state.last_truth_fills,
+                last_truth_partial_fills=self.safety_state.last_truth_partial_fills,
+                last_truth_balance_available=self.safety_state.last_truth_balance_available,
+                last_truth_balance_total=self.safety_state.last_truth_balance_total,
+                last_truth_open_order_notional=self.safety_state.last_truth_open_order_notional,
+                last_truth_reserved_buy_notional=self.safety_state.last_truth_reserved_buy_notional,
+                last_truth_marked_position_notional=self.safety_state.last_truth_marked_position_notional,
+                last_truth_observed_at=self.safety_state.last_truth_observed_at,
+                heartbeat_required=self.safety_state.heartbeat_required,
+                heartbeat_active=self.safety_state.heartbeat_active,
+                heartbeat_running=self.safety_state.heartbeat_running,
+                heartbeat_healthy_for_trading=self.safety_state.heartbeat_healthy_for_trading,
+                heartbeat_unhealthy=self.safety_state.heartbeat_unhealthy,
+                heartbeat_last_success_at=self.safety_state.heartbeat_last_success_at,
+                heartbeat_consecutive_failures=self.safety_state.heartbeat_consecutive_failures,
+                heartbeat_last_error=self.safety_state.heartbeat_last_error,
+                heartbeat_last_id=self.safety_state.heartbeat_last_id,
+                last_live_delta_applied_at=self.safety_state.last_live_delta_applied_at,
+                last_live_delta_source=self.safety_state.last_live_delta_source,
+                last_live_delta_order_upserts=self.safety_state.last_live_delta_order_upserts,
+                last_live_delta_fill_upserts=self.safety_state.last_live_delta_fill_upserts,
+                last_live_delta_terminal_orders=self.safety_state.last_live_delta_terminal_orders,
+                last_live_terminal_marker_applied_count=self.safety_state.last_live_terminal_marker_applied_count,
+                last_snapshot_correction_at=self.safety_state.last_snapshot_correction_at,
+                last_snapshot_correction_order_count=self.safety_state.last_snapshot_correction_order_count,
+                last_snapshot_correction_fill_count=self.safety_state.last_snapshot_correction_fill_count,
+                last_snapshot_terminal_confirmation_count=self.safety_state.last_snapshot_terminal_confirmation_count,
+                last_snapshot_terminal_reversal_count=self.safety_state.last_snapshot_terminal_reversal_count,
+                overlay_degraded=self.safety_state.overlay_degraded,
+                overlay_degraded_since=self.safety_state.overlay_degraded_since,
+                overlay_degraded_reason=self.safety_state.overlay_degraded_reason,
+                overlay_delta_suppressed=self.safety_state.overlay_delta_suppressed,
+                overlay_last_live_event_at=self.safety_state.overlay_last_live_event_at,
+                overlay_last_confirmed_snapshot_at=self.safety_state.overlay_last_confirmed_snapshot_at,
+                overlay_forced_snapshot_count=self.safety_state.overlay_forced_snapshot_count,
+                overlay_last_forced_snapshot_reason=self.safety_state.overlay_last_forced_snapshot_reason,
+                overlay_last_forced_snapshot_scope=self.safety_state.overlay_last_forced_snapshot_scope,
+                overlay_last_recovery_outcome=self.safety_state.overlay_last_recovery_outcome,
+                overlay_last_recovery_scope=self.safety_state.overlay_last_recovery_scope,
+                overlay_last_recovery_at=self.safety_state.overlay_last_recovery_at,
+                overlay_last_suppression_duration_seconds=self.safety_state.overlay_last_suppression_duration_seconds,
+                overlay_last_live_state_active=self.safety_state.overlay_last_live_state_active,
+                overlay_last_subscribed_markets=self.safety_state.overlay_last_subscribed_markets,
+                daily_loss_date=self.safety_state.daily_loss_date,
+                daily_loss_baseline_balance=self.safety_state.daily_loss_baseline_balance,
+                daily_loss_current_balance=self.safety_state.daily_loss_current_balance,
+                daily_loss_source=self.safety_state.daily_loss_source,
+                daily_loss_approximation=self.safety_state.daily_loss_approximation,
+                daily_realized_pnl=self.safety_state.daily_realized_pnl,
+                daily_loss_last_updated_at=self.safety_state.daily_loss_last_updated_at,
+                daily_loss_limit_reached=self.risk_engine.state.daily_loss_limit_reached(
+                    self.risk_engine.limits.max_daily_loss
+                ),
+                pending_cancels=self.pending_cancels(unresolved_only=True),
+                pending_submissions=self.pending_submissions(unresolved_only=True),
+                pending_refresh_requests=list(
+                    self.safety_state.pending_refresh_requests
+                ),
+                recovery_items=self.recovery_items(open_only=True),
+                resume_trading_eligible=self.resume_trading_eligible(),
             ),
-            pending_cancels=self.pending_cancels(unresolved_only=True),
-            pending_submissions=self.pending_submissions(unresolved_only=True),
-            pending_refresh_requests=list(self.safety_state.pending_refresh_requests),
-            recovery_items=self.recovery_items(open_only=True),
-            resume_trading_eligible=self.resume_trading_eligible(),
         )
 
     def clear_halt(self) -> None:

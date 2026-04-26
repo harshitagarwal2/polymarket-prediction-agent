@@ -5,6 +5,11 @@ import os
 
 from adapters.polymarket import PolymarketAdapter, PolymarketConfig
 from engine.cli_output import add_quiet_flag, emit_json
+from engine.runtime_bootstrap import (
+    resolve_polymarket_live_user_markets,
+    resolve_polymarket_private_key,
+    validate_polymarket_live_routing,
+)
 from services.capture.polymarket import (
     PolymarketCaptureStores,
     sanitize_polymarket_capture_error,
@@ -54,7 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
 def _build_user_adapter(market_ids: list[str]) -> PolymarketAdapter:
     return PolymarketAdapter(
         PolymarketConfig(
-            private_key=os.getenv("POLYMARKET_PRIVATE_KEY"),
+            host=os.getenv("POLYMARKET_CLOB_HOST") or PolymarketConfig.host,
+            data_api_host=(
+                os.getenv("POLYMARKET_DATA_API_HOST") or PolymarketConfig.data_api_host
+            ),
+            private_key=resolve_polymarket_private_key(),
             funder=os.getenv("POLYMARKET_FUNDER"),
             account_address=os.getenv("POLYMARKET_ACCOUNT_ADDRESS"),
             live_user_markets=market_ids,
@@ -79,6 +88,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     if args.command == "market":
+        validate_polymarket_live_routing(context="run-polymarket-capture market")
+        if resolve_polymarket_private_key() in (None, ""):
+            raise RuntimeError(
+                "run-polymarket-capture market requires POLYMARKET_PRIVATE_KEY or POLYMARKET_PRIVATE_KEY_FILE"
+            )
         asset_ids = _split_csv(args.asset_id)
         if not asset_ids:
             raise RuntimeError(
@@ -101,10 +115,20 @@ def main(argv: list[str] | None = None) -> int:
         payload = results[-1] if results else {"ok": False, "root": args.root}
         emit_json(payload, quiet=args.quiet)
         return 0 if payload.get("ok") else 1
-    market_ids = _split_csv(args.market_id)
+    market_ids = resolve_polymarket_live_user_markets(
+        explicit_markets=args.market_id,
+        env_markets=os.getenv("POLYMARKET_LIVE_USER_MARKETS"),
+        runtime_mode="run",
+        opportunity_root=args.root,
+    )
     if not market_ids:
         raise RuntimeError(
-            "run-polymarket-capture user requires at least one --market-id"
+            "run-polymarket-capture user requires at least one --market-id, POLYMARKET_LIVE_USER_MARKETS, or projected fair-value coverage"
+        )
+    validate_polymarket_live_routing(context="run-polymarket-capture user")
+    if resolve_polymarket_private_key() in (None, ""):
+        raise RuntimeError(
+            "run-polymarket-capture user requires POLYMARKET_PRIVATE_KEY or POLYMARKET_PRIVATE_KEY_FILE"
         )
     worker = PolymarketUserCaptureWorker(
         stores=stores,

@@ -6,7 +6,8 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from adapters.types import (
     AccountSnapshot,
@@ -491,6 +492,15 @@ class PolymarketCaptureWorkerTests(unittest.TestCase):
                     "_hydrate",
                     return_value={"ok": True, "market_count": 0, "rows": []},
                 ),
+                patch.dict(
+                    "os.environ",
+                    {
+                        "POLYMARKET_PRIVATE_KEY": "test-private-key",
+                        "POLYMARKET_ROUTE_LABEL": "eu-proxy-1",
+                        "POLYMARKET_GEO_COMPLIANCE_ACK": "true",
+                    },
+                    clear=False,
+                ),
             ):
                 exit_code = run_polymarket_capture.main(
                     [
@@ -532,6 +542,210 @@ class PolymarketCaptureWorkerTests(unittest.TestCase):
             payload["error_message"], "Postgres worker storage is not configured"
         )
         self.assertEqual(payload["error_kind"], "RuntimeError")
+
+    def test_user_cli_derives_market_ids_from_projected_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            worker = Mock()
+            worker.run.return_value = [{"ok": True, "order_count": 0, "fill_count": 0}]
+            with (
+                patch.object(
+                    run_polymarket_capture.PolymarketCaptureStores,
+                    "from_root",
+                    return_value=self._stores(root),
+                ),
+                patch.object(
+                    run_polymarket_capture,
+                    "resolve_polymarket_live_user_markets",
+                    return_value=["condition-1", "condition-2"],
+                ) as resolver,
+                patch.object(
+                    run_polymarket_capture,
+                    "_build_user_adapter",
+                    return_value=object(),
+                ) as build_user_adapter,
+                patch.object(
+                    run_polymarket_capture,
+                    "PolymarketUserCaptureWorker",
+                    return_value=worker,
+                ) as worker_cls,
+                patch.dict(
+                    "os.environ",
+                    {
+                        "POLYMARKET_PRIVATE_KEY": "test-private-key",
+                        "POLYMARKET_ROUTE_LABEL": "eu-proxy-1",
+                        "POLYMARKET_GEO_COMPLIANCE_ACK": "true",
+                    },
+                    clear=False,
+                ),
+            ):
+                exit_code = run_polymarket_capture.main(
+                    [
+                        "user",
+                        "--root",
+                        str(root),
+                        "--quiet",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        resolver.assert_called_once()
+        build_user_adapter.assert_called_once_with(["condition-1", "condition-2"])
+        config = worker_cls.call_args.kwargs["config"]
+        self.assertEqual(config.market_ids, ["condition-1", "condition-2"])
+
+    def test_user_cli_rejects_missing_market_contract(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            with (
+                patch.object(
+                    run_polymarket_capture.PolymarketCaptureStores,
+                    "from_root",
+                    return_value=self._stores(root),
+                ),
+                patch.object(
+                    run_polymarket_capture,
+                    "resolve_polymarket_live_user_markets",
+                    return_value=None,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "POLYMARKET_LIVE_USER_MARKETS, or projected fair-value coverage",
+                ):
+                    run_polymarket_capture.main(
+                        [
+                            "user",
+                            "--root",
+                            str(root),
+                            "--quiet",
+                        ]
+                    )
+
+    def test_user_cli_accepts_polymarket_private_key_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            worker = Mock()
+            worker.run.return_value = [{"ok": True, "order_count": 0, "fill_count": 0}]
+            key_file = Path(temp_dir) / "polymarket.key"
+            key_file.write_text("file-private-key", encoding="utf-8")
+            with (
+                patch.object(
+                    run_polymarket_capture.PolymarketCaptureStores,
+                    "from_root",
+                    return_value=self._stores(root),
+                ),
+                patch.object(
+                    run_polymarket_capture,
+                    "resolve_polymarket_live_user_markets",
+                    return_value=["condition-1"],
+                ),
+                patch.object(
+                    run_polymarket_capture,
+                    "PolymarketUserCaptureWorker",
+                    return_value=worker,
+                ),
+                patch.dict(
+                    "os.environ",
+                    {
+                        "POLYMARKET_PRIVATE_KEY": "",
+                        "POLYMARKET_PRIVATE_KEY_FILE": str(key_file),
+                        "POLYMARKET_ROUTE_LABEL": "eu-proxy-1",
+                        "POLYMARKET_GEO_COMPLIANCE_ACK": "true",
+                    },
+                    clear=False,
+                ),
+            ):
+                exit_code = run_polymarket_capture.main(
+                    ["user", "--root", str(root), "--quiet"]
+                )
+
+        self.assertEqual(exit_code, 0)
+
+    def test_user_cli_accepts_polymarket_private_key_command(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            worker = Mock()
+            worker.run.return_value = [{"ok": True, "order_count": 0, "fill_count": 0}]
+            with (
+                patch.object(
+                    run_polymarket_capture.PolymarketCaptureStores,
+                    "from_root",
+                    return_value=self._stores(root),
+                ),
+                patch.object(
+                    run_polymarket_capture,
+                    "resolve_polymarket_live_user_markets",
+                    return_value=["condition-1"],
+                ),
+                patch.object(
+                    run_polymarket_capture,
+                    "PolymarketUserCaptureWorker",
+                    return_value=worker,
+                ),
+                patch.dict(
+                    "os.environ",
+                    {
+                        "POLYMARKET_PRIVATE_KEY": "",
+                        "POLYMARKET_PRIVATE_KEY_COMMAND": "python -c \"print('cmd-private-key')\"",
+                        "POLYMARKET_ROUTE_LABEL": "eu-proxy-1",
+                        "POLYMARKET_GEO_COMPLIANCE_ACK": "true",
+                    },
+                    clear=False,
+                ),
+                patch("engine.runtime_bootstrap.subprocess.run") as run,
+            ):
+                run.return_value = SimpleNamespace(stdout="cmd-private-key\n")
+                exit_code = run_polymarket_capture.main(
+                    ["user", "--root", str(root), "--quiet"]
+                )
+
+        self.assertEqual(exit_code, 0)
+
+    def test_user_adapter_applies_polymarket_host_overrides(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "POLYMARKET_PRIVATE_KEY": "pk",
+                "POLYMARKET_CLOB_HOST": "https://private-clob.example.invalid",
+                "POLYMARKET_DATA_API_HOST": "https://private-data.example.invalid",
+            },
+            clear=False,
+        ):
+            adapter = run_polymarket_capture._build_user_adapter(["condition-1"])
+
+        self.assertEqual(adapter.config.host, "https://private-clob.example.invalid")
+        self.assertEqual(
+            adapter.config.data_api_host,
+            "https://private-data.example.invalid",
+        )
+
+    def test_market_cli_rejects_missing_geo_routing_ack(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime-data"
+            with (
+                patch.object(
+                    run_polymarket_capture.PolymarketCaptureStores,
+                    "from_root",
+                    return_value=self._stores(root),
+                ),
+                patch.dict(
+                    "os.environ",
+                    {"POLYMARKET_PRIVATE_KEY": "test-private-key"},
+                    clear=False,
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "POLYMARKET_ROUTE_LABEL"):
+                    run_polymarket_capture.main(
+                        [
+                            "market",
+                            "--root",
+                            str(root),
+                            "--asset-id",
+                            "asset-1",
+                            "--quiet",
+                        ]
+                    )
 
 
 if __name__ == "__main__":
