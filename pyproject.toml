@@ -33,7 +33,7 @@ research = [
   "duckdb>=0.10",
 ]
 postgres = [
-  "psycopg[binary]>=3.3.3",
+  "psycopg[binary]>=3.3.4",
 ]
 polymarket = [
   "httpx>=0.27",
