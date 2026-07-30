@@ -762,4 +762,8 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
         self.assertIn("sb-1|book-a|h2h|Home Team", sportsbook_odds)
         self.assertIn("pm-1", polymarket_markets)
         self.assertIn("pm-1", polymarket_bbo)
-        self.assertGreaterEqual(len(preview_context.preview_order_proposals), 1)
+        self.assertGreaterEqual(
+            len(preview_context.preview_order_proposals),
+            1,
+            preview_context.blocked_preview_orders,
+        )
