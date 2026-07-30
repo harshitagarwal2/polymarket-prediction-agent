@@ -749,7 +749,13 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             sportsbook_odds = adapter.read_table("sportsbook_odds")
             polymarket_markets = adapter.read_table("polymarket_markets")
             polymarket_bbo = adapter.read_table("polymarket_bbo")
-            preview_context = build_preview_runtime_context(None, read_adapter=adapter)
+            with patch("execution.planner.datetime") as planner_datetime:
+                planner_datetime.now.return_value = datetime(
+                    2026, 5, 21, 18, 5, tzinfo=timezone.utc
+                )
+                preview_context = build_preview_runtime_context(
+                    None, read_adapter=adapter
+                )
 
         self.assertTrue(projection_result["ok"])
         self.assertIn("sb-1", sportsbook_events)
