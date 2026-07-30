@@ -5,7 +5,7 @@ import os
 import stat
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -621,6 +621,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "runtime-data"
             write_dsn_marker(root, self.dsn)
+            fixture_start = datetime(2026, 5, 21, 18, 0, tzinfo=timezone.utc)
             event_map = Path(temp_dir) / "event_map.json"
             event_map.write_text(
                 '{"sb-1": {"event_key": "event-1", "game_id": "game-1", "sport": "nba", "series": "playoffs"}}',
@@ -640,11 +641,15 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                         "sport_title": "NBA",
                         "home_team": "Home Team",
                         "away_team": "Away Team",
-                        "commence_time": "2026-05-21T20:00:00+00:00",
+                        "commence_time": (
+                            fixture_start + timedelta(hours=2)
+                        ).isoformat(),
                         "bookmakers": [
                             {
                                 "key": "book-a",
-                                "last_update": "2026-05-21T17:59:30+00:00",
+                                "last_update": (
+                                    fixture_start - timedelta(seconds=30)
+                                ).isoformat(),
                                 "markets": [
                                     {
                                         "key": "h2h",
@@ -659,7 +664,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                     }
                 ),
                 stores=SportsbookCaptureStores.from_root(root, require_postgres=True),
-                observed_at=datetime(2026, 5, 21, 18, 0, tzinfo=timezone.utc),
+                observed_at=fixture_start,
             )
             hydrate_polymarket_market_snapshot(
                 request=PolymarketMarketSnapshotRequest(
@@ -670,7 +675,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                     stale_after_ms=60_000,
                 ),
                 client=_StaticCatalogClient(),
-                observed_at=datetime(2026, 5, 21, 18, 1, tzinfo=timezone.utc),
+                observed_at=fixture_start + timedelta(seconds=10),
             )
             persist_polymarket_bbo_input_events(
                 [
@@ -680,11 +685,13 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                         "best_bid_size": 10,
                         "best_ask": 0.47,
                         "best_ask_size": 8,
-                        "timestamp": "2026-05-21T18:02:00Z",
+                        "timestamp": int(
+                            (fixture_start + timedelta(seconds=20)).timestamp() * 1000
+                        ),
                     }
                 ],
                 root=str(root),
-                observed_at=datetime(2026, 5, 21, 18, 2, tzinfo=timezone.utc),
+                observed_at=fixture_start + timedelta(seconds=20),
             )
 
             projection_result = project_current_state_once(root)
@@ -712,7 +719,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             fair_value_repo.append(
                 {
                     "market_id": "pm-1",
-                    "as_of": "2026-05-21T18:03:00+00:00",
+                    "as_of": (fixture_start + timedelta(seconds=25)).isoformat(),
                     "fair_yes_prob": 0.61,
                     "calibrated_fair_yes_prob": 0.60,
                     "lower_prob": 0.58,
@@ -727,7 +734,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             opportunity_repo.append(
                 {
                     "market_id": "pm-1",
-                    "as_of": "2026-05-21T18:04:00+00:00",
+                    "as_of": (fixture_start + timedelta(seconds=27)).isoformat(),
                     "side": "buy_yes",
                     "fair_yes_prob": 0.61,
                     "best_bid_yes": 0.45,
@@ -741,7 +748,9 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                     "confidence": 0.98,
                     "blocked_reason": None,
                     "blocked_reasons": [],
-                    "fair_value_ref": "2026-05-21T18:03:00+00:00",
+                    "fair_value_ref": (
+                        fixture_start + timedelta(seconds=25)
+                    ).isoformat(),
                 }
             )
             adapter = ProjectedCurrentStateReadAdapter.from_root(root)
@@ -750,8 +759,8 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             polymarket_markets = adapter.read_table("polymarket_markets")
             polymarket_bbo = adapter.read_table("polymarket_bbo")
             with patch("execution.planner.datetime") as planner_datetime:
-                planner_datetime.now.return_value = datetime(
-                    2026, 5, 21, 18, 5, tzinfo=timezone.utc
+                planner_datetime.now.return_value = fixture_start + timedelta(
+                    seconds=30
                 )
                 preview_context = build_preview_runtime_context(
                     None, read_adapter=adapter
