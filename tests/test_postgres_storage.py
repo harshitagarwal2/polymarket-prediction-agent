@@ -675,7 +675,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                     stale_after_ms=60_000,
                 ),
                 client=_StaticCatalogClient(),
-                observed_at=fixture_start + timedelta(seconds=10),
+                observed_at=fixture_start + timedelta(seconds=1),
             )
             persist_polymarket_bbo_input_events(
                 [
@@ -686,15 +686,21 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                         "best_ask": 0.47,
                         "best_ask_size": 8,
                         "timestamp": int(
-                            (fixture_start + timedelta(seconds=20)).timestamp() * 1000
+                            (fixture_start + timedelta(seconds=2)).timestamp() * 1000
                         ),
                     }
                 ],
                 root=str(root),
-                observed_at=fixture_start + timedelta(seconds=20),
+                observed_at=fixture_start + timedelta(seconds=2),
             )
 
-            projection_result = project_current_state_once(root)
+            with patch(
+                "adapters.polymarket.normalizer.datetime", wraps=datetime
+            ) as normalizer_datetime:
+                normalizer_datetime.now.return_value = fixture_start + timedelta(
+                    seconds=2
+                )
+                projection_result = project_current_state_once(root)
 
             mapping_repo = MappingRepository(root / "postgres")
             fair_value_repo = FairValueRepository(root / "postgres")
@@ -719,7 +725,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             fair_value_repo.append(
                 {
                     "market_id": "pm-1",
-                    "as_of": (fixture_start + timedelta(seconds=25)).isoformat(),
+                    "as_of": (fixture_start + timedelta(seconds=3)).isoformat(),
                     "fair_yes_prob": 0.61,
                     "calibrated_fair_yes_prob": 0.60,
                     "lower_prob": 0.58,
@@ -734,7 +740,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             opportunity_repo.append(
                 {
                     "market_id": "pm-1",
-                    "as_of": (fixture_start + timedelta(seconds=27)).isoformat(),
+                    "as_of": (fixture_start + timedelta(seconds=4)).isoformat(),
                     "side": "buy_yes",
                     "fair_yes_prob": 0.61,
                     "best_bid_yes": 0.45,
@@ -749,7 +755,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
                     "blocked_reason": None,
                     "blocked_reasons": [],
                     "fair_value_ref": (
-                        fixture_start + timedelta(seconds=25)
+                        fixture_start + timedelta(seconds=3)
                     ).isoformat(),
                 }
             )
@@ -759,9 +765,7 @@ class PostgresStorageIntegrationTests(unittest.TestCase):
             polymarket_markets = adapter.read_table("polymarket_markets")
             polymarket_bbo = adapter.read_table("polymarket_bbo")
             with patch("execution.planner.datetime") as planner_datetime:
-                planner_datetime.now.return_value = fixture_start + timedelta(
-                    seconds=30
-                )
+                planner_datetime.now.return_value = fixture_start + timedelta(seconds=5)
                 preview_context = build_preview_runtime_context(
                     None, read_adapter=adapter
                 )
