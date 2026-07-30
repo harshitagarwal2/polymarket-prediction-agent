@@ -1231,7 +1231,9 @@ class RunAgentLoopTests(unittest.TestCase):
                     {
                         "sb-1": {
                             "sportsbook_event_id": "sb-1",
-                            "start_time": "2026-04-30T19:00:00Z",
+                            "start_time": (
+                                datetime.now(timezone.utc) + timedelta(days=1)
+                            ).isoformat(),
                         }
                     }
                 )
@@ -1369,16 +1371,17 @@ class RunAgentLoopTests(unittest.TestCase):
                     }
                 )
             )
+            now = datetime.now(timezone.utc)
             (runtime_root / "sportsbook_events.json").write_text(
                 json.dumps(
                     {
                         "sb-good": {
                             "sportsbook_event_id": "sb-good",
-                            "start_time": "2026-04-30T19:00:00Z",
+                            "start_time": (now + timedelta(days=1)).isoformat(),
                         },
                         "sb-bad": {
                             "sportsbook_event_id": "sb-bad",
-                            "start_time": "2026-04-21T00:04:00Z",
+                            "start_time": (now + timedelta(minutes=5)).isoformat(),
                         },
                     }
                 )
@@ -1498,7 +1501,9 @@ class RunAgentLoopTests(unittest.TestCase):
                     {
                         "sb-1": {
                             "sportsbook_event_id": "sb-1",
-                            "start_time": "2026-04-30T19:00:00Z",
+                            "start_time": (
+                                datetime.now(timezone.utc) + timedelta(days=1)
+                            ).isoformat(),
                         }
                     }
                 )
@@ -1604,7 +1609,9 @@ class RunAgentLoopTests(unittest.TestCase):
                     {
                         "sb-1": {
                             "sportsbook_event_id": "sb-1",
-                            "start_time": "2026-04-30T19:00:00Z",
+                            "start_time": (
+                                datetime.now(timezone.utc) + timedelta(days=1)
+                            ).isoformat(),
                         }
                     }
                 )
@@ -2083,7 +2090,9 @@ class RunAgentLoopTests(unittest.TestCase):
                     {
                         "sb-1": {
                             "sportsbook_event_id": "sb-1",
-                            "start_time": "2026-04-30T19:00:00Z",
+                            "start_time": (
+                                datetime.now(timezone.utc) + timedelta(days=1)
+                            ).isoformat(),
                         }
                     }
                 )
@@ -2210,7 +2219,9 @@ class RunAgentLoopTests(unittest.TestCase):
                     {
                         "sb-1": {
                             "sportsbook_event_id": "sb-1",
-                            "start_time": "2026-04-30T19:00:00Z",
+                            "start_time": (
+                                datetime.now(timezone.utc) + timedelta(days=1)
+                            ).isoformat(),
                         }
                     }
                 )
